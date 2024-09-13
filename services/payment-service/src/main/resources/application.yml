@@ -40,7 +40,12 @@ spring:
       group-id: payment-service-group
       properties:
         spring.json.type.mapping: initializePaymentMessage:io.github.marianciuc.streamingservice.payment.kafka.messages.InitializePaymentMessage
-
+logging:
+  level:
+    org:
+      springframework:
+        security: DEBUG
+        web.access: DEBUG
 stripe:
   api:
     key: REDACTED_STRIPE_TEST_KEY
