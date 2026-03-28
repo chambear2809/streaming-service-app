@@ -48,4 +48,4 @@ logging:
         web.access: DEBUG
 stripe:
   api:
-    key: REDACTED_STRIPE_TEST_KEY
+    key: ${STRIPE_API_KEY:replace-me}
