@@ -3,6 +3,47 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+ENV_FILE="${ENV_FILE:-${ROOT_DIR}/.env}"
+
+load_env_file() {
+  local env_file="$1"
+  local line normalized key value
+
+  [[ -f "${env_file}" ]] || return 0
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+
+    [[ -z "${line}" || "${line}" == \#* ]] && continue
+
+    normalized="${line}"
+    [[ "${normalized}" == export\ * ]] && normalized="${normalized#export }"
+    [[ "${normalized}" == *=* ]] || continue
+
+    key="${normalized%%=*}"
+    value="${normalized#*=}"
+
+    key="${key%"${key##*[![:space:]]}"}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+
+    if [[ "${key}" != [A-Za-z_][A-Za-z0-9_]* ]]; then
+      continue
+    fi
+
+    if [[ "${value}" == \"*\" && "${value}" == *\" ]]; then
+      value="${value:1:${#value}-2}"
+    elif [[ "${value}" == \'*\' && "${value}" == *\' ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+
+    export "${key}=${value}"
+  done < "${env_file}"
+}
+
+load_env_file "${ENV_FILE}"
+
 NAMESPACE="${NAMESPACE:-streaming-service-app}"
 APP_NAME="${APP_NAME:-streaming-frontend}"
 CONFIGMAP_NAME="${CONFIGMAP_NAME:-streaming-frontend-assets}"

@@ -39,7 +39,24 @@ window.STREAMING_CONFIG = {
         realm: "us1",
         rumAccessToken: "UlvFbyejeC_vQnOlBLgObw",
         applicationName: "streaming-app-frontend",
-        deploymentEnvironment: "streaming-app"
+        deploymentEnvironment: "streaming-app",
+        privacy: {
+            maskAllText: false,
+            sensitivityRules: [
+                { rule: "mask", selector: "#billing, #billing *" }
+            ]
+        },
+        sessionReplay: {
+            maskAllInputs: false,
+            maskAllText: false,
+            sensitivityRules: [
+                { rule: "mask", selector: "input[type='password']" },
+                { rule: "mask", selector: "#billing, #billing *" }
+            ],
+            features: {
+                video: true
+            }
+        }
     },
     probeTimeoutMs: 4500,
     channelLabels: ["Prime East", "Events", "Review Desk"],

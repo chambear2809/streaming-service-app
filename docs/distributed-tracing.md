@@ -43,14 +43,22 @@ The static frontend also initializes Splunk browser RUM before the page applicat
 
 - `frontend/package.json` declares `@splunk/otel-web` and `@splunk/otel-web-session-recorder`
 - `frontend/splunk-instrumentation.js` initializes the browser agent and session replay
-- `frontend/scripts/build.mjs` produces minified bundles and source maps in `frontend/dist`
-- `scripts/frontend/deploy.sh` builds the frontend, injects source map IDs, and uploads source maps when Splunk auth env vars are present
+- `frontend/scripts/build.mjs` produces minified bundles and source maps in `frontend/dist`, and reads overrides from the repo-root `.env` in addition to normal shell env vars
+- `scripts/frontend/deploy.sh` reads the same repo-root `.env`, builds the frontend, injects source map IDs, and uploads source maps when Splunk auth env vars are present
 
-The current frontend runtime config uses:
+The checked-in frontend defaults use:
 
 - Realm: `us1`
 - Application name: `streaming-app-frontend`
 - Deployment environment: `streaming-app`
+
+Override them in the repo-root `.env` instead of editing `frontend/config.js` directly:
+
+- `STREAMING_ENVIRONMENT_LABEL`
+- `SPLUNK_REALM`
+- `SPLUNK_ACCESS_TOKEN`
+- `SPLUNK_RUM_APP_NAME`
+- `SPLUNK_DEPLOYMENT_ENVIRONMENT`
 
 The frontend build stamps the current app version into the RUM config and then runs:
 
@@ -60,6 +68,13 @@ The frontend build stamps the current app version into the RUM config and then r
 `scripts/frontend/deploy.sh` will skip upload unless both `SPLUNK_REALM` and `SPLUNK_ACCESS_TOKEN` are set.
 
 Session replay is enabled for the Kubernetes frontend. It uses the same Splunk realm and RUM access token as browser RUM.
+
+The frontend session replay configuration is intentionally permissive for this demo surface:
+
+- Browser RUM text masking is disabled so page text remains visible in replay.
+- Session replay text masking is disabled.
+- The billing workspace is masked in browser RUM and session replay, and password inputs remain masked elsewhere in the app.
+- Video element capture is enabled so the screening player and broadcast surfaces are visible in replay.
 
 For a multi-service ThousandEyes Service Map in this demo environment, target:
 
