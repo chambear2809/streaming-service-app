@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: streaming-frontend
+  namespace: streaming-service-app
+  labels:
+    app.kubernetes.io/name: streaming-frontend
+    app.kubernetes.io/part-of: streaming-service-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: streaming-frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: streaming-frontend
+        app.kubernetes.io/part-of: streaming-service-app
+      annotations:
+        instrumentation.opentelemetry.io/container-names: app
+        instrumentation.opentelemetry.io/inject-nodejs: otel-splunk/splunk-otel-collector
+    spec:
+      containers:
+        - name: app
+          image: node:22-alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - node
+            - /srv/frontend/server.js
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: PORT
+              value: "8080"
+            - name: K8S_NAMESPACE
+              value: streaming-service-app
+            - name: STATIC_ROOT
+              value: /srv/frontend
+            - name: OTEL_SERVICE_NAME
+              value: streaming-frontend
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: grpc
+            - name: OTEL_PROPAGATORS
+              value: baggage,b3,tracecontext
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.name=$(OTEL_SERVICE_NAME),service.namespace=streaming-service-app,k8s.namespace.name=streaming-service-app,k8s.deployment.name=streaming-frontend,deployment.environment=streaming-app
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          volumeMounts:
+            - name: frontend-assets
+              mountPath: /srv/frontend
+              readOnly: true
+            - name: frontend-rum-assets
+              mountPath: /srv/frontend/splunk
+              readOnly: true
+      volumes:
+        - name: frontend-assets
+          configMap:
+            name: streaming-frontend-assets
+        - name: frontend-rum-assets
+          configMap:
+            name: streaming-frontend-rum-assets

@@ -3,3 +3,12 @@ spring:
     import: optional:configserver:http://localhost:8888
   application:
     name: content-service
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      group-id: content-service-group
+      properties:
+        spring.json.type.mapping: masterPlaylistMessage:io.github.marianciuc.streamingservice.content.kafka.messages.CreateMasterPlayListMessage
+        spring.json.trusted.packages: io.github.marianciuc.streamingservice.content.kafka.messages

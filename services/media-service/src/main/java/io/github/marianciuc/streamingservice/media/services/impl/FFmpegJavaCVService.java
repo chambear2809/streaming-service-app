@@ -9,7 +9,6 @@ package io.github.marianciuc.streamingservice.media.services.impl;
 
 import io.github.marianciuc.streamingservice.media.dto.ResolutionDto;
 import io.github.marianciuc.streamingservice.media.exceptions.CompressingException;
-import io.github.marianciuc.streamingservice.media.exceptions.VideoStorageUploadException;
 import io.github.marianciuc.streamingservice.media.services.PlaylistService;
 import io.github.marianciuc.streamingservice.media.services.VideoCompressingService;
 import io.github.marianciuc.streamingservice.media.services.VideoStorageService;
@@ -40,10 +39,10 @@ public class FFmpegJavaCVService implements VideoCompressingService {
     private static final int VIDEO_CODEC = avcodec.AV_CODEC_ID_H264;
     private static final int AUDIO_CODEC = avcodec.AV_CODEC_ID_AAC;
     private static final int PIXEL_FORMAT = avutil.AV_PIX_FMT_YUV420P;
-    private static final String OUTPUT_FORMAT = "hls";
+    private static final String OUTPUT_FORMAT = "mpegts";
     private static final int CHUNK_DURATION_IN_SECONDS = 10;
-    private static final String HLS_SEGMENT_FILENAME = "segment%d.ts";
     private static final String CONTENT_TYPE_VIDEO_MP2T = "video/mp2t";
+    private static final int DEFAULT_FRAME_RATE = 24;
 
     private final VideoStorageService videoStorageService;
     private final PlaylistService playlistService;
@@ -54,8 +53,9 @@ public class FFmpegJavaCVService implements VideoCompressingService {
 
         try {
             inputFile = createTempFile();
-            Files.copy(videoStorageService.assembleVideoTemporaryVideoFile(id), Path.of(inputFile.getAbsolutePath()),
-                    StandardCopyOption.REPLACE_EXISTING);
+            try (InputStream sourceStream = videoStorageService.assembleVideo(id)) {
+                Files.copy(sourceStream, Path.of(inputFile.getAbsolutePath()), StandardCopyOption.REPLACE_EXISTING);
+            }
             return executeCompression(inputFile.getAbsolutePath(), resolution, id);
         } catch (IOException e) {
             throw new CompressingException(IO_EXCEPTION_MSG, e);
@@ -69,7 +69,7 @@ public class FFmpegJavaCVService implements VideoCompressingService {
              ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
 
             grabber.start();
-            int frameRate = (int) grabber.getFrameRate();
+            int frameRate = (int) Math.max(grabber.getFrameRate(), DEFAULT_FRAME_RATE);
             int totalFramesPerChunk = frameRate * CHUNK_DURATION_IN_SECONDS;
 
             Frame frame;
@@ -77,7 +77,7 @@ public class FFmpegJavaCVService implements VideoCompressingService {
             StringBuilder resolutionPlaylist = playlistService.generateResolutionPlaylist();
             int chunkCounter = 0;
 
-            while ((frame = grabber.grab()) != null) {
+            while ((frame = grabber.grabFrame()) != null) {
                 if (recorder == null || recorder.getFrameNumber() >= totalFramesPerChunk) {
                     if (recorder != null) {
                         recorder.stop();
@@ -103,7 +103,12 @@ public class FFmpegJavaCVService implements VideoCompressingService {
     }
 
     private FFmpegFrameRecorder initializeRecorder(ByteArrayOutputStream outputStream, ResolutionDto resolution, int frameRate, FFmpegFrameGrabber grabber) throws Exception {
-        FFmpegFrameRecorder recorder = new FFmpegFrameRecorder(outputStream, resolution.width(), resolution.height());
+        FFmpegFrameRecorder recorder = new FFmpegFrameRecorder(
+                outputStream,
+                resolution.width(),
+                resolution.height(),
+                Math.max(grabber.getAudioChannels(), 0)
+        );
 
         setupRecorder(recorder, frameRate, resolution.bitrate(), grabber);
         recorder.start();
@@ -113,21 +118,23 @@ public class FFmpegJavaCVService implements VideoCompressingService {
 
     private void setupRecorder(FFmpegFrameRecorder recorder, int frameRate, int bitrate, FFmpegFrameGrabber grabber) {
         recorder.setVideoCodec(VIDEO_CODEC);
-        recorder.setAudioCodec(AUDIO_CODEC);
         recorder.setPixelFormat(PIXEL_FORMAT);
         recorder.setFormat(OUTPUT_FORMAT);
         recorder.setFrameRate(frameRate);
-        recorder.setSampleRate(grabber.getSampleRate());
+        if (grabber.getAudioChannels() > 0) {
+            recorder.setAudioCodec(AUDIO_CODEC);
+            recorder.setAudioChannels(grabber.getAudioChannels());
+        }
+        if (grabber.getSampleRate() > 0) {
+            recorder.setSampleRate(grabber.getSampleRate());
+        }
         recorder.setVideoBitrate(bitrate);
-        recorder.setOption("hls_list_size", "0");
-        recorder.setOption("hls_time", String.valueOf(CHUNK_DURATION_IN_SECONDS));
-        recorder.setOption("hls_segment_filename", HLS_SEGMENT_FILENAME);
     }
 
     private void uploadChunkAndResetStream(ByteArrayOutputStream outputStream, ResolutionDto resolution, UUID fileId,
-                                           StringBuilder playlist, int chunkNumber) throws VideoStorageUploadException {
-        String objectName = videoStorageService.uploadVideoSegment(outputStream, fileId, resolution, chunkNumber, CONTENT_TYPE_VIDEO_MP2T);
-        playlistService.appendResolutionPlaylist(objectName, playlist, CHUNK_DURATION_IN_SECONDS);
+                                           StringBuilder playlist, int chunkNumber) {
+        videoStorageService.uploadVideoSegment(outputStream, fileId, resolution, chunkNumber, CONTENT_TYPE_VIDEO_MP2T);
+        playlistService.appendResolutionPlaylist(resolution.height(), fileId, chunkNumber, playlist, CHUNK_DURATION_IN_SECONDS);
         outputStream.reset();
     }
 

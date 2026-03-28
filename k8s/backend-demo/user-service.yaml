@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service-demo
+  namespace: streaming-service-app
+  labels:
+    app.kubernetes.io/name: user-service-demo
+    app.kubernetes.io/part-of: streaming-service-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: user-service-demo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: user-service-demo
+        app.kubernetes.io/part-of: streaming-service-app
+      annotations:
+        instrumentation.opentelemetry.io/container-names: app
+        instrumentation.opentelemetry.io/inject-java: otel-splunk/splunk-otel-collector
+    spec:
+      initContainers:
+        - name: extract-source
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              mkdir -p /workspace
+              tar -xzf /source/user-service-source.tgz -C /workspace
+          volumeMounts:
+            - name: source
+              mountPath: /source
+              readOnly: true
+            - name: workspace
+              mountPath: /workspace
+        - name: build-app
+          image: maven:3.9.9-eclipse-temurin-22
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              cd /workspace/services/user-service
+              mvn -f pom.demo.xml -Dmaven.test.skip=true package
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: maven-repo
+              mountPath: /root/.m2
+      containers:
+        - name: app
+          image: eclipse-temurin:22-jre
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - java -jar /workspace/services/user-service/target/user-service-demo.jar
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: user-service-demo
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: grpc
+            - name: OTEL_PROPAGATORS
+              value: baggage,b3,tracecontext
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.name=$(OTEL_SERVICE_NAME),service.namespace=streaming-service-app,k8s.namespace.name=streaming-service-app,k8s.deployment.name=user-service-demo,deployment.environment=streaming-app
+            - name: SERVER_PORT
+              value: "8080"
+            - name: DEMO_AUTH_SECRET
+              value: acme-broadcasting-demo-auth-secret
+          readinessProbe:
+            httpGet:
+              path: /api/v1/demo/auth/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/v1/demo/auth/health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+              readOnly: true
+      volumes:
+        - name: source
+          configMap:
+            name: user-service-source
+        - name: workspace
+          emptyDir: {}
+        - name: maven-repo
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service-demo
+  namespace: streaming-service-app
+  labels:
+    app.kubernetes.io/name: user-service-demo
+    app.kubernetes.io/part-of: streaming-service-app
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: user-service-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

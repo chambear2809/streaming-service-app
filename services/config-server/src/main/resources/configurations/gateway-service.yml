@@ -9,5 +9,9 @@ spring:
           uri: lb:http://USER-SERVICE
           predicates:
             - Path=/jwt/**,/api/v1/users/**,/api/v1/auth/**
+        - id: billing-service
+          uri: lb:http://BILLING-SERVICE
+          predicates:
+            - Path=/api/v1/billing/**
 server:
   port: 8222

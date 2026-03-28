@@ -10,9 +10,11 @@ package io.github.marianciuc.streamingservice.media.dto;
 
 import io.github.marianciuc.streamingservice.media.entity.Video;
 import io.github.marianciuc.streamingservice.media.enums.MediaType;
+import io.github.marianciuc.streamingservice.media.enums.VideoSourceType;
 import io.github.marianciuc.streamingservice.media.enums.VideoStatues;
 
 import java.util.Set;
+import java.util.Collections;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -23,6 +25,9 @@ public record VideoDto (
         MediaType mediaType,
         Integer processedResolutions,
         VideoStatues status,
+        VideoSourceType sourceType,
+        String sourceUrl,
+        Boolean liveStream,
         String masterPlaylistPath,
         Set<VideoFileMetadataDto> files,
         Set<VideoFileUploadStatusDto> statues
@@ -36,9 +41,16 @@ public record VideoDto (
                 video.getMediaType(),
                 video.getProcessedResolutions(),
                 video.getStatus(),
+                video.getSourceType(),
+                video.getSourceUrl(),
+                video.getLiveStream(),
                 video.getMasterPlaylistPath(),
-                video.getFiles().stream().map(VideoFileMetadataDto::toVideoFileMetadataDto).collect(Collectors.toSet()),
-                video.getStatuses().stream().map(VideoFileUploadStatusDto::toVideoFileUploadStatusDto).collect(Collectors.toSet())
+                video.getFiles() == null
+                        ? Collections.emptySet()
+                        : video.getFiles().stream().map(VideoFileMetadataDto::toVideoFileMetadataDto).collect(Collectors.toSet()),
+                video.getStatuses() == null
+                        ? Collections.emptySet()
+                        : video.getStatuses().stream().map(VideoFileUploadStatusDto::toVideoFileUploadStatusDto).collect(Collectors.toSet())
         );
     }
     public static Video toEntity(VideoDto videoDto) {

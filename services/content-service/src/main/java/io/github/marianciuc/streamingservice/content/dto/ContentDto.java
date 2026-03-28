@@ -23,6 +23,8 @@ public record ContentDto(
         LocalDate releaseDate,
         String ageRating,
         String posterUrl,
+        String playbackUrl,
+        Boolean streamReady,
         List<GenreDto> genreList,
         List<PersonDto> directorList,
         List<SeasonDto> seasonList,
@@ -38,11 +40,26 @@ public record ContentDto(
                 content.getReleaseDate(),
                 content.getAgeRating(),
                 content.getPosterUrl(),
+                resolvePlaybackUrl(content),
+                resolvePlaybackUrl(content) != null,
                 content.getGenres().stream().map(GenreDto::toGenreDto).toList(),
                 content.getDirectors().stream().map(PersonDto::toPersonDto).toList(),
                 content.getSeasons().stream().map(SeasonDto::toSeasonDto).toList(),
                 content.getActors().stream().map(PersonDto::toPersonDto).toList(),
                 content.getTags().stream().map(TagDto::toTagDto).toList()
         );
+    }
+
+    private static String resolvePlaybackUrl(Content content) {
+        if (content.getMovie() == null) {
+            return null;
+        }
+
+        String playbackUrl = content.getMovie().getMasterPlaylistUrl();
+        if (playbackUrl == null || playbackUrl.isBlank()) {
+            return null;
+        }
+
+        return playbackUrl;
     }
 }

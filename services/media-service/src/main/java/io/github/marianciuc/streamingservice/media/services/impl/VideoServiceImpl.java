@@ -11,6 +11,7 @@ package io.github.marianciuc.streamingservice.media.services.impl;
 import io.github.marianciuc.streamingservice.media.dto.VideoDto;
 import io.github.marianciuc.streamingservice.media.entity.Video;
 import io.github.marianciuc.streamingservice.media.enums.MediaType;
+import io.github.marianciuc.streamingservice.media.enums.VideoSourceType;
 import io.github.marianciuc.streamingservice.media.enums.VideoStatues;
 import io.github.marianciuc.streamingservice.media.exceptions.ImageNotFoundException;
 import io.github.marianciuc.streamingservice.media.exceptions.NotFoundException;
@@ -43,11 +44,20 @@ public class VideoServiceImpl implements VideoService {
     }
 
     public VideoDto createVideoEntity(UUID contentId, Integer totalChunks, MediaType mediaType) {
+        return createVideoEntity(contentId, mediaType, DEFAULT_CONTENT_TYPE, VideoSourceType.UPLOAD, null, false);
+    }
+
+    @Override
+    public VideoDto createVideoEntity(UUID contentId, MediaType mediaType, String contentType, VideoSourceType sourceType, String sourceUrl, boolean liveStream) {
         Video video = Video.builder()
                 .status(VideoStatues.PREPARED)
-                .contentType(DEFAULT_CONTENT_TYPE)
+                .contentType(contentType == null || contentType.isBlank() ? DEFAULT_CONTENT_TYPE : contentType)
                 .mediaType(mediaType)
                 .contentId(contentId)
+                .processedResolutions(0)
+                .sourceType(sourceType == null ? VideoSourceType.UPLOAD : sourceType)
+                .sourceUrl(sourceUrl)
+                .liveStream(liveStream)
                 .build();
         return VideoDto.toVideoDto(repository.save(video));
     }

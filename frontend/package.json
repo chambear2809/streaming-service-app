@@ -1,0 +1,17 @@
+{
+  "name": "streaming-frontend",
+  "private": true,
+  "scripts": {
+    "build": "node ./scripts/build.mjs",
+    "sourcemaps:inject": "splunk-rum sourcemaps inject --path dist",
+    "build:production": "npm run build && npm run sourcemaps:inject"
+  },
+  "dependencies": {
+    "@splunk/otel-web": "^2.4.0",
+    "@splunk/otel-web-session-recorder": "^2.4.0"
+  },
+  "devDependencies": {
+    "@splunk/rum-cli": "^1.0.0",
+    "esbuild": "^0.27.4"
+  }
+}

@@ -43,6 +43,7 @@ public class VideoFileMetadataServiceImpl implements VideoFileMetadataService {
         VideoFileMetadata metadata = repository.findById(id).orElseThrow(() -> new NotFoundException("Metadata not found"));
         if (status != null) metadata.setIsProcessed(status);
         if (!playlistPath.isEmpty()) metadata.setPlayListPath(playlistPath);
+        repository.save(metadata);
     }
 
     @Override

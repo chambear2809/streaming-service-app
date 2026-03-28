@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: streaming-postgres
+  namespace: streaming-service-app
+  labels:
+    app.kubernetes.io/name: streaming-postgres
+    app.kubernetes.io/part-of: streaming-service-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: streaming-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: streaming-postgres
+        app.kubernetes.io/part-of: streaming-service-app
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              value: streaming
+            - name: POSTGRES_USER
+              value: streaming
+            - name: POSTGRES_PASSWORD
+              value: streaming
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U streaming -d streaming
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: postgres-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: streaming-postgres
+  namespace: streaming-service-app
+  labels:
+    app.kubernetes.io/name: streaming-postgres
+    app.kubernetes.io/part-of: streaming-service-app
+spec:
+  selector:
+    app.kubernetes.io/name: streaming-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres

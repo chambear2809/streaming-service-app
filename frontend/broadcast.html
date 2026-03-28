@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acme Broadcasting External Distribution</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script src="./config.js"></script>
+    <script type="module" src="./splunk/splunk-instrumentation.js"></script>
+    <style>
+        body.public-broadcast {
+            min-height: 100vh;
+        }
+
+        .public-broadcast-shell {
+            width: min(1180px, calc(100vw - 28px));
+            margin: 0 auto;
+            padding: 24px 0 48px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .public-broadcast-hero,
+        .public-broadcast-stage,
+        .public-broadcast-grid {
+            border: 1px solid var(--line);
+            background: linear-gradient(180deg, rgba(10, 20, 29, 0.92), rgba(13, 24, 34, 0.82));
+            box-shadow: var(--shadow-xl);
+            backdrop-filter: blur(20px);
+            border-radius: var(--radius-xl);
+        }
+
+        .public-broadcast-hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+            gap: 24px;
+            padding: 34px;
+            margin-bottom: 18px;
+        }
+
+        .public-broadcast-stage {
+            padding: 22px;
+            margin-bottom: 18px;
+        }
+
+        .public-broadcast-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 16px;
+            padding: 18px;
+        }
+
+        .public-broadcast-copy h1 {
+            margin: 0 0 14px;
+            font-size: clamp(2.4rem, 5vw, 4rem);
+        }
+
+        .public-broadcast-copy p {
+            margin: 0;
+            color: var(--fog-200);
+            line-height: 1.7;
+            max-width: 62ch;
+        }
+
+        .public-broadcast-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 22px;
+        }
+
+        .public-broadcast-meta {
+            display: grid;
+            gap: 14px;
+            align-content: start;
+        }
+
+        .public-broadcast-meta-card,
+        .public-broadcast-signal {
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: 18px;
+            padding: 18px;
+        }
+
+        .public-broadcast-meta-card span,
+        .public-broadcast-signal span {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--fog-300);
+            font-size: 0.78rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .public-broadcast-meta-card strong,
+        .public-broadcast-signal strong {
+            display: block;
+            font-size: 1.14rem;
+            margin-bottom: 8px;
+        }
+
+        .public-broadcast-meta-card p,
+        .public-broadcast-signal p {
+            margin: 0;
+            color: var(--fog-200);
+            line-height: 1.6;
+        }
+
+        .public-broadcast-player {
+            width: 100%;
+            border-radius: 18px;
+            background: #000;
+            display: block;
+        }
+
+        .public-broadcast-grid article {
+            border: 1px solid rgba(173, 196, 219, 0.12);
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)),
+                radial-gradient(circle at top right, rgba(130, 168, 217, 0.08), transparent 28%);
+            border-radius: 18px;
+            padding: 18px;
+        }
+
+        .public-broadcast-grid span {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--fog-300);
+            font-size: 0.76rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .public-broadcast-grid strong {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 1rem;
+        }
+
+        .public-broadcast-grid p {
+            margin: 0;
+            color: var(--fog-200);
+            line-height: 1.6;
+        }
+
+        @media (min-width: 1440px) {
+            .public-broadcast-shell {
+                width: min(1540px, calc(100vw - 44px));
+                padding-top: 18px;
+            }
+
+            .public-broadcast-hero {
+                grid-template-columns: minmax(0, 1.42fr) minmax(320px, 0.58fr);
+                padding: 28px 32px 24px;
+            }
+
+            .public-broadcast-stage {
+                padding: 18px;
+            }
+
+            .public-broadcast-player {
+                aspect-ratio: 21 / 9;
+                max-height: 72vh;
+                object-fit: contain;
+            }
+
+            .public-broadcast-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .public-broadcast-copy p,
+            .public-broadcast-grid p,
+            .public-broadcast-meta-card p,
+            .public-broadcast-signal p {
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 2;
+                overflow: hidden;
+            }
+        }
+
+        body.public-broadcast.is-presentation-mode .public-broadcast-shell {
+            width: min(1600px, calc(100vw - 40px));
+            padding-top: 14px;
+            padding-bottom: 24px;
+        }
+
+        body.public-broadcast.is-presentation-mode .public-broadcast-hero {
+            grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.55fr);
+            padding: 24px 28px 20px;
+        }
+
+        body.public-broadcast.is-presentation-mode .public-broadcast-stage {
+            padding: 16px;
+        }
+
+        body.public-broadcast.is-presentation-mode .public-broadcast-player {
+            aspect-ratio: 21 / 9;
+            max-height: 76vh;
+            object-fit: contain;
+        }
+
+        body.public-broadcast.is-presentation-mode .public-broadcast-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        body.public-broadcast.is-presentation-mode .public-broadcast-copy p,
+        body.public-broadcast.is-presentation-mode .public-broadcast-grid p,
+        body.public-broadcast.is-presentation-mode .public-broadcast-meta-card p,
+        body.public-broadcast.is-presentation-mode .public-broadcast-signal p {
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+            overflow: hidden;
+        }
+
+        @media (max-width: 960px) {
+            .public-broadcast-hero,
+            .public-broadcast-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js"></script>
+    <script type="module" src="./broadcast.js"></script>
+</head>
+<body class="public-broadcast">
+<div class="public-broadcast-shell">
+    <section class="public-broadcast-hero">
+        <div class="public-broadcast-copy">
+            <p class="eyebrow">External Distribution</p>
+            <h1 id="broadcast-title">Acme Network East</h1>
+            <p id="broadcast-detail">Loading the current external program feed.</p>
+            <div class="public-broadcast-actions">
+                <a class="button button-solid" id="broadcast-direct-link" href="/api/v1/demo/public/broadcast/live/index.m3u8" target="_blank" rel="noreferrer">Open direct stream</a>
+                <button class="button button-ghost presentation-toggle" id="broadcast-presentation-toggle" type="button" aria-pressed="false">Presentation mode</button>
+                <a class="button button-ghost" href="/">Open master control</a>
+            </div>
+        </div>
+
+        <div class="public-broadcast-meta">
+            <article class="public-broadcast-meta-card">
+                <span>Channel</span>
+                <strong id="broadcast-channel">Acme Network East</strong>
+                <p>Externally reachable distribution window for stakeholder review, transport checks, and playout validation.</p>
+            </article>
+            <article class="public-broadcast-signal">
+                <span>Service state</span>
+                <strong id="broadcast-status">Loading</strong>
+                <p id="broadcast-status-copy">Checking the current on-air source.</p>
+            </article>
+        </div>
+    </section>
+
+    <section class="public-broadcast-stage">
+        <video id="broadcast-player" class="public-broadcast-player" controls autoplay muted playsinline preload="metadata"></video>
+    </section>
+
+    <section class="public-broadcast-grid">
+        <article>
+            <span>On air</span>
+            <strong id="broadcast-source-type">Preparing feed</strong>
+            <p id="broadcast-source-copy">Waiting for the current source profile.</p>
+        </article>
+        <article>
+            <span>Updated</span>
+            <strong id="broadcast-updated">Checking</strong>
+            <p>The public page refreshes channel metadata automatically.</p>
+        </article>
+        <article>
+            <span>Sponsor pod</span>
+            <strong id="broadcast-ad-pod">Loading</strong>
+            <p id="broadcast-ad-copy">Checking the current sponsor break.</p>
+        </article>
+        <article>
+            <span>Ad mode</span>
+            <strong id="broadcast-ad-mode">Checking</strong>
+            <p id="broadcast-ad-mode-copy">Resolving ad decisioning state.</p>
+        </article>
+        <article>
+            <span>Transport URL</span>
+            <strong id="broadcast-playback-url">Resolving</strong>
+            <p>Use this direct URL for VLC, transport validation, or an external monitoring handoff.</p>
+        </article>
+        <article>
+            <span>Control page</span>
+            <strong id="broadcast-page-url">/broadcast</strong>
+            <p>Master Control can switch the external feed without changing this page URL.</p>
+        </article>
+    </section>
+</div>
+</body>
+</html>

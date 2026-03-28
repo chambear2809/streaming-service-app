@@ -1,0 +1,390 @@
+const runtimeConfig = window.STREAMING_CONFIG ?? {};
+
+const elements = {
+    title: document.querySelector("#broadcast-title"),
+    detail: document.querySelector("#broadcast-detail"),
+    channel: document.querySelector("#broadcast-channel"),
+    status: document.querySelector("#broadcast-status"),
+    statusCopy: document.querySelector("#broadcast-status-copy"),
+    sourceType: document.querySelector("#broadcast-source-type"),
+    sourceCopy: document.querySelector("#broadcast-source-copy"),
+    adPod: document.querySelector("#broadcast-ad-pod"),
+    adCopy: document.querySelector("#broadcast-ad-copy"),
+    adMode: document.querySelector("#broadcast-ad-mode"),
+    adModeCopy: document.querySelector("#broadcast-ad-mode-copy"),
+    updated: document.querySelector("#broadcast-updated"),
+    playbackUrl: document.querySelector("#broadcast-playback-url"),
+    pageUrl: document.querySelector("#broadcast-page-url"),
+    directLink: document.querySelector("#broadcast-direct-link"),
+    presentationToggle: document.querySelector("#broadcast-presentation-toggle"),
+    player: document.querySelector("#broadcast-player")
+};
+
+const state = {
+    activePlaybackUrl: ""
+};
+
+let presentationFallbackEnabled = false;
+let hlsPlayer = null;
+let reconnectTimer = null;
+let stallRecoveryTimer = null;
+let playbackWatchdogTimer = null;
+let lastPlaybackProgressAt = 0;
+let lastPlaybackTime = 0;
+const BROADCAST_REFRESH_INTERVAL_MS = 5000;
+const STALL_RECOVERY_DELAY_MS = 4000;
+const PLAYBACK_WATCHDOG_INTERVAL_MS = 3000;
+const PLAYBACK_STALL_THRESHOLD_MS = 5000;
+
+function resolveChannelLabel(label) {
+    return String(label ?? "").trim() || runtimeConfig.defaultBroadcastChannelLabel || "Acme Network East";
+}
+
+function resolveBroadcastTitle(title) {
+    return String(title ?? "").trim() || runtimeConfig.defaultBroadcastTitle || runtimeConfig.defaultBroadcastChannelLabel || "Acme Network East";
+}
+
+function resolveBroadcastDetail(detail) {
+    return String(detail ?? "").trim() || runtimeConfig.defaultBroadcastDetail || "External distribution is available from this page.";
+}
+
+function absoluteUrl(path) {
+    try {
+        return new URL(path || "/", window.location.origin).href;
+    } catch (_error) {
+        return path || "/";
+    }
+}
+
+function formatStamp(dateLike) {
+    const date = new Date(dateLike);
+    if (Number.isNaN(date.getTime())) {
+        return "Unavailable";
+    }
+
+    return date.toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit"
+    });
+}
+
+function presentationModeActive() {
+    return Boolean(document.fullscreenElement) || presentationFallbackEnabled;
+}
+
+function syncPresentationMode() {
+    const active = presentationModeActive();
+
+    document.body.classList.toggle("is-presentation-mode", active);
+    elements.presentationToggle.setAttribute("aria-pressed", String(active));
+    elements.presentationToggle.textContent = active ? "Exit fullscreen" : "Presentation mode";
+}
+
+async function togglePresentationMode() {
+    const root = document.documentElement;
+
+    if (!document.fullscreenEnabled || typeof root.requestFullscreen !== "function") {
+        presentationFallbackEnabled = !presentationFallbackEnabled;
+        syncPresentationMode();
+        return;
+    }
+
+    try {
+        if (document.fullscreenElement) {
+            await document.exitFullscreen();
+        } else {
+            presentationFallbackEnabled = false;
+            await root.requestFullscreen();
+        }
+    } catch (error) {
+        console.warn("Unable to toggle broadcast presentation mode.", error);
+        presentationFallbackEnabled = !presentationFallbackEnabled;
+    }
+
+    syncPresentationMode();
+}
+
+function resetPlayerSource() {
+    if (reconnectTimer) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+    if (stallRecoveryTimer) {
+        window.clearTimeout(stallRecoveryTimer);
+        stallRecoveryTimer = null;
+    }
+
+    if (hlsPlayer) {
+        hlsPlayer.destroy();
+        hlsPlayer = null;
+    }
+
+    elements.player.pause();
+    elements.player.removeAttribute("src");
+    while (elements.player.firstChild) {
+        elements.player.removeChild(elements.player.firstChild);
+    }
+    elements.player.load();
+}
+
+function markPlaybackProgress() {
+    lastPlaybackTime = elements.player.currentTime || 0;
+    lastPlaybackProgressAt = Date.now();
+}
+
+function clearStallRecoveryTimer() {
+    if (!stallRecoveryTimer) {
+        return;
+    }
+
+    window.clearTimeout(stallRecoveryTimer);
+    stallRecoveryTimer = null;
+}
+
+function scheduleStallRecovery(reason) {
+    if (!state.activePlaybackUrl || !isLikelyHlsSource(state.activePlaybackUrl)) {
+        return;
+    }
+
+    if (stallRecoveryTimer) {
+        return;
+    }
+
+    elements.statusCopy.textContent = reason;
+    stallRecoveryTimer = window.setTimeout(() => {
+        stallRecoveryTimer = null;
+        elements.statusCopy.textContent = "The external live feed stalled during playout. Reconnecting...";
+        scheduleReconnect(state.activePlaybackUrl, 250);
+    }, STALL_RECOVERY_DELAY_MS);
+}
+
+function ensurePlaybackWatchdog() {
+    if (playbackWatchdogTimer) {
+        return;
+    }
+
+    playbackWatchdogTimer = window.setInterval(() => {
+        if (!state.activePlaybackUrl || !isLikelyHlsSource(state.activePlaybackUrl)) {
+            return;
+        }
+
+        if (elements.player.paused || elements.player.ended) {
+            return;
+        }
+
+        const currentTime = elements.player.currentTime || 0;
+        const now = Date.now();
+        const timeAdvanced = Math.abs(currentTime - lastPlaybackTime) > 0.2;
+        if (timeAdvanced) {
+            markPlaybackProgress();
+            clearStallRecoveryTimer();
+            return;
+        }
+
+        const lowReadyState = elements.player.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
+        const stalledTooLong = lastPlaybackProgressAt > 0 && now - lastPlaybackProgressAt >= PLAYBACK_STALL_THRESHOLD_MS;
+        if (lowReadyState || stalledTooLong) {
+            scheduleStallRecovery("The external live feed is buffering. Recovering the player...");
+        }
+    }, PLAYBACK_WATCHDOG_INTERVAL_MS);
+}
+
+function isLikelyHlsSource(url) {
+    const normalized = String(url ?? "").trim().toLowerCase();
+    return normalized.endsWith(".m3u8") || normalized.includes("/broadcast/live/");
+}
+
+function scheduleReconnect(sourceUrl, delayMs = 1500) {
+    if (!sourceUrl) {
+        return;
+    }
+
+    if (reconnectTimer) {
+        window.clearTimeout(reconnectTimer);
+    }
+
+    reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null;
+        state.activePlaybackUrl = "";
+        updatePlayer(sourceUrl);
+    }, delayMs);
+}
+
+function loadHlsPlayerSource(sourceUrl) {
+    if (window.Hls?.isSupported?.()) {
+        hlsPlayer = new window.Hls({
+            enableWorker: true,
+            lowLatencyMode: false
+        });
+        hlsPlayer.on(window.Hls.Events.ERROR, (_event, data) => {
+            if (!data?.fatal) {
+                if (data?.details === window.Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
+                    scheduleStallRecovery("The external live feed is buffering. Recovering the player...");
+                }
+                return;
+            }
+
+            console.warn("External HLS feed failed to load.", data);
+            elements.statusCopy.textContent = "The external live feed dropped during playout. Reconnecting...";
+
+            if (data.type === window.Hls.ErrorTypes.MEDIA_ERROR && hlsPlayer) {
+                hlsPlayer.recoverMediaError();
+                return;
+            }
+
+            if (hlsPlayer) {
+                hlsPlayer.destroy();
+                hlsPlayer = null;
+            }
+            scheduleReconnect(sourceUrl);
+        });
+        hlsPlayer.loadSource(sourceUrl);
+        hlsPlayer.attachMedia(elements.player);
+        return true;
+    }
+
+    if (elements.player.canPlayType("application/vnd.apple.mpegurl") || elements.player.canPlayType("application/x-mpegURL")) {
+        elements.player.src = sourceUrl;
+        elements.player.load();
+        return true;
+    }
+
+    return false;
+}
+
+function updatePlayer(playbackUrl) {
+    const resolvedUrl = absoluteUrl(playbackUrl);
+    const needsRecovery = isLikelyHlsSource(resolvedUrl) && (!hlsPlayer || elements.player.ended);
+    if (!playbackUrl || (state.activePlaybackUrl === resolvedUrl && !needsRecovery)) {
+        return;
+    }
+
+    state.activePlaybackUrl = resolvedUrl;
+    resetPlayerSource();
+    markPlaybackProgress();
+    ensurePlaybackWatchdog();
+
+    if (isLikelyHlsSource(resolvedUrl)) {
+        if (!loadHlsPlayerSource(resolvedUrl)) {
+            elements.statusCopy.textContent = "This browser cannot open the live HLS feed.";
+            return;
+        }
+    } else {
+        elements.player.src = resolvedUrl;
+        elements.player.load();
+    }
+
+    elements.player.play().catch(() => {});
+}
+
+async function refreshBroadcast() {
+    const statusUrl = runtimeConfig.publicBroadcastStatusUrl ?? "/api/v1/demo/public/broadcast/current";
+    const response = await fetch(statusUrl, {
+        cache: "no-store"
+    });
+
+    if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const broadcastPageUrl = absoluteUrl(payload?.publicPageUrl ?? runtimeConfig.publicBroadcastPageUrl ?? "/broadcast");
+    const publicPlaybackUrl = payload?.publicPlaybackUrl ?? runtimeConfig.publicBroadcastPlaybackUrl ?? "/api/v1/demo/public/broadcast/live/index.m3u8";
+    const status = String(payload?.status ?? "DEMO_LOOP").toUpperCase();
+    const statusLabel = status === "ON_AIR" ? "On air" : "House loop";
+    const sourceType = status === "ON_AIR" ? "RTSP contribution" : "House lineup";
+    const adStatus = payload?.adStatus ?? {};
+    const adState = String(adStatus?.state ?? "ARMED").toUpperCase();
+    const adBreakActive = adState === "IN_BREAK";
+
+    elements.title.textContent = resolveBroadcastTitle(payload?.title);
+    elements.detail.textContent = resolveBroadcastDetail(payload?.detail);
+    elements.channel.textContent = resolveChannelLabel(payload?.channelLabel);
+    elements.status.textContent = statusLabel;
+    elements.statusCopy.textContent = resolveBroadcastDetail(payload?.detail) || (status === "ON_AIR"
+        ? "Master control has routed an active RTSP contribution into the external channel."
+        : "The channel is carrying the house lineup until a contribution source is taken live.");
+    elements.sourceType.textContent = sourceType;
+    elements.sourceCopy.textContent = payload?.detail ?? "The current source detail is unavailable.";
+    elements.adPod.textContent = `${adStatus?.podLabel ?? "Sponsor pod A"} · ${adStatus?.sponsorLabel ?? "North Coast Sports Network"}`;
+    elements.adCopy.textContent = adStatus?.detail ?? "The current sponsor pod detail is unavailable.";
+    elements.adMode.textContent = adBreakActive ? "Sponsor break live" : "Program feed";
+    elements.adModeCopy.textContent = `${adStatus?.decisioningMode ?? "Server-side stitched pod"} · ${formatStamp(adStatus?.breakStartAt)} - ${formatStamp(adStatus?.breakEndAt)}`;
+    elements.updated.textContent = formatStamp(payload?.updatedAt);
+    elements.playbackUrl.textContent = absoluteUrl(publicPlaybackUrl);
+    elements.pageUrl.textContent = broadcastPageUrl;
+    elements.directLink.href = absoluteUrl(publicPlaybackUrl);
+    updatePlayer(publicPlaybackUrl);
+}
+
+async function bootstrap() {
+    syncPresentationMode();
+
+    try {
+        await refreshBroadcast();
+    } catch (error) {
+        console.warn("Unable to load the external distribution feed.", error);
+        elements.status.textContent = "Unavailable";
+        elements.statusCopy.textContent = "The external distribution feed could not be loaded.";
+    }
+
+    window.setInterval(() => {
+        refreshBroadcast().catch((error) => {
+            console.warn("Unable to refresh the external distribution feed.", error);
+        });
+    }, BROADCAST_REFRESH_INTERVAL_MS);
+}
+
+elements.presentationToggle.addEventListener("click", () => {
+    togglePresentationMode();
+});
+window.addEventListener("focus", () => {
+    refreshBroadcast().catch((error) => {
+        console.warn("Unable to refresh the external distribution feed.", error);
+    });
+});
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") {
+        return;
+    }
+    refreshBroadcast().catch((error) => {
+        console.warn("Unable to refresh the external distribution feed.", error);
+    });
+});
+document.addEventListener("fullscreenchange", () => {
+    if (!document.fullscreenElement) {
+        presentationFallbackEnabled = false;
+    }
+    syncPresentationMode();
+});
+elements.player.addEventListener("ended", () => {
+    if (!state.activePlaybackUrl || !isLikelyHlsSource(state.activePlaybackUrl)) {
+        return;
+    }
+
+    elements.statusCopy.textContent = "The external live feed reached a playout boundary. Reconnecting...";
+    scheduleReconnect(state.activePlaybackUrl, 500);
+});
+elements.player.addEventListener("playing", () => {
+    markPlaybackProgress();
+    clearStallRecoveryTimer();
+});
+elements.player.addEventListener("timeupdate", () => {
+    markPlaybackProgress();
+    clearStallRecoveryTimer();
+});
+elements.player.addEventListener("waiting", () => {
+    scheduleStallRecovery("The external live feed is buffering. Recovering the player...");
+});
+elements.player.addEventListener("stalled", () => {
+    scheduleStallRecovery("The external live feed stalled during playout. Recovering the player...");
+});
+elements.player.addEventListener("error", () => {
+    scheduleStallRecovery("The external live feed hit a playback error. Recovering the player...");
+});
+
+bootstrap().catch((error) => {
+    console.warn("External distribution bootstrap failed.", error);
+});

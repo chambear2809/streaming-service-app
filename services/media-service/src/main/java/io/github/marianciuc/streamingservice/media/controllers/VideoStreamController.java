@@ -29,12 +29,20 @@ public class VideoStreamController {
 
     private final PlaylistService playlistService;
 
-    @GetMapping("/playlist/{videoId}")
+    @GetMapping({"/playlist/{videoId}", "/playlist/{videoId}.m3u8"})
     public ResponseEntity<Resource> getMasterPlaylist(@PathVariable UUID videoId) {
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("application/vnd.apple.mpegurl"))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"playlist.m3u8\"")
                 .body(playlistService.getMasterPlaylistResource(videoId));
+    }
+
+    @GetMapping({"/playlist/{videoId}/{resolution}", "/playlist/{videoId}/{resolution}.m3u8"})
+    public ResponseEntity<Resource> getResolutionPlaylist(@PathVariable UUID videoId, @PathVariable int resolution) {
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/vnd.apple.mpegurl"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"playlist-" + resolution + ".m3u8\"")
+                .body(playlistService.getResolutionPlaylistResource(videoId, resolution));
     }
 
     @GetMapping("/segment/{resolution}/{videoId}/segment{chunkIndex}.ts")

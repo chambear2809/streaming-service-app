@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acme Broadcasting Operations Suite</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script src="./config.js"></script>
+    <script type="module" src="./splunk/splunk-instrumentation.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js"></script>
+    <script type="module" src="./app.js"></script>
+</head>
+<body>
+<div class="app-shell">
+    <header class="topbar">
+        <a class="brand" href="#home">
+            <span class="brand-mark"></span>
+            <span class="brand-copy">
+                <strong>Acme Broadcasting Network</strong>
+                <span>Network operations suite</span>
+            </span>
+        </a>
+
+        <nav class="nav">
+            <a href="#home" data-page-link="home">Command Center</a>
+            <a href="#player" data-page-link="player">Screening</a>
+            <a href="#library" data-page-link="library">Programming</a>
+            <a href="#operations" data-page-link="operations" data-role-scope="operations">Master Control</a>
+            <a href="#billing" data-page-link="billing" data-role-scope="billing">Revenue</a>
+        </nav>
+
+        <div class="topbar-tools">
+            <span class="catalog-pill" id="catalog-status"></span>
+            <button class="button button-ghost" id="surprise-me" type="button">Route priority title</button>
+            <button class="button button-ghost presentation-toggle" id="presentation-toggle" type="button" aria-pressed="false">Presentation mode</button>
+            <div class="session-chip" id="session-chip"></div>
+            <button class="button button-ghost" id="sign-out" type="button" hidden>Sign out</button>
+        </div>
+    </header>
+
+    <section class="suite-strip">
+        <article class="suite-strip-card">
+            <span>Facility</span>
+            <strong id="suite-facility"></strong>
+        </article>
+        <article class="suite-strip-card">
+            <span>Region</span>
+            <strong id="suite-region"></strong>
+        </article>
+        <article class="suite-strip-card">
+            <span>Environment</span>
+            <strong id="suite-environment"></strong>
+        </article>
+        <article class="suite-strip-card">
+            <span>Operator posture</span>
+            <strong id="suite-posture"></strong>
+        </article>
+    </section>
+
+    <section class="auth-overlay" id="auth-overlay">
+        <div class="auth-panel">
+            <div class="auth-copy">
+                <p class="eyebrow">Live Demo Launch</p>
+                <h1>Start with the viewer, then pivot into the broadcast operation.</h1>
+                <p>
+                    Open the public channel first, show the queued sponsor break, then step into the protected operator
+                    suite only when you need to explain what changed across the network, application, and revenue path.
+                </p>
+                <div class="tag-row">
+                    <span>Viewer symptom</span>
+                    <span>Sponsor timing</span>
+                    <span>Operator handoff</span>
+                </div>
+
+                <div class="auth-brief-grid">
+                    <article class="auth-brief-card">
+                        <span>Public channel</span>
+                        <strong id="launch-channel-label">Loading live feed</strong>
+                        <p id="launch-channel-copy">Pulling the current public broadcast status.</p>
+                    </article>
+                    <article class="auth-brief-card">
+                        <span>Queued sponsor pod</span>
+                        <strong id="launch-sponsor-label">Loading sponsor timing</strong>
+                        <p id="launch-sponsor-copy">Resolving the next sponsor break for the attendee path.</p>
+                    </article>
+                    <article class="auth-brief-card">
+                        <span>Incident posture</span>
+                        <strong id="launch-incident-label">Healthy</strong>
+                        <p id="launch-incident-copy">No demo incident is currently armed on the public surfaces.</p>
+                    </article>
+                </div>
+
+                <div class="hero-actions auth-launch-actions">
+                    <a class="button button-solid" id="launch-broadcast-link" href="/broadcast">Open live broadcast</a>
+                    <a class="button button-ghost" id="launch-trace-link" href="/api/v1/demo/public/trace-map" target="_blank" rel="noreferrer">See network symptom</a>
+                    <button class="button button-ghost" type="button" data-launch-persona="operator" data-launch-page="operations">Enter operator suite</button>
+                </div>
+            </div>
+
+            <div class="auth-launch-stack">
+                <section class="auth-form auth-quick-card">
+                    <div class="auth-form-heading">
+                        <span>Booth personas</span>
+                        <strong>Enter the right view in one click</strong>
+                        <p>Viewer stays on the public channel. Operator and executive personas open the protected suite with the right scope.</p>
+                    </div>
+                    <div class="launch-grid" id="launch-persona-grid">
+                        <button class="button button-solid" type="button" data-launch-persona="viewer">Viewer</button>
+                        <button class="button button-ghost" type="button" data-launch-persona="operator" data-launch-page="operations">Operator</button>
+                        <button class="button button-ghost" type="button" data-launch-persona="exec" data-launch-page="billing">Exec</button>
+                    </div>
+                </section>
+
+                <section class="auth-form auth-quick-card">
+                    <div class="auth-form-heading">
+                        <span>Scenario shortcuts</span>
+                        <strong>Arm the storyline without manual fault toggles</strong>
+                        <p>Each shortcut signs into the protected suite if needed, applies the incident profile, and lands in Master Control.</p>
+                    </div>
+                    <div class="launch-grid" id="launch-scenario-grid">
+                        <button class="button button-ghost" type="button" data-launch-scenario="viewer-startup-spike">Slow startup</button>
+                        <button class="button button-ghost" type="button" data-launch-scenario="ad-break-delay">Ad stall</button>
+                        <button class="button button-ghost" type="button" data-launch-scenario="sponsor-pod-miss">Sponsor miss</button>
+                        <button class="button button-ghost" type="button" data-launch-scenario="clear">Recovery</button>
+                    </div>
+                </section>
+
+                <p class="auth-message auth-launch-message" id="launch-message"></p>
+
+                <form class="auth-form" id="auth-form">
+                    <div class="auth-form-heading">
+                        <span>Manual operator sign-in</span>
+                        <strong>Use a named Acme Broadcasting account</strong>
+                        <p>Fallback access for presenters who want to switch to a specific internal role manually.</p>
+                    </div>
+
+                    <label>
+                        Company email
+                        <input id="auth-email" type="email" placeholder="name@acmebroadcasting.com" autocomplete="email">
+                    </label>
+
+                    <label>
+                        Password
+                        <input id="auth-password" type="password" placeholder="Enter your password" autocomplete="current-password">
+                    </label>
+
+                    <button class="button button-solid" type="submit">Sign in</button>
+                    <p class="auth-message" id="auth-message"></p>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <main>
+        <section class="billboard page-section" id="home" data-page="home">
+            <div class="billboard-copy">
+                <p class="eyebrow">Primary Playout</p>
+                <div class="tag-row" id="featured-meta"></div>
+                <h1 id="featured-title"></h1>
+                <p class="billboard-text" id="featured-description"></p>
+
+                <div class="hero-actions">
+                    <button class="button button-solid" id="play-featured" type="button">Route to screening</button>
+                    <button class="button button-ghost" id="save-featured" type="button">Stage for desk</button>
+                    <a class="button button-ghost" href="#library">Open programming catalog</a>
+                </div>
+
+                <div class="stat-grid">
+                    <article class="stat-card">
+                        <span>Linear services</span>
+                        <strong id="hero-ready-count"></strong>
+                    </article>
+                    <article class="stat-card">
+                        <span>Contribution feeds</span>
+                        <strong id="hero-active-count"></strong>
+                    </article>
+                    <article class="stat-card">
+                        <span>Desk queues</span>
+                        <strong id="hero-queue-count"></strong>
+                    </article>
+                </div>
+            </div>
+
+            <aside class="billboard-panel">
+                <p class="eyebrow">Operations Brief</p>
+                <h2 id="spotlight-title"></h2>
+                <p id="spotlight-copy"></p>
+                <div class="tag-row" id="spotlight-tags"></div>
+
+                <div class="meta-list">
+                    <div>
+                        <span>Catalog</span>
+                        <strong id="catalog-source-label"></strong>
+                    </div>
+                    <div>
+                        <span>Selected title</span>
+                        <strong id="selected-title-label"></strong>
+                    </div>
+                    <div>
+                        <span>Signed in as</span>
+                        <strong id="session-role-label"></strong>
+                    </div>
+                </div>
+
+                <div class="queue-card">
+                    <header>
+                        <h3>Desk queue</h3>
+                        <span id="my-list-count"></span>
+                    </header>
+                    <div class="compact-list" id="my-list-preview"></div>
+                </div>
+            </aside>
+
+            <div class="broadcast-deck">
+                <section class="broadcast-panel">
+                    <div class="section-heading compact">
+                        <p class="eyebrow">Linear Services</p>
+                        <h2>Current program line-up</h2>
+                        <p>Monitor the active linear desks, contribution lanes, and operator screening flow from one command surface.</p>
+                    </div>
+                    <div class="channel-grid" id="channel-grid"></div>
+                </section>
+
+                <section class="broadcast-panel">
+                    <div class="section-heading compact">
+                        <p class="eyebrow">Program Rundown</p>
+                        <h2>Upcoming desk moves</h2>
+                        <p>A concise view of what is live now, what is queued next, and which sponsor pod is approaching.</p>
+                    </div>
+                    <div class="rundown-list" id="rundown-list"></div>
+                </section>
+
+                <aside class="broadcast-panel">
+                    <div class="section-heading compact">
+                        <p class="eyebrow">Operations Health</p>
+                        <h2>Control surface posture</h2>
+                        <p>Identity, catalog, media, sponsor, and billing posture stay visible here so the suite reads like a live operations surface.</p>
+                    </div>
+                    <div class="service-wall" id="service-wall"></div>
+                    <div class="desk-highlights" id="desk-highlights"></div>
+                    <div class="signal-card compact-card sponsor-summary-card">
+                        <div class="section-heading compact">
+                            <p class="eyebrow">Sponsor Operations</p>
+                            <h2>Break readiness</h2>
+                            <p>Sponsor decisioning, break posture, and incident controls live in Master Control so the front page stays focused on live operations.</p>
+                        </div>
+                        <a class="button button-ghost" href="#operations">Open master control</a>
+                    </div>
+                </aside>
+            </div>
+        </section>
+
+        <section class="player-stage page-section" id="player" data-page="player">
+            <div class="player-shell">
+                <video id="movie-player" controls playsinline preload="metadata"></video>
+            </div>
+
+            <aside class="player-panel">
+                <p class="eyebrow">Screening</p>
+                <h2 id="movie-title"></h2>
+                <p id="movie-description"></p>
+                <div class="tag-row" id="movie-badges"></div>
+
+                <div class="status-card">
+                    <header>
+                        <h3>Playback state</h3>
+                        <span class="status-pill status-pill-ready" id="player-status-badge">Ready</span>
+                    </header>
+                    <p id="player-status-text"></p>
+                </div>
+
+                <div class="progress-card">
+                    <div class="progress-top">
+                        <span>Progress</span>
+                        <strong id="playback-progress-label">0%</strong>
+                    </div>
+                    <div class="progress-track">
+                        <span id="playback-progress-fill"></span>
+                    </div>
+                </div>
+
+                <details class="advanced-panel">
+                    <summary class="advanced-summary">Operator source override</summary>
+                    <form class="source-form" id="player-form">
+                        <label>
+                            Source URL
+                            <input id="player-url" type="url" placeholder="https://.../movie.mp4">
+                        </label>
+
+                        <div class="form-actions">
+                            <button class="button button-solid" type="submit">Load source</button>
+                            <button class="button button-ghost" id="load-demo" type="button">Use selected asset</button>
+                        </div>
+                    </form>
+                </details>
+            </aside>
+        </section>
+
+        <section class="section library-layout page-section" id="library" data-page="library">
+            <div class="library-main">
+                <div class="section-heading compact">
+                    <p class="eyebrow">Programming Catalog</p>
+                    <h2>Route approved assets to screening or desk review</h2>
+                    <p id="catalog-status-copy"></p>
+                </div>
+
+                <div class="library-toolbar">
+                    <label class="search-field">
+                        <span>Search</span>
+                        <input id="library-search" type="search" placeholder="Search titles, desks, or genres">
+                    </label>
+                    <div class="chip-row" id="genre-chips"></div>
+                </div>
+
+                <div class="continue-block" id="continue-section">
+                    <div class="section-heading compact section-heading-inline">
+                        <div>
+                            <p class="eyebrow">Operator Handoff</p>
+                            <h3>Resume work already in progress</h3>
+                        </div>
+                        <p id="continue-copy"></p>
+                    </div>
+                    <div class="media-row" id="continue-row"></div>
+                </div>
+
+                <div class="continue-block" id="featured-lineup-section">
+                    <div class="section-heading compact section-heading-inline">
+                        <div>
+                            <p class="eyebrow">Programming Desk</p>
+                            <h3>Priority stack</h3>
+                        </div>
+                        <p id="featured-lineup-copy"></p>
+                    </div>
+                    <div class="media-row" id="featured-row"></div>
+                </div>
+
+                <div class="library-grid" id="library-grid"></div>
+            </div>
+
+            <aside class="library-rail">
+                <div class="section-heading compact">
+                    <p class="eyebrow">Operational Context</p>
+                    <h2>Catalog readiness</h2>
+                    <p id="ops-summary-copy"></p>
+                </div>
+
+                <div class="summary-stack">
+                    <article class="signal-card compact-card">
+                        <span>Library size</span>
+                        <strong id="ops-library-size"></strong>
+                        <p>Titles currently available in this session.</p>
+                    </article>
+                    <article class="signal-card compact-card">
+                        <span>Playback ready</span>
+                        <strong id="ops-stream-ready"></strong>
+                        <p>Titles with a valid backend playback path.</p>
+                    </article>
+                    <article class="signal-card compact-card">
+                        <span>In progress</span>
+                        <strong id="ops-in-progress"></strong>
+                        <p>Titles with saved watch progress.</p>
+                    </article>
+                </div>
+
+                <div class="meta-list">
+                    <div>
+                        <span>Cluster</span>
+                        <strong id="cluster-context"></strong>
+                    </div>
+                    <div>
+                        <span>Namespace</span>
+                        <strong id="deployment-namespace"></strong>
+                    </div>
+                    <div>
+                        <span>Runtime</span>
+                        <strong id="runtime-mode"></strong>
+                    </div>
+                    <div>
+                        <span>Saved titles</span>
+                        <strong id="saved-count-label"></strong>
+                    </div>
+                </div>
+
+                <button class="button button-ghost" id="refresh-catalog" type="button">Refresh library</button>
+            </aside>
+        </section>
+
+        <section class="section intelligence-board page-section" id="operations" data-page="operations" data-role-scope="operations">
+            <div class="section-heading compact">
+                <p class="eyebrow">Master Control</p>
+                <h2>Contribution, routing, and sponsor operations</h2>
+                <p id="rtsp-jobs-copy"></p>
+            </div>
+
+            <div class="signal-grid governance-grid" id="governance" data-role-scope="governance">
+                <article class="signal-card">
+                    <span>Programming source</span>
+                    <strong id="ops-source"></strong>
+                    <p>Where the operator catalog and routing metadata are being served from.</p>
+                </article>
+                <article class="signal-card">
+                    <span>Distribution fabric</span>
+                    <strong id="ops-distribution"></strong>
+                    <p>The current playback and playout architecture serving the suite.</p>
+                </article>
+                <article class="signal-card">
+                    <span>Access boundary</span>
+                    <strong id="ops-auth"></strong>
+                    <p>The active authentication posture and operator-role boundary.</p>
+                </article>
+                <article class="signal-card">
+                    <span>Asset in focus</span>
+                    <strong id="ops-selected"></strong>
+                    <p>The asset currently routed to the operator screening surface.</p>
+                </article>
+                <article class="signal-card">
+                    <span>External distribution</span>
+                    <strong id="ops-public-title"></strong>
+                    <p id="ops-public-copy"></p>
+                    <div class="ops-public-links">
+                        <a class="button button-ghost" id="ops-public-link" href="/broadcast" target="_blank" rel="noreferrer">Open external feed</a>
+                        <a class="button button-ghost" id="ops-public-rtsp-link" href="#" target="_blank" rel="noreferrer">Open RTSP transport</a>
+                    </div>
+                    <div class="endpoint-chip" id="ops-public-rtsp-chip">
+                        <span>External RTSP</span>
+                        <code id="ops-public-rtsp-url">Waiting for RTSP endpoint</code>
+                    </div>
+                </article>
+                <article class="signal-card">
+                    <span>Incident simulation</span>
+                    <strong id="demo-monkey-status"></strong>
+                    <p id="demo-monkey-summary"></p>
+                </article>
+            </div>
+
+            <div class="ops-console-grid">
+                <section class="ops-console-panel" data-role-scope="ingest">
+                    <div class="section-heading compact">
+                        <p class="eyebrow">Contribution Intake</p>
+                        <h2>Register a live source</h2>
+                        <p id="rtsp-intake-copy"></p>
+                    </div>
+
+                    <form class="rtsp-form" id="rtsp-job-form">
+                        <label>
+                            Target title
+                            <select id="rtsp-target-content"></select>
+                        </label>
+
+                        <label>
+                            RTSP source URL
+                            <input id="rtsp-source-url" type="url" placeholder="rtsp://demo.acmebroadcasting.local/live" autocomplete="off">
+                        </label>
+
+                        <label>
+                            Capture window
+                            <select id="rtsp-duration">
+                                <option value="300">5 minutes</option>
+                                <option value="900">15 minutes</option>
+                                <option value="1800">30 minutes</option>
+                                <option value="3600">60 minutes</option>
+                            </select>
+                        </label>
+
+                        <div class="form-actions">
+                            <button class="button button-solid" id="rtsp-submit" type="submit">Create ingest job</button>
+                            <button class="button button-ghost" id="rtsp-refresh" type="button">Refresh register</button>
+                        </div>
+
+                        <p class="auth-message" id="rtsp-form-message"></p>
+                    </form>
+                </section>
+
+                <aside class="ops-console-panel">
+                    <div class="section-heading compact">
+                        <p class="eyebrow">Contribution Register</p>
+                        <h2>Recent ingest activity</h2>
+                        <p>Use this register to review contribution status, open finished captures, and take approved feeds to air.</p>
+                    </div>
+
+                    <div class="job-list" id="rtsp-jobs"></div>
+                </aside>
+            </div>
+
+            <section class="ops-console-panel sponsor-ops-panel">
+                <div class="section-heading compact">
+                    <p class="eyebrow">Sponsor Operations</p>
+                    <h2>Decisioning override and break controls</h2>
+                    <p id="ad-issue-summary">Loading current sponsor decisioning posture. Use this desk to inject decisioning delay or failed sponsor clips without opening the separate incident console.</p>
+                </div>
+
+                <form class="demo-monkey-form" id="ad-issue-form">
+                    <div class="billing-form-grid">
+                        <label>
+                            Fault profile
+                            <select id="ad-issue-preset">
+                                <option value="clear">Clear</option>
+                                <option value="slow-decisioning">Slow decisioning</option>
+                                <option value="failed-ads">Fail ad loads</option>
+                                <option value="slow-and-failed">Slow and fail</option>
+                            </select>
+                        </label>
+
+                        <label>
+                            Delay ms
+                            <input id="ad-issue-delay" type="number" min="0" max="15000" step="250" value="0">
+                        </label>
+                    </div>
+
+                    <div class="demo-monkey-control-grid sponsor-ops-grid">
+                        <label class="demo-monkey-toggle-card">
+                            <div class="demo-monkey-toggle-top">
+                                <input id="ad-issue-enabled" type="checkbox">
+                                <span>Enable issue</span>
+                            </div>
+                            <p>Turn on injected sponsor decisioning delay or break failure conditions.</p>
+                        </label>
+
+                        <label class="demo-monkey-toggle-card">
+                            <div class="demo-monkey-toggle-top">
+                                <input id="ad-issue-fail-load" type="checkbox">
+                                <span>Fail sponsor clip</span>
+                            </div>
+                            <p>Force the sponsor clip to miss its break slot while leaving the rest of the distribution path intact.</p>
+                        </label>
+                    </div>
+
+                    <div class="form-actions">
+                        <button class="button button-solid" id="ad-issue-apply" type="submit">Apply override</button>
+                        <button class="button button-ghost" id="ad-issue-clear" type="button">Clear override</button>
+                    </div>
+
+                    <p class="auth-message" id="ad-issue-message"></p>
+                </form>
+            </section>
+
+            <section class="ops-console-panel demo-monkey-panel">
+                <div class="section-heading compact">
+                    <p class="eyebrow">Incident Simulation</p>
+                    <h2>Controlled playback, sponsor, and observability faults</h2>
+                    <p id="demo-monkey-scope"></p>
+                </div>
+
+                <div class="demo-monkey-shell">
+                    <div class="signal-card demo-monkey-active-card">
+                        <span>Current posture</span>
+                        <strong id="demo-monkey-profile"></strong>
+                        <p id="demo-monkey-detail"></p>
+                        <div class="endpoint-chip">
+                            <span>Last updated</span>
+                            <code id="demo-monkey-updated-at"></code>
+                        </div>
+                    </div>
+
+                    <form class="demo-monkey-form" id="demo-monkey-form">
+                        <div class="chip-row demo-monkey-presets" id="demo-monkey-presets">
+                            <button type="button" data-preset="clear">Clear</button>
+                            <button type="button" data-preset="viewer-startup-spike">Slow startup</button>
+                            <button type="button" data-preset="viewer-brownout">Viewer brownout</button>
+                            <button type="button" data-preset="ad-break-delay">Ad break delay</button>
+                            <button type="button" data-preset="sponsor-pod-miss">Sponsor pod miss</button>
+                        </div>
+
+                        <label class="billing-toggle">
+                            <input id="demo-monkey-enabled" type="checkbox">
+                            <span>Enable incident simulation across viewer, trace, and sponsor paths</span>
+                        </label>
+
+                        <label class="billing-toggle">
+                            <input id="demo-monkey-next-break-only" type="checkbox">
+                            <span>Next sponsor pod only</span>
+                        </label>
+
+                        <div class="demo-monkey-control-grid">
+                            <label class="demo-monkey-toggle-card">
+                                <div class="demo-monkey-toggle-top">
+                                    <input id="demo-monkey-latency-enabled" type="checkbox">
+                                    <span>Startup latency</span>
+                                </div>
+                                <select id="demo-monkey-latency-value">
+                                    <option value="1200">1.2 seconds</option>
+                                    <option value="1800">1.8 seconds</option>
+                                    <option value="2500">2.5 seconds</option>
+                                    <option value="4000">4 seconds</option>
+                                </select>
+                            </label>
+
+                            <label class="demo-monkey-toggle-card">
+                                <div class="demo-monkey-toggle-top">
+                                    <input id="demo-monkey-throttle-enabled" type="checkbox">
+                                    <span>Bandwidth clamp</span>
+                                </div>
+                                <select id="demo-monkey-throttle-value">
+                                    <option value="384">384 kbps</option>
+                                    <option value="512">512 kbps</option>
+                                    <option value="768">768 kbps</option>
+                                    <option value="1500">1.5 Mbps</option>
+                                </select>
+                            </label>
+
+                            <label class="demo-monkey-toggle-card">
+                                <div class="demo-monkey-toggle-top">
+                                    <input id="demo-monkey-disconnect-enabled" type="checkbox">
+                                    <span>Mid-stream reset</span>
+                                </div>
+                                <select id="demo-monkey-disconnect-value">
+                                    <option value="256">256 KiB</option>
+                                    <option value="384">384 KiB</option>
+                                    <option value="768">768 KiB</option>
+                                </select>
+                            </label>
+
+                            <label class="demo-monkey-toggle-card">
+                                <div class="demo-monkey-toggle-top">
+                                    <input id="demo-monkey-playback-failure-enabled" type="checkbox">
+                                    <span>Playback 503</span>
+                                </div>
+                                <p>Return HTTP 503 from video playback endpoints so Browser RUM and APM both record a hard failure.</p>
+                            </label>
+
+                            <label class="demo-monkey-toggle-card">
+                                <div class="demo-monkey-toggle-top">
+                                    <input id="demo-monkey-trace-map-failure-enabled" type="checkbox">
+                                    <span>Trace pivot 503</span>
+                                </div>
+                                <p>Force the public trace pivot to fan out across upstream services and then return HTTP 503 for the ThousandEyes handoff story.</p>
+                            </label>
+
+                            <label class="demo-monkey-toggle-card">
+                                <div class="demo-monkey-toggle-top">
+                                    <input id="demo-monkey-frontend-exception-enabled" type="checkbox">
+                                    <span>Browser exception</span>
+                                </div>
+                                <p>Emit one unhandled browser exception on page load so the frontend becomes visible in Splunk Browser RUM.</p>
+                            </label>
+
+                            <label class="demo-monkey-toggle-card">
+                                <div class="demo-monkey-toggle-top">
+                                    <input id="demo-monkey-slow-ad-enabled" type="checkbox">
+                                    <span>Slow ad</span>
+                                </div>
+                                <p>Delay ad decisioning so the broadcast reaches the sponsor break and then stalls before the clip starts.</p>
+                            </label>
+
+                            <label class="demo-monkey-toggle-card">
+                                <div class="demo-monkey-toggle-top">
+                                    <input id="demo-monkey-ad-load-failure-enabled" type="checkbox">
+                                    <span>Ad not loading</span>
+                                </div>
+                                <p>Force the sponsor clip to fail during the injected ad slot while leaving the rest of the video feed intact.</p>
+                            </label>
+                        </div>
+
+                        <div class="form-actions">
+                            <button class="button button-solid" id="demo-monkey-apply" type="submit">Apply faults</button>
+                            <button class="button button-ghost" id="demo-monkey-disable" type="button">Disable simulation</button>
+                        </div>
+
+                        <p class="auth-message" id="demo-monkey-message"></p>
+                    </form>
+                </div>
+            </section>
+        </section>
+
+        <section class="section billing-layout page-section" id="billing" data-page="billing" data-role-scope="billing">
+            <div class="section-heading compact">
+                <p class="eyebrow">Revenue Operations</p>
+                <h2>Ledger, receivables, and invoice staging</h2>
+                <p id="billing-portfolio-copy"></p>
+            </div>
+
+            <div class="signal-grid billing-overview-grid">
+                <article class="signal-card">
+                    <span>Outstanding exposure</span>
+                    <strong id="billing-total-outstanding"></strong>
+                    <p>Open balance due across the current billing view.</p>
+                </article>
+                <article class="signal-card">
+                    <span>Open invoices</span>
+                    <strong id="billing-open-count"></strong>
+                    <p>Invoices that are staged for collection or active follow-up.</p>
+                </article>
+                <article class="signal-card">
+                    <span>Past due</span>
+                    <strong id="billing-past-due-count"></strong>
+                    <p>Invoices that need collection attention right now.</p>
+                </article>
+                <article class="signal-card">
+                    <span>Next due</span>
+                    <strong id="billing-next-due-date"></strong>
+                    <p>The nearest due date in the current billing slice.</p>
+                </article>
+            </div>
+
+            <div class="billing-workspace">
+                <div class="billing-main">
+                    <div class="billing-toolbar">
+                        <label class="search-field">
+                            <span>Account</span>
+                            <select id="billing-account-filter"></select>
+                        </label>
+
+                        <label class="search-field">
+                            <span>Status</span>
+                            <select id="billing-status-filter">
+                                <option value="ALL">All statuses</option>
+                                <option value="OPEN">Open</option>
+                                <option value="PAST_DUE">Past due</option>
+                                <option value="PAID">Paid</option>
+                                <option value="VOID">Void</option>
+                                <option value="DRAFT">Draft</option>
+                            </select>
+                        </label>
+
+                        <label class="billing-toggle">
+                            <input id="billing-overdue-only" type="checkbox">
+                            <span>Past due only</span>
+                        </label>
+
+                        <button class="button button-ghost" id="billing-refresh" type="button">Refresh ledger</button>
+                    </div>
+
+                    <div class="invoice-list" id="billing-invoice-list"></div>
+                </div>
+
+                <aside class="billing-rail">
+                    <div class="ops-console-panel">
+                        <div class="section-heading compact">
+                            <p class="eyebrow">Account Desk</p>
+                            <h2>Summary and invoice detail</h2>
+                            <p id="billing-source-copy"></p>
+                        </div>
+
+                        <div class="meta-list">
+                            <div>
+                                <span>Data source</span>
+                                <strong id="billing-source-label"></strong>
+                            </div>
+                            <div>
+                                <span>Billing health</span>
+                                <strong id="billing-health-label"></strong>
+                            </div>
+                            <div>
+                                <span>Selected invoice</span>
+                                <strong id="billing-selected-label"></strong>
+                            </div>
+                            <div>
+                                <span>Last sync</span>
+                                <strong id="billing-last-sync"></strong>
+                            </div>
+                        </div>
+
+                        <div class="billing-detail" id="billing-detail"></div>
+                    </div>
+
+                    <div class="ops-console-panel" data-role-scope="billing_write">
+                        <div class="section-heading compact">
+                            <p class="eyebrow">Invoice Composer</p>
+                            <h2>Stage a new invoice</h2>
+                            <p>Create a desk, network, or event invoice without leaving the revenue operations surface.</p>
+                        </div>
+
+                        <form class="billing-form" id="billing-create-form">
+                            <label>
+                                Account
+                                <select id="billing-create-account"></select>
+                            </label>
+
+                            <label>
+                                Line item title
+                                <input id="billing-line-title" type="text" placeholder="Transmission window">
+                            </label>
+
+                            <div class="billing-form-grid">
+                                <label>
+                                    Quantity
+                                    <input id="billing-line-quantity" type="number" min="1" step="1" value="1">
+                                </label>
+
+                                <label>
+                                    Unit amount
+                                    <input id="billing-line-amount" type="number" min="0" step="0.01" placeholder="1250.00">
+                                </label>
+                            </div>
+
+                            <div class="billing-form-grid">
+                                <label>
+                                    Billing cycle
+                                    <select id="billing-cycle">
+                                        <option value="ONE_TIME">One-time</option>
+                                        <option value="MONTHLY">Monthly</option>
+                                        <option value="QUARTERLY">Quarterly</option>
+                                        <option value="ANNUAL">Annual</option>
+                                    </select>
+                                </label>
+
+                                <label>
+                                    Due date
+                                    <input id="billing-due-date" type="date">
+                                </label>
+                            </div>
+
+                            <label>
+                                Notes
+                                <textarea id="billing-notes" rows="3" placeholder="Notes for the finance desk or payment reference"></textarea>
+                            </label>
+
+                            <div class="form-actions">
+                                <button class="button button-solid" id="billing-create-submit" type="submit">Create invoice</button>
+                            </div>
+
+                            <p class="auth-message" id="billing-form-message"></p>
+                        </form>
+                    </div>
+                </aside>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <p>Acme Broadcasting unifies programming, master control, sponsor operations, contribution intake, and revenue review inside one operator workspace.</p>
+        <p>The suite remains role-aware so platform, programming, executive, and finance users each land in the desk that matches their responsibility.</p>
+    </footer>
+</div>
+</body>
+</html>

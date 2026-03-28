@@ -11,6 +11,7 @@ package io.github.marianciuc.streamingservice.media.services.impl;
 import io.github.marianciuc.streamingservice.media.dto.UploadMetadataDto;
 import io.github.marianciuc.streamingservice.media.dto.VideoDto;
 import io.github.marianciuc.streamingservice.media.enums.MediaType;
+import io.github.marianciuc.streamingservice.media.enums.VideoSourceType;
 import io.github.marianciuc.streamingservice.media.kafka.KafkaPlaylistProducer;
 import io.github.marianciuc.streamingservice.media.kafka.messages.MasterPlaylistMessage;
 import io.github.marianciuc.streamingservice.media.services.*;
@@ -42,7 +43,7 @@ public class UploadVideoServiceImpl implements UploadVideoService {
     @Override
     public UploadMetadataDto prepareVideo(String contentType, long fileSize, MediaType mediaType, UUID contentId) {
         int totalChunks = (int) Math.ceil((double) fileSize / CHUNK_SIZE);
-        VideoDto videoDto = this.videoService.createVideoEntity(contentId, totalChunks, mediaType);
+        VideoDto videoDto = this.videoService.createVideoEntity(contentId, mediaType, contentType, VideoSourceType.UPLOAD, null, false);
 
         this.chunkStateService.createChunkUploadStatus(videoDto.id(), totalChunks);
         this.kafkaPlaylistProducer.sendMasterPlaylistCreated(new MasterPlaylistMessage(

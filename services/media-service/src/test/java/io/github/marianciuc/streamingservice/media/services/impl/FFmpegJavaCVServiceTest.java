@@ -9,6 +9,7 @@
 package io.github.marianciuc.streamingservice.media.services.impl;
 
 import io.github.marianciuc.streamingservice.media.dto.ResolutionDto;
+import io.github.marianciuc.streamingservice.media.services.PlaylistService;
 import io.github.marianciuc.streamingservice.media.services.VideoStorageService;
 import io.minio.errors.MinioException;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +35,9 @@ public class FFmpegJavaCVServiceTest {
 
     @Mock
     private VideoStorageService videoStorageService;
+
+    @Mock
+    private PlaylistService playlistService;
 
     @InjectMocks
     private FFmpegJavaCVService ffmpegJavaCVService;

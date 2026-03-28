@@ -10,6 +10,7 @@ package io.github.marianciuc.streamingservice.media.entity;
 
 import io.github.marianciuc.streamingservice.media.enums.MediaType;
 import io.github.marianciuc.streamingservice.media.enums.VideoStatues;
+import io.github.marianciuc.streamingservice.media.enums.VideoSourceType;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -47,6 +48,18 @@ public class Video {
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
     private VideoStatues status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source_type")
+    @Builder.Default
+    private VideoSourceType sourceType = VideoSourceType.UPLOAD;
+
+    @Column(name = "source_url")
+    private String sourceUrl;
+
+    @Column(name = "is_live_stream")
+    @Builder.Default
+    private Boolean liveStream = false;
 
     @Column(name = "master_playlist_path")
     private String masterPlaylistPath;

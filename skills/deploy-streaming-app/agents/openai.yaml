@@ -1,0 +1,3 @@
+interface:
+  display_name: "Deploy Streaming App"
+  short_description: "Deploy the app to Kubernetes or OpenShift"

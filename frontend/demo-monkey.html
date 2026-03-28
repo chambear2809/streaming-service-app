@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acme Broadcasting Incident Simulation Console</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script src="./config.js"></script>
+    <script type="module" src="./splunk/splunk-instrumentation.js"></script>
+    <style>
+        body.demo-monkey-body {
+            min-height: 100vh;
+        }
+
+        .demo-monkey-shell {
+            width: min(1180px, calc(100vw - 28px));
+            margin: 0 auto;
+            padding: 24px 0 48px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .demo-monkey-hero,
+        .demo-monkey-grid {
+            border: 1px solid var(--line);
+            background: linear-gradient(180deg, rgba(10, 20, 29, 0.92), rgba(13, 24, 34, 0.82));
+            box-shadow: var(--shadow-xl);
+            backdrop-filter: blur(20px);
+            border-radius: var(--radius-xl);
+        }
+
+        .demo-monkey-hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+            gap: 24px;
+            padding: 34px;
+            margin-bottom: 18px;
+        }
+
+        .demo-monkey-copy p {
+            margin: 0;
+            color: var(--fog-200);
+            line-height: 1.7;
+            max-width: 62ch;
+        }
+
+        .demo-monkey-copy {
+            display: grid;
+            gap: 16px;
+            align-content: start;
+        }
+
+        .demo-monkey-copy h1 {
+            margin: 0;
+            font-size: clamp(3.4rem, 6vw, 4.8rem);
+            line-height: 0.92;
+            letter-spacing: -0.05em;
+            max-width: 4ch;
+        }
+
+        #demo-monkey-summary {
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 3;
+            overflow: hidden;
+        }
+
+        .demo-monkey-actions {
+            display: grid;
+            grid-template-columns: repeat(3, max-content);
+            gap: 12px;
+        }
+
+        .demo-monkey-summary {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+            align-content: start;
+        }
+
+        .demo-monkey-summary-card,
+        .demo-monkey-signal-card {
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: 18px;
+            padding: 18px;
+        }
+
+        .demo-monkey-summary-card span,
+        .demo-monkey-signal-card span {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--fog-300);
+            font-size: 0.78rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .demo-monkey-summary-card strong,
+        .demo-monkey-signal-card strong {
+            display: block;
+            font-size: 1.14rem;
+            margin-bottom: 8px;
+        }
+
+        .demo-monkey-summary-card p,
+        .demo-monkey-signal-card p {
+            margin: 0;
+            color: var(--fog-200);
+            line-height: 1.6;
+        }
+
+        .demo-monkey-grid {
+            display: grid;
+            grid-template-columns: minmax(280px, 0.82fr) minmax(0, 1.18fr);
+            gap: 18px;
+            padding: 20px;
+        }
+
+        .demo-monkey-side,
+        .demo-monkey-main {
+            display: grid;
+            gap: 16px;
+            align-content: start;
+        }
+
+        .demo-monkey-stat-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .demo-monkey-detail-card {
+            border-radius: 16px;
+            border: 1px solid rgba(173, 196, 219, 0.1);
+            background: rgba(255, 255, 255, 0.04);
+            padding: 16px;
+            display: grid;
+            gap: 14px;
+        }
+
+        .demo-monkey-detail-row {
+            display: grid;
+            gap: 6px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(173, 196, 219, 0.08);
+        }
+
+        .demo-monkey-detail-row:last-child {
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        .demo-monkey-detail-row span {
+            display: block;
+            color: var(--fog-300);
+            font-size: 0.78rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .demo-monkey-detail-row strong,
+        .demo-monkey-detail-row code {
+            display: block;
+            font-size: 1rem;
+            color: var(--fog-100);
+            word-break: break-word;
+        }
+
+        .demo-monkey-detail-row code {
+            font-family: "IBM Plex Mono", "SFMono-Regular", ui-monospace, monospace;
+            font-size: 0.9rem;
+        }
+
+        .demo-monkey-detail-row p {
+            margin: 0;
+            color: var(--fog-200);
+            line-height: 1.55;
+        }
+
+        .demo-monkey-form {
+            display: grid;
+            gap: 16px;
+        }
+
+        .demo-monkey-main-card,
+        .demo-monkey-toolbar,
+        .demo-monkey-group {
+            border-radius: 18px;
+            border: 1px solid rgba(173, 196, 219, 0.1);
+            background: rgba(255, 255, 255, 0.035);
+        }
+
+        .demo-monkey-main-card {
+            padding: 18px;
+        }
+
+        .demo-monkey-toolbar,
+        .demo-monkey-group {
+            display: grid;
+            gap: 14px;
+            padding: 16px;
+        }
+
+        .demo-monkey-master-toggle {
+            margin: 0;
+        }
+
+        .demo-monkey-toolbar-toggles {
+            display: grid;
+            gap: 12px;
+        }
+
+        .demo-monkey-group-header {
+            display: grid;
+            gap: 6px;
+        }
+
+        .demo-monkey-group-header span {
+            color: var(--fog-300);
+            font-size: 0.78rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .demo-monkey-group-header h2 {
+            margin: 0;
+            font-size: 1.02rem;
+        }
+
+        .demo-monkey-group-header p {
+            margin: 0;
+            color: var(--fog-200);
+            line-height: 1.55;
+        }
+
+        .demo-monkey-toggle-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .demo-monkey-toggle-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 16px;
+            align-items: center;
+            padding: 14px 16px;
+            border-radius: 16px;
+            border: 1px solid rgba(173, 196, 219, 0.1);
+            background: rgba(8, 17, 26, 0.46);
+            color: var(--fog-100);
+        }
+
+        .demo-monkey-toggle-row-single {
+            grid-template-columns: 1fr;
+            align-items: start;
+        }
+
+        .demo-monkey-toggle-copy {
+            display: grid;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .demo-monkey-toggle-copy p {
+            margin: 0;
+            color: var(--fog-200);
+            line-height: 1.6;
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+            overflow: hidden;
+        }
+
+        .demo-monkey-toggle-top {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .demo-monkey-toggle-top span {
+            color: var(--fog-100);
+            font-weight: 600;
+        }
+
+        .demo-monkey-toggle-top input {
+            accent-color: var(--gold-400);
+        }
+
+        .demo-monkey-toggle-row select {
+            width: min(170px, 100%);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 14px;
+            background: rgba(5, 13, 20, 0.74);
+            color: #fff;
+            padding: 12px 14px;
+            font: inherit;
+        }
+
+        .demo-monkey-toggle-row select:focus {
+            outline: 2px solid rgba(226, 191, 102, 0.35);
+        }
+
+        .demo-monkey-launch-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .demo-monkey-launch-grid .button {
+            width: 100%;
+            justify-content: center;
+        }
+
+        @media (min-width: 1440px) {
+            .demo-monkey-shell {
+                width: min(1540px, calc(100vw - 44px));
+                padding-top: 18px;
+            }
+
+            .demo-monkey-hero {
+                grid-template-columns: minmax(0, 1.28fr) minmax(320px, 0.72fr);
+                padding: 30px 32px 24px;
+            }
+
+            .demo-monkey-grid {
+                grid-template-columns: minmax(280px, 0.58fr) minmax(0, 1fr);
+                padding: 18px;
+            }
+
+            .demo-monkey-copy p,
+            .demo-monkey-summary-card p,
+            .demo-monkey-signal-card p,
+            .demo-monkey-detail-row p,
+            .demo-monkey-group-header p,
+            .demo-monkey-toggle-copy p {
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 2;
+                overflow: hidden;
+            }
+        }
+
+        body.demo-monkey-body.is-presentation-mode .demo-monkey-shell {
+            width: min(1620px, calc(100vw - 40px));
+            padding-top: 14px;
+            padding-bottom: 30px;
+        }
+
+        body.demo-monkey-body.is-presentation-mode .demo-monkey-hero {
+            grid-template-columns: minmax(0, 1.32fr) minmax(320px, 0.68fr);
+            padding: 24px 28px;
+        }
+
+        body.demo-monkey-body.is-presentation-mode .demo-monkey-grid {
+            grid-template-columns: minmax(260px, 0.5fr) minmax(0, 1fr);
+            padding: 18px;
+        }
+
+        body.demo-monkey-body.is-presentation-mode .demo-monkey-side {
+            position: sticky;
+            top: 18px;
+            align-self: start;
+        }
+
+        body.demo-monkey-body.is-presentation-mode .demo-monkey-copy p,
+        body.demo-monkey-body.is-presentation-mode .demo-monkey-summary-card p,
+        body.demo-monkey-body.is-presentation-mode .demo-monkey-signal-card p,
+        body.demo-monkey-body.is-presentation-mode .demo-monkey-detail-row p,
+        body.demo-monkey-body.is-presentation-mode .demo-monkey-group-header p,
+        body.demo-monkey-body.is-presentation-mode .demo-monkey-toggle-copy p {
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 1;
+            overflow: hidden;
+        }
+
+        body.demo-monkey-body.is-presentation-mode .demo-monkey-toggle-row {
+            padding: 12px 14px;
+        }
+
+        @media (max-width: 960px) {
+            .demo-monkey-summary,
+            .demo-monkey-hero,
+            .demo-monkey-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .demo-monkey-actions {
+                grid-template-columns: 1fr;
+            }
+
+            .demo-monkey-launch-grid,
+            .demo-monkey-toggle-row {
+                grid-template-columns: 1fr;
+                align-items: start;
+            }
+
+            .demo-monkey-toggle-row select {
+                width: 100%;
+            }
+        }
+    </style>
+    <script type="module" src="./demo-monkey.js"></script>
+</head>
+<body class="demo-monkey-body">
+<div class="demo-monkey-shell">
+    <section class="demo-monkey-hero">
+        <div class="demo-monkey-copy">
+            <p class="eyebrow">Incident Simulation Console</p>
+            <h1>Incident Simulation</h1>
+            <p id="demo-monkey-summary">
+                Loading the current fault profile for screening, sponsor insertion, and external distribution.
+            </p>
+            <div class="demo-monkey-actions">
+                <a class="button button-solid" id="demo-monkey-public-link" href="/broadcast" target="_blank" rel="noreferrer">Open external feed</a>
+                <button class="button button-ghost presentation-toggle" id="demo-monkey-presentation-toggle" type="button" aria-pressed="false">Presentation mode</button>
+                <a class="button button-ghost" href="/">Open operations suite</a>
+            </div>
+        </div>
+
+        <div class="demo-monkey-summary">
+            <article class="demo-monkey-summary-card">
+                <span>Status</span>
+                <strong id="demo-monkey-status">Loading</strong>
+                <p id="demo-monkey-status-copy">Checking the current incident profile.</p>
+            </article>
+            <article class="demo-monkey-signal-card">
+                <span>Scope</span>
+                <strong id="demo-monkey-scope-title">Playback and ad fault surface</strong>
+                <p id="demo-monkey-scope-copy">Resolving the protected control endpoint and affected playback, sponsor, and trace paths.</p>
+            </article>
+        </div>
+    </section>
+
+    <section class="demo-monkey-grid">
+        <aside class="demo-monkey-side">
+            <div class="demo-monkey-detail-card">
+                <div class="demo-monkey-detail-row">
+                    <span>Preset</span>
+                    <strong id="demo-monkey-profile">Loading</strong>
+                </div>
+                <div class="demo-monkey-detail-row">
+                    <span>Updated</span>
+                    <strong id="demo-monkey-updated">Checking</strong>
+                </div>
+                <div class="demo-monkey-detail-row">
+                    <span>Duration</span>
+                    <strong id="demo-monkey-duration">Persistent</strong>
+                    <p id="demo-monkey-duration-copy">The active incident profile remains armed until an operator clears it.</p>
+                </div>
+                <div class="demo-monkey-detail-row">
+                    <span>Control API</span>
+                    <code id="demo-monkey-api">Resolving</code>
+                    <p>Writes require authenticated operator access and target the protected control endpoint.</p>
+                </div>
+            </div>
+
+            <div class="demo-monkey-detail-card">
+                <div class="demo-monkey-detail-row">
+                    <span>On-air source</span>
+                    <strong id="demo-monkey-live-source">Checking</strong>
+                    <p id="demo-monkey-live-source-copy">Resolving the current broadcast source and operator-facing delivery state.</p>
+                </div>
+                <div class="demo-monkey-detail-row">
+                    <span>Sponsor pod</span>
+                    <strong id="demo-monkey-live-pod">Checking</strong>
+                    <p id="demo-monkey-live-pod-copy">Loading the sponsor pod that is currently armed for the public channel.</p>
+                </div>
+                <div class="demo-monkey-detail-row">
+                    <span>Next break</span>
+                    <strong id="demo-monkey-live-break">Checking</strong>
+                    <p id="demo-monkey-live-break-copy">Resolving when the next sponsor window reaches air.</p>
+                </div>
+            </div>
+
+            <div class="demo-monkey-detail-card">
+                <div class="demo-monkey-detail-row">
+                    <span>Audience story</span>
+                    <strong id="demo-monkey-story-headline">Healthy operating surface</strong>
+                    <p id="demo-monkey-story-copy">Use a narrative preset to create a visible symptom before pivoting into ThousandEyes and Splunk.</p>
+                </div>
+                <div class="demo-monkey-detail-row">
+                    <span>Next pivot</span>
+                    <strong id="demo-monkey-pivot-title">Broadcast then ThousandEyes</strong>
+                    <p id="demo-monkey-pivot-copy">Start with the live viewer experience, then follow the path and application transaction.</p>
+                </div>
+                <div class="demo-monkey-detail-row">
+                    <span>Monetization signal</span>
+                    <strong id="demo-monkey-revenue-title">Sponsor revenue protected</strong>
+                    <p id="demo-monkey-revenue-copy">No sponsor faults are armed, so the next break should deliver normally.</p>
+                </div>
+            </div>
+
+            <div class="demo-monkey-detail-card">
+                <div class="demo-monkey-detail-row">
+                    <span>Launch targets</span>
+                    <strong id="demo-monkey-launch-title">Open the right telemetry surface</strong>
+                    <p id="demo-monkey-launch-copy">Scenario launch targets follow the NAB story from viewer symptom to root cause.</p>
+                    <div class="demo-monkey-launch-grid">
+                        <a class="button button-solid" id="demo-monkey-launch-thousandeyes" href="/api/v1/demo/public/trace-map" target="_blank" rel="noreferrer">Open ThousandEyes</a>
+                        <a class="button button-ghost" id="demo-monkey-launch-apm" href="https://app.us1.signalfx.com/" target="_blank" rel="noreferrer">Open Splunk APM</a>
+                        <a class="button button-ghost" id="demo-monkey-launch-rum" href="https://app.us1.signalfx.com/" target="_blank" rel="noreferrer">Open Browser RUM</a>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <div class="demo-monkey-main">
+            <section class="demo-monkey-main-card">
+                <form class="demo-monkey-form" id="demo-monkey-form">
+                    <div class="demo-monkey-toolbar">
+                        <div class="chip-row" id="demo-monkey-presets">
+                            <button type="button" data-preset="clear">Clear</button>
+                            <button type="button" data-preset="viewer-startup-spike">Slow startup</button>
+                            <button type="button" data-preset="viewer-brownout">Viewer brownout</button>
+                            <button type="button" data-preset="ad-break-delay">Ad break delay</button>
+                            <button type="button" data-preset="sponsor-pod-miss">Sponsor pod miss</button>
+                        </div>
+
+                        <div class="demo-monkey-toolbar-toggles">
+                            <label class="billing-toggle demo-monkey-master-toggle">
+                                <input id="demo-monkey-enabled" type="checkbox">
+                                <span>Enable incident simulation across viewer, trace, and sponsor paths</span>
+                            </label>
+                            <label class="billing-toggle demo-monkey-master-toggle">
+                                <input id="demo-monkey-next-break-only" type="checkbox">
+                                <span>Next sponsor pod only</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <section class="demo-monkey-group">
+                        <div class="demo-monkey-group-header">
+                            <span>Signal shaping</span>
+                            <h2>Degrade the stream without taking it fully down</h2>
+                            <p>Use delay, clamp, and reset conditions for the “slow or unstable feed” part of the incident story.</p>
+                        </div>
+
+                        <div class="demo-monkey-toggle-list">
+                            <label class="demo-monkey-toggle-row">
+                                <div class="demo-monkey-toggle-copy">
+                                    <div class="demo-monkey-toggle-top">
+                                        <input id="demo-monkey-latency-enabled" type="checkbox">
+                                        <span>Startup latency</span>
+                                    </div>
+                                    <p>Add extra time before the player starts so the feed looks slow or unstable.</p>
+                                </div>
+                                <select id="demo-monkey-latency-value">
+                                    <option value="1200">1.2 seconds</option>
+                                    <option value="1800">1.8 seconds</option>
+                                    <option value="2500">2.5 seconds</option>
+                                    <option value="4000">4 seconds</option>
+                                </select>
+                            </label>
+
+                            <label class="demo-monkey-toggle-row">
+                                <div class="demo-monkey-toggle-copy">
+                                    <div class="demo-monkey-toggle-top">
+                                        <input id="demo-monkey-throttle-enabled" type="checkbox">
+                                        <span>Bandwidth clamp</span>
+                                    </div>
+                                    <p>Reduce available throughput so buffering and low quality are easier to demonstrate.</p>
+                                </div>
+                                <select id="demo-monkey-throttle-value">
+                                    <option value="384">384 kbps</option>
+                                    <option value="512">512 kbps</option>
+                                    <option value="768">768 kbps</option>
+                                    <option value="1500">1.5 Mbps</option>
+                                </select>
+                            </label>
+
+                            <label class="demo-monkey-toggle-row">
+                                <div class="demo-monkey-toggle-copy">
+                                    <div class="demo-monkey-toggle-top">
+                                        <input id="demo-monkey-disconnect-enabled" type="checkbox">
+                                        <span>Mid-stream reset</span>
+                                    </div>
+                                    <p>Cut the stream after a fixed amount of data to simulate an abrupt network drop.</p>
+                                </div>
+                                <select id="demo-monkey-disconnect-value">
+                                    <option value="256">256 KiB</option>
+                                    <option value="384">384 KiB</option>
+                                    <option value="768">768 KiB</option>
+                                </select>
+                            </label>
+                        </div>
+                    </section>
+
+                    <section class="demo-monkey-group">
+                        <div class="demo-monkey-group-header">
+                            <span>Hard failures</span>
+                            <h2>Force explicit breakage for observability pivots</h2>
+                            <p>These toggles create clean handoff moments into APM, Browser RUM, and trace pivot workflows.</p>
+                        </div>
+
+                        <div class="demo-monkey-toggle-list">
+                            <label class="demo-monkey-toggle-row demo-monkey-toggle-row-single">
+                                <div class="demo-monkey-toggle-copy">
+                                    <div class="demo-monkey-toggle-top">
+                                        <input id="demo-monkey-playback-failure-enabled" type="checkbox">
+                                        <span>Playback 503</span>
+                                    </div>
+                                    <p>Return HTTP 503 from playback endpoints so Browser RUM and APM both record a hard failure.</p>
+                                </div>
+                            </label>
+
+                            <label class="demo-monkey-toggle-row demo-monkey-toggle-row-single">
+                                <div class="demo-monkey-toggle-copy">
+                                    <div class="demo-monkey-toggle-top">
+                                        <input id="demo-monkey-trace-map-failure-enabled" type="checkbox">
+                                        <span>Trace pivot 503</span>
+                                    </div>
+                                    <p>Force the public trace pivot to fan out across upstream services and then return HTTP 503.</p>
+                                </div>
+                            </label>
+
+                            <label class="demo-monkey-toggle-row demo-monkey-toggle-row-single">
+                                <div class="demo-monkey-toggle-copy">
+                                    <div class="demo-monkey-toggle-top">
+                                        <input id="demo-monkey-frontend-exception-enabled" type="checkbox">
+                                        <span>Browser exception</span>
+                                    </div>
+                                    <p>Emit one unhandled browser exception on page load so the frontend is obvious in Browser RUM.</p>
+                                </div>
+                            </label>
+                        </div>
+                    </section>
+
+                    <section class="demo-monkey-group">
+                        <div class="demo-monkey-group-header">
+                            <span>Ad insertion</span>
+                            <h2>Degrade or break sponsor clips independently of the video feed</h2>
+                            <p>These controls target the in-cluster ad service and the stitched sponsor break that runs between queued videos.</p>
+                        </div>
+
+                        <div class="demo-monkey-toggle-list">
+                            <label class="demo-monkey-toggle-row demo-monkey-toggle-row-single">
+                                <div class="demo-monkey-toggle-copy">
+                                    <div class="demo-monkey-toggle-top">
+                                        <input id="demo-monkey-slow-ad-enabled" type="checkbox">
+                                        <span>Slow ad</span>
+                                    </div>
+                                    <p>Delay ad decisioning so the live broadcast hits a short stall before the sponsor clip starts.</p>
+                                </div>
+                            </label>
+
+                            <label class="demo-monkey-toggle-row demo-monkey-toggle-row-single">
+                                <div class="demo-monkey-toggle-copy">
+                                    <div class="demo-monkey-toggle-top">
+                                        <input id="demo-monkey-ad-load-failure-enabled" type="checkbox">
+                                        <span>Ad not loading</span>
+                                    </div>
+                                    <p>Force the sponsor clip to fail so the break slot is still reached, but the ad itself does not load.</p>
+                                </div>
+                            </label>
+                        </div>
+                    </section>
+
+                    <div class="form-actions">
+                        <button class="button button-solid" type="submit">Apply faults</button>
+                        <button class="button button-ghost" id="demo-monkey-disable" type="button">Disable simulation</button>
+                    </div>
+
+                    <p class="auth-message" id="demo-monkey-message"></p>
+                </form>
+            </section>
+        </div>
+    </section>
+</div>
+</body>
+</html>

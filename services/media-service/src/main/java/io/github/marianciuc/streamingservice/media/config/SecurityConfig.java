@@ -7,6 +7,7 @@ import io.github.marianciuc.streamingservice.media.security.serialization.Access
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -19,6 +20,7 @@ import org.springframework.security.web.csrf.CsrfFilter;
 @EnableWebSecurity
 @RequiredArgsConstructor
 @Configuration
+@Profile("!demo")
 public class SecurityConfig {
 
     @Bean

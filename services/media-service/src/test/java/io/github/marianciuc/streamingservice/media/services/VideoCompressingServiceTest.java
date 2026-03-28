@@ -74,7 +74,7 @@ class VideoCompressingServiceTest {
                          new File("src/test/resources/test_video.mp4").toURI().toURL().openStream();) {
             StringBuilder playlistBuilder = new StringBuilder();
             when(playlistService.generateResolutionPlaylist()).thenReturn(playlistBuilder);
-            when(videoStorageService.assembleVideoTemporaryVideoFile(any(UUID.class))).thenReturn(inputStream);
+            when(videoStorageService.assembleVideo(any(UUID.class))).thenReturn(inputStream);
 
             when(videoStorageService.uploadVideoSegment(any(ByteArrayOutputStream.class), eq(videoId), eq(resolution), anyInt(), anyString()))
                     .thenReturn("segment0.ts");

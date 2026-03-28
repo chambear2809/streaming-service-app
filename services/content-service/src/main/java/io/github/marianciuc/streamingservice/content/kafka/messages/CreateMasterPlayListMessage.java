@@ -12,7 +12,11 @@ import java.util.UUID;
 
 public record CreateMasterPlayListMessage (
         UUID contentId,
+        String mediaType,
         UUID masterPlaylistId,
-        String url
+        String masterPlaylistUrl
 ) {
+    public String url() {
+        return masterPlaylistUrl;
+    }
 }

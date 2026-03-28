@@ -32,6 +32,7 @@ public class ExceptionHandlerController {
         EXCEPTION_STATUS_MAP.put(ImageNotFoundException.class, HttpStatus.NOT_FOUND);
         EXCEPTION_STATUS_MAP.put(ImageUploadException.class, HttpStatus.INTERNAL_SERVER_ERROR);
         EXCEPTION_STATUS_MAP.put(NotFoundException.class, HttpStatus.NOT_FOUND);
+        EXCEPTION_STATUS_MAP.put(RtspIngestException.class, HttpStatus.BAD_REQUEST);
         EXCEPTION_STATUS_MAP.put(VideoAssembleException.class, HttpStatus.INTERNAL_SERVER_ERROR);
         EXCEPTION_STATUS_MAP.put(VideoDeleteException.class, HttpStatus.INTERNAL_SERVER_ERROR);
         EXCEPTION_STATUS_MAP.put(VideoStorageException.class, HttpStatus.INTERNAL_SERVER_ERROR);

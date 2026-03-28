@@ -8,9 +8,11 @@
 
 package io.github.marianciuc.streamingservice.media.services;
 
+import io.github.marianciuc.streamingservice.media.dto.ResolutionDto;
 import io.minio.errors.MinioException;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.InvalidKeyException;
@@ -24,8 +26,10 @@ import java.util.UUID;
 public interface VideoStorageService {
 
     String CONTENT_PATH = "videos/";
-    String CHUNKS_PATH = "chunks/";
-    String PATH_CHUNK_TEMPLATE = CONTENT_PATH + "%d/ " + CHUNKS_PATH + "%s/segment%d.ts";
+    String PATH_CHUNK_TEMPLATE = CONTENT_PATH + "%s/%dp/segment%d.ts";
+    String PATH_RESOLUTION_PLAYLIST_TEMPLATE = CONTENT_PATH + "%s/%dp/playlist.m3u8";
+    String PATH_MASTER_PLAYLIST_TEMPLATE = CONTENT_PATH + "%s/master.m3u8";
+    String PATH_SOURCE_VIDEO_TEMPLATE = CONTENT_PATH + "%s/source.mp4";
 
 
     /**
@@ -51,6 +55,28 @@ public interface VideoStorageService {
      * @param fileId the unique identifier of the video file to which this chunk belongs
      */
     void uploadVideoChunk(MultipartFile chunk, Integer chunkNumber, UUID fileId);
+
+    /**
+     * Uploads a source file for a video under the canonical storage path used by transcoding.
+     *
+     * @param videoId the unique identifier of the video
+     * @param inputStream the source video stream
+     * @param size the size of the source video in bytes
+     * @param contentType the MIME type of the source video
+     */
+    void uploadSourceVideo(UUID videoId, InputStream inputStream, long size, String contentType);
+
+    /**
+     * Uploads a single HLS transport stream segment and returns its storage path.
+     *
+     * @param segmentBytes the encoded segment bytes
+     * @param videoId the unique identifier of the video
+     * @param resolution the target resolution
+     * @param chunkNumber the sequential segment number
+     * @param contentType the MIME type of the segment
+     * @return the object path in storage
+     */
+    String uploadVideoSegment(ByteArrayOutputStream segmentBytes, UUID videoId, ResolutionDto resolution, int chunkNumber, String contentType);
 
     /**
      * Deletes a video file from the storage system.

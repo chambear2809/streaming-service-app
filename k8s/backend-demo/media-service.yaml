@@ -1,0 +1,429 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media-service-demo
+  namespace: streaming-service-app
+  labels:
+    app.kubernetes.io/name: media-service-demo
+    app.kubernetes.io/part-of: streaming-service-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: media-service-demo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: media-service-demo
+        app.kubernetes.io/part-of: streaming-service-app
+      annotations:
+        instrumentation.opentelemetry.io/container-names: app
+        instrumentation.opentelemetry.io/inject-java: otel-splunk/splunk-otel-collector
+    spec:
+      initContainers:
+        - name: extract-source
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              mkdir -p /workspace
+              tar -xzf /source/media-service-source.tgz -C /workspace
+          volumeMounts:
+            - name: source
+              mountPath: /source
+              readOnly: true
+            - name: workspace
+              mountPath: /workspace
+        - name: stage-demo-movie
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              mkdir -p /opt/demo/library
+              wget -U "AcmeDemoLibrary/1.0" -O /opt/demo/demo.mp4 "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+              cp /opt/demo/demo.mp4 /opt/demo/library/big-buck-bunny.mp4
+              wget -U "AcmeDemoLibrary/1.0" -O /opt/demo/library/elephants-dream.mp4 "https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4"
+              wget -U "AcmeDemoLibrary/1.0" -O /opt/demo/library/sintel.mp4 "https://storage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4"
+              wget -U "AcmeDemoLibrary/1.0" -O /opt/demo/library/tears-of-steel.mp4 "https://storage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
+          volumeMounts:
+            - name: demo-media
+              mountPath: /opt/demo
+        - name: stage-ad-clip
+          image: jrottenberg/ffmpeg:7.1-alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              FONT_BOLD=/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf
+              FONT_REGULAR=/usr/share/fonts/dejavu/DejaVuSans.ttf
+
+              cat > /tmp/sponsor-break-filter.txt <<EOF
+              [0:v]drawbox=x=72:y=72:w=1136:h=576:color=0xcaa85c:t=6,drawbox=x=120:y=468:w=1040:h=120:color=0x000000@0.20:t=fill,drawtext=fontfile=${FONT_BOLD}:text='ACME NETWORK EAST':fontcolor=white:fontsize=42:x=(w-text_w)/2:y=136,drawtext=fontfile=${FONT_BOLD}:text='SPONSOR BREAK':fontcolor=0xcaa85c:fontsize=72:x=(w-text_w)/2:y=236,drawtext=fontfile=${FONT_BOLD}:text='North Coast Sports Network':fontcolor=white:fontsize=44:x=(w-text_w)/2:y=370,drawtext=fontfile=${FONT_REGULAR}:text='Regional sports launch pod':fontcolor=white:fontsize=28:x=(w-text_w)/2:y=468[v0];
+              [1:v]drawbox=x=72:y=72:w=1136:h=576:color=0x8fd3dc:t=6,drawbox=x=120:y=468:w=1040:h=120:color=0x000000@0.20:t=fill,drawtext=fontfile=${FONT_BOLD}:text='ACME NETWORK EAST':fontcolor=white:fontsize=42:x=(w-text_w)/2:y=136,drawtext=fontfile=${FONT_BOLD}:text='SPONSOR BREAK':fontcolor=0x8fd3dc:fontsize=72:x=(w-text_w)/2:y=236,drawtext=fontfile=${FONT_BOLD}:text='Metro Weather Desk':fontcolor=white:fontsize=44:x=(w-text_w)/2:y=370,drawtext=fontfile=${FONT_REGULAR}:text='Storm desk weather sponsorship':fontcolor=white:fontsize=28:x=(w-text_w)/2:y=468[v1];
+              [2:v]drawbox=x=72:y=72:w=1136:h=576:color=0xf29d52:t=6,drawbox=x=120:y=468:w=1040:h=120:color=0x000000@0.20:t=fill,drawtext=fontfile=${FONT_BOLD}:text='ACME NETWORK EAST':fontcolor=white:fontsize=42:x=(w-text_w)/2:y=136,drawtext=fontfile=${FONT_BOLD}:text='SPONSOR BREAK':fontcolor=0xf29d52:fontsize=72:x=(w-text_w)/2:y=236,drawtext=fontfile=${FONT_BOLD}:text='City Arts Channel':fontcolor=white:fontsize=44:x=(w-text_w)/2:y=370,drawtext=fontfile=${FONT_REGULAR}:text='Festival takeover pod':fontcolor=white:fontsize=28:x=(w-text_w)/2:y=468[v2];
+              [v0][v1][v2]concat=n=3:v=1:a=0[v]
+              EOF
+
+              ffmpeg -hide_banner -loglevel warning -y \
+                -f lavfi -i color=c=0x0b1622:s=1280x720:r=24:d=5 \
+                -f lavfi -i color=c=0x163948:s=1280x720:r=24:d=5 \
+                -f lavfi -i color=c=0x3a1d24:s=1280x720:r=24:d=5 \
+                -ss 00:00:05 -t 00:00:15 -i /opt/demo/demo.mp4 \
+                -filter_complex_script /tmp/sponsor-break-filter.txt \
+                -map '[v]' -map 3:a:0 -t 15 \
+                -c:v libx264 -preset veryfast -pix_fmt yuv420p -r 24 -c:a aac -ar 44100 -b:a 128k -movflags +faststart \
+                /opt/demo/library/sponsor-break.mp4
+
+              ffmpeg -hide_banner -loglevel warning -y \
+                -f lavfi -i color=c=0x111111:s=1280x720:r=24:d=3 \
+                -ss 00:00:20 -t 00:00:03 -i /opt/demo/demo.mp4 \
+                -vf "drawbox=x=72:y=72:w=1136:h=576:color=0xe2b261:t=6,drawbox=x=120:y=452:w=1040:h=136:color=0x000000@0.30:t=fill,drawtext=fontfile=${FONT_BOLD}:text='ACME NETWORK EAST':fontcolor=white:fontsize=42:x=(w-text_w)/2:y=150,drawtext=fontfile=${FONT_BOLD}:text='AD DECISIONING DELAY':fontcolor=0xe2b261:fontsize=64:x=(w-text_w)/2:y=260,drawtext=fontfile=${FONT_BOLD}:text='Awaiting sponsor response':fontcolor=white:fontsize=36:x=(w-text_w)/2:y=370,drawtext=fontfile=${FONT_REGULAR}:text='The break slot will recover automatically when the ad service responds.':fontcolor=white:fontsize=24:x=(w-text_w)/2:y=470" \
+                -shortest -map 0:v:0 -map 1:a:0 \
+                -c:v libx264 -preset veryfast -pix_fmt yuv420p -r 24 -c:a aac -ar 44100 -b:a 128k -movflags +faststart \
+                /opt/demo/library/sponsor-stall.mp4
+
+              mkdir -p /opt/demo/house-loop-segments
+              ffmpeg -hide_banner -loglevel warning -y \
+                -i /opt/demo/demo.mp4 \
+                -map 0:v:0 -map 0:a:0 \
+                -c:v libx264 -preset veryfast -pix_fmt yuv420p -r 24 -g 48 -keyint_min 48 -sc_threshold 0 \
+                -force_key_frames "expr:gte(t,n_forced*180)" \
+                -c:a aac -ar 44100 -b:a 128k \
+                -f segment -segment_time 180 -reset_timestamps 1 \
+                /opt/demo/house-loop-segments/segment-%03d.mp4
+          volumeMounts:
+            - name: demo-media
+              mountPath: /opt/demo
+        - name: build-app
+          image: maven:3.9.9-eclipse-temurin-22
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              cd /workspace/services/media-service
+              mvn -f pom.demo.xml -Dmaven.test.skip=true package
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: maven-repo
+              mountPath: /root/.m2
+      containers:
+        - name: app
+          image: eclipse-temurin:22-jre
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - java -jar /workspace/services/media-service/target/media-service-demo.jar
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: media-service-demo
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: grpc
+            - name: OTEL_PROPAGATORS
+              value: baggage,b3,tracecontext
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.name=$(OTEL_SERVICE_NAME),service.namespace=streaming-service-app,k8s.namespace.name=streaming-service-app,k8s.deployment.name=media-service-demo,deployment.environment=streaming-app
+            - name: SERVER_PORT
+              value: "8080"
+            - name: DEMO_MEDIA_FILE
+              value: /opt/demo/demo.mp4
+            - name: DEMO_MEDIA_ROOT
+              value: /opt/demo/library
+            - name: DEMO_MEDIA_BROADCAST_ROOT
+              value: /broadcast-state
+          readinessProbe:
+            httpGet:
+              path: /api/v1/demo/media/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/v1/demo/media/health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+              readOnly: true
+            - name: demo-media
+              mountPath: /opt/demo
+              readOnly: true
+            - name: broadcast-state
+              mountPath: /broadcast-state
+        - name: rtsp-restreamer
+          image: jrottenberg/ffmpeg:7.1-alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              DEMO_SOURCE_FILE="/opt/demo/demo.mp4"
+              ROUTE_FILE="/broadcast-state/current-source.txt"
+              HOUSE_BREAK_SEGMENT_SECONDS="${HOUSE_BREAK_SEGMENT_SECONDS:-180}"
+              DEMO_PID=""
+              LIVE_PID=""
+              LIVE_CONFIG=""
+              ROUTE_WORK_DIR=""
+
+              stop_pid() {
+                PID="$1"
+                if [ -n "${PID}" ] && kill -0 "${PID}" 2>/dev/null; then
+                  kill "${PID}" || true
+                  wait "${PID}" || true
+                fi
+              }
+
+              stop_demo_source() {
+                stop_pid "${DEMO_PID}"
+                DEMO_PID=""
+              }
+
+              stop_live_stream() {
+                stop_pid "${LIVE_PID}"
+                LIVE_PID=""
+                if [ -n "${ROUTE_WORK_DIR}" ] && [ -d "${ROUTE_WORK_DIR}" ]; then
+                  rm -rf "${ROUTE_WORK_DIR}" || true
+                fi
+                ROUTE_WORK_DIR=""
+              }
+
+              start_demo_source() {
+                ffmpeg -hide_banner -loglevel warning -re -stream_loop -1 -i "${DEMO_SOURCE_FILE}" -c copy -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/demo-source &
+                DEMO_PID="$!"
+              }
+
+              start_live_stream() {
+                ROUTE_KIND="$1"
+                ROUTE_SOURCE="$2"
+                ROUTE_LOOP="$3"
+                ROUTE_INSERT_AD="$4"
+                ROUTE_SLOW_AD="$5"
+                ROUTE_AD_LOAD_FAILURE="$6"
+                ROUTE_AD_ASSET="$7"
+                ROUTE_STALL_ASSET="$8"
+                ROUTE_WORK_DIR="$(mktemp -d /tmp/live-route.XXXXXX)"
+                ROUTE_PLAYLIST="${ROUTE_WORK_DIR}/live-playlist.txt"
+                ROUTE_SEGMENT_DIR="${ROUTE_WORK_DIR}/segments"
+
+                append_ad_break_assets() {
+                  if [ "${ROUTE_SLOW_AD}" = "true" ] && [ -n "${ROUTE_STALL_ASSET}" ] && [ -f "${ROUTE_STALL_ASSET}" ]; then
+                    printf "file '%s'\n" "${ROUTE_STALL_ASSET}" >> "${ROUTE_PLAYLIST}"
+                  fi
+
+                  if [ "${ROUTE_AD_LOAD_FAILURE}" = "true" ]; then
+                    if [ -n "${ROUTE_STALL_ASSET}" ] && [ -f "${ROUTE_STALL_ASSET}" ]; then
+                      printf "file '%s'\n" "${ROUTE_STALL_ASSET}" >> "${ROUTE_PLAYLIST}"
+                    fi
+                  elif [ -n "${ROUTE_AD_ASSET}" ] && [ -f "${ROUTE_AD_ASSET}" ]; then
+                    printf "file '%s'\n" "${ROUTE_AD_ASSET}" >> "${ROUTE_PLAYLIST}"
+                  fi
+                }
+
+                build_segmented_loop_playlist() {
+                  PREBUILT_SEGMENT_DIR="/opt/demo/house-loop-segments"
+                  if [ -d "${PREBUILT_SEGMENT_DIR}" ] && find "${PREBUILT_SEGMENT_DIR}" -maxdepth 1 -type f -name 'segment-*.mp4' | grep -q .; then
+                    find "${PREBUILT_SEGMENT_DIR}" -maxdepth 1 -type f -name 'segment-*.mp4' | sort > "${ROUTE_WORK_DIR}/segments.list"
+                  else
+                    mkdir -p "${ROUTE_SEGMENT_DIR}"
+                    ffmpeg -hide_banner -loglevel warning -y -i "${ROUTE_SOURCE}" -map 0:v:0 -map 0:a:0 -c:v libx264 -preset veryfast -pix_fmt yuv420p -r 24 -g 48 -keyint_min 48 -sc_threshold 0 -force_key_frames "expr:gte(t,n_forced*${HOUSE_BREAK_SEGMENT_SECONDS})" -c:a aac -ar 44100 -b:a 128k -f segment -segment_time "${HOUSE_BREAK_SEGMENT_SECONDS}" -reset_timestamps 1 "${ROUTE_SEGMENT_DIR}/segment-%03d.mp4" >/dev/null 2>&1 || return 1
+                    find "${ROUTE_SEGMENT_DIR}" -maxdepth 1 -type f -name 'segment-*.mp4' | sort > "${ROUTE_WORK_DIR}/segments.list"
+                  fi
+                  SEGMENT_COUNT="$(wc -l < "${ROUTE_WORK_DIR}/segments.list" | tr -d ' ')"
+                  if [ -z "${SEGMENT_COUNT}" ] || [ "${SEGMENT_COUNT}" -le 1 ]; then
+                    return 1
+                  fi
+
+                  : > "${ROUTE_PLAYLIST}"
+                  SEGMENT_INDEX=0
+                  LAST_SEGMENT_INDEX=$((SEGMENT_COUNT - 1))
+                  while IFS= read -r SEGMENT_PATH; do
+                    [ -n "${SEGMENT_PATH}" ] || continue
+                    printf "file '%s'\n" "${SEGMENT_PATH}" >> "${ROUTE_PLAYLIST}"
+                    if [ "${SEGMENT_INDEX}" -lt "${LAST_SEGMENT_INDEX}" ]; then
+                      append_ad_break_assets
+                    fi
+                    SEGMENT_INDEX=$((SEGMENT_INDEX + 1))
+                  done < "${ROUTE_WORK_DIR}/segments.list"
+                }
+
+                build_route_playlist() {
+                  : > "${ROUTE_PLAYLIST}"
+
+                  if [ ! -f "${ROUTE_SOURCE}" ]; then
+                    return 1
+                  fi
+
+                  if [ "${ROUTE_INSERT_AD}" = "true" ] && [ "${ROUTE_LOOP}" = "true" ]; then
+                    if build_segmented_loop_playlist; then
+                      return 0
+                    fi
+                  fi
+
+                  printf "file '%s'\n" "${ROUTE_SOURCE}" >> "${ROUTE_PLAYLIST}"
+
+                  if [ "${ROUTE_INSERT_AD}" != "true" ]; then
+                    return 0
+                  fi
+
+                  append_ad_break_assets
+                }
+
+                if [ "${ROUTE_KIND}" = "file" ]; then
+                  build_route_playlist || return 1
+
+                  if [ "${ROUTE_LOOP}" = "true" ]; then
+                    ffmpeg -hide_banner -loglevel warning -fflags +genpts -re -stream_loop -1 -f concat -safe 0 -i "${ROUTE_PLAYLIST}" -map 0:v:0 -map 0:a:0 -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -c:a aac -ar 44100 -b:a 128k -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/live &
+                  else
+                    ffmpeg -hide_banner -loglevel warning -fflags +genpts -re -f concat -safe 0 -i "${ROUTE_PLAYLIST}" -map 0:v:0 -map 0:a:0 -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -c:a aac -ar 44100 -b:a 128k -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/live &
+                  fi
+                else
+                  ffmpeg -hide_banner -loglevel warning -rtsp_transport tcp -i "${ROUTE_SOURCE}" -c copy -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/live &
+                fi
+
+                LIVE_PID="$!"
+              }
+
+              read_route() {
+                if [ ! -f "${ROUTE_FILE}" ]; then
+                  return 1
+                fi
+
+                ROUTE_KEY="$(sed -n '1p' "${ROUTE_FILE}")"
+                ROUTE_KIND="$(sed -n '2p' "${ROUTE_FILE}")"
+                ROUTE_LOOP="$(sed -n '3p' "${ROUTE_FILE}")"
+                ROUTE_SOURCE="$(sed -n '4p' "${ROUTE_FILE}")"
+                ROUTE_INSERT_AD="$(sed -n '5p' "${ROUTE_FILE}")"
+                ROUTE_SLOW_AD="$(sed -n '6p' "${ROUTE_FILE}")"
+                ROUTE_AD_LOAD_FAILURE="$(sed -n '7p' "${ROUTE_FILE}")"
+                ROUTE_AD_ASSET="$(sed -n '8p' "${ROUTE_FILE}")"
+                ROUTE_STALL_ASSET="$(sed -n '9p' "${ROUTE_FILE}")"
+
+                [ -n "${ROUTE_INSERT_AD}" ] || ROUTE_INSERT_AD="false"
+                [ -n "${ROUTE_SLOW_AD}" ] || ROUTE_SLOW_AD="false"
+                [ -n "${ROUTE_AD_LOAD_FAILURE}" ] || ROUTE_AD_LOAD_FAILURE="false"
+
+                [ -n "${ROUTE_KEY}" ] && [ -n "${ROUTE_KIND}" ] && [ -n "${ROUTE_SOURCE}" ]
+              }
+
+              trap 'stop_live_stream; stop_demo_source; exit 0' INT TERM
+
+              while true; do
+                if [ -f "${DEMO_SOURCE_FILE}" ]; then
+                  if [ -z "${DEMO_PID}" ] || ! kill -0 "${DEMO_PID}" 2>/dev/null; then
+                    stop_demo_source
+                    start_demo_source
+                  fi
+                else
+                  stop_demo_source
+                fi
+
+                if read_route; then
+                  NEXT_CONFIG="${ROUTE_KEY}|${ROUTE_KIND}|${ROUTE_LOOP}|${ROUTE_SOURCE}|${ROUTE_INSERT_AD}|${ROUTE_SLOW_AD}|${ROUTE_AD_LOAD_FAILURE}|${ROUTE_AD_ASSET}|${ROUTE_STALL_ASSET}"
+                  if [ "${NEXT_CONFIG}" != "${LIVE_CONFIG}" ] || [ -z "${LIVE_PID}" ] || ! kill -0 "${LIVE_PID}" 2>/dev/null; then
+                    stop_live_stream
+                    LIVE_CONFIG="${NEXT_CONFIG}"
+                    start_live_stream "${ROUTE_KIND}" "${ROUTE_SOURCE}" "${ROUTE_LOOP}" "${ROUTE_INSERT_AD}" "${ROUTE_SLOW_AD}" "${ROUTE_AD_LOAD_FAILURE}" "${ROUTE_AD_ASSET}" "${ROUTE_STALL_ASSET}"
+                  fi
+                else
+                  stop_live_stream
+                  LIVE_CONFIG=""
+                fi
+
+                sleep 2
+              done
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi
+          volumeMounts:
+            - name: broadcast-state
+              mountPath: /broadcast-state
+            - name: demo-media
+              mountPath: /opt/demo
+              readOnly: true
+        - name: rtsp-server
+          image: bluenviron/mediamtx:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MTX_PROTOCOLS
+              value: tcp
+          ports:
+            - containerPort: 8554
+              name: rtsp
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+      volumes:
+        - name: source
+          configMap:
+            name: media-service-source
+        - name: workspace
+          emptyDir: {}
+        - name: maven-repo
+          emptyDir: {}
+        - name: demo-media
+          emptyDir: {}
+        - name: broadcast-state
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: media-service-demo
+  namespace: streaming-service-app
+  labels:
+    app.kubernetes.io/name: media-service-demo
+    app.kubernetes.io/part-of: streaming-service-app
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: media-service-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: media-service-demo-rtsp
+  namespace: streaming-service-app
+  labels:
+    app.kubernetes.io/name: media-service-demo-rtsp
+    app.kubernetes.io/part-of: streaming-service-app
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: nlb
+    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: media-service-demo
+  ports:
+    - name: rtsp
+      port: 8554
+      targetPort: rtsp
+      protocol: TCP
