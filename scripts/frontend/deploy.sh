@@ -5,6 +5,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 ENV_FILE="${ENV_FILE:-${ROOT_DIR}/.env}"
 
+log() {
+  print -r -- "[frontend-deploy] $*"
+}
+
+warn() {
+  print -u2 -r -- "[frontend-deploy] WARN: $*"
+}
+
 load_env_file() {
   local env_file="$1"
   local line normalized key value
@@ -57,19 +65,22 @@ SPLUNK_RUM_ACCESS_TOKEN="${SPLUNK_RUM_ACCESS_TOKEN:-}"
 kubectl apply -f "${ROOT_DIR}/k8s/frontend/namespace.yaml"
 
 if [[ ! -d "${FRONTEND_DIR}/node_modules" ]]; then
+  log "Installing frontend dependencies"
   (
     cd "${FRONTEND_DIR}"
     npm install --no-fund --no-audit
   )
 fi
 
+log "Building frontend assets"
 (
   cd "${FRONTEND_DIR}"
   APP_VERSION="${APP_VERSION}" npm run build:production
 )
 
 if [[ -n "${SPLUNK_REALM:-}" && -n "${SPLUNK_RUM_ACCESS_TOKEN:-}" ]]; then
-  (
+  log "Uploading frontend sourcemaps to Splunk RUM"
+  if ! (
     cd "${FRONTEND_DIR}"
     APP_VERSION="${APP_VERSION}" ./node_modules/.bin/splunk-rum sourcemaps upload \
       --app-name "${SPLUNK_RUM_APP_NAME}" \
@@ -77,9 +88,11 @@ if [[ -n "${SPLUNK_REALM:-}" && -n "${SPLUNK_RUM_ACCESS_TOKEN:-}" ]]; then
       --path dist \
       --realm "${SPLUNK_REALM}" \
       --token "${SPLUNK_RUM_ACCESS_TOKEN}"
-  )
+  ); then
+    warn "Splunk source map upload failed; continuing deploy because the frontend rollout does not depend on it."
+  fi
 else
-  echo "Skipping Splunk source map upload because SPLUNK_REALM and/or SPLUNK_RUM_ACCESS_TOKEN are not set."
+  log "Skipping Splunk source map upload because SPLUNK_REALM and/or SPLUNK_RUM_ACCESS_TOKEN are not set."
 fi
 
 kubectl -n "${NAMESPACE}" create configmap "${CONFIGMAP_NAME}" \

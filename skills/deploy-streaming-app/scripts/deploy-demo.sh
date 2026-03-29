@@ -6,21 +6,27 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel 2>/dev/null || true)"
 FRONTEND_DIR=""
-NAMESPACE="${NAMESPACE:-streaming-service-app}"
-PLATFORM="${PLATFORM:-auto}"
-KUBECLI="${KUBECLI:-}"
-FRONTEND_SERVICE_TYPE="${FRONTEND_SERVICE_TYPE:-}"
-RTSP_SERVICE_TYPE="${RTSP_SERVICE_TYPE:-}"
-CLUSTER_LABEL="${CLUSTER_LABEL:-}"
-ENVIRONMENT_LABEL="${ENVIRONMENT_LABEL:-}"
-REGION_LABEL="${REGION_LABEL:-}"
-CONTROL_ROOM_LABEL="${CONTROL_ROOM_LABEL:-}"
-PUBLIC_RTSP_URL="${PUBLIC_RTSP_URL:-}"
-APP_VERSION="${APP_VERSION:-}"
-SPLUNK_RUM_APP_NAME="${SPLUNK_RUM_APP_NAME:-streaming-app-frontend}"
-FRONTEND_ROUTE_NAME="${FRONTEND_ROUTE_NAME:-streaming-frontend}"
-ROLLOUT_TIMEOUT="${ROLLOUT_TIMEOUT:-900s}"
-EXTERNAL_URL_TIMEOUT_SECONDS="${EXTERNAL_URL_TIMEOUT_SECONDS:-60}"
+ENV_FILE="${ENV_FILE-}"
+NAMESPACE="${NAMESPACE-}"
+PLATFORM="${PLATFORM-}"
+KUBECLI="${KUBECLI-}"
+FRONTEND_SERVICE_TYPE="${FRONTEND_SERVICE_TYPE-}"
+RTSP_SERVICE_TYPE="${RTSP_SERVICE_TYPE-}"
+CLUSTER_LABEL="${CLUSTER_LABEL-}"
+ENVIRONMENT_LABEL="${ENVIRONMENT_LABEL-}"
+REGION_LABEL="${REGION_LABEL-}"
+CONTROL_ROOM_LABEL="${CONTROL_ROOM_LABEL-}"
+PUBLIC_RTSP_URL="${PUBLIC_RTSP_URL-}"
+APP_VERSION="${APP_VERSION-}"
+SPLUNK_RUM_APP_NAME="${SPLUNK_RUM_APP_NAME-}"
+SPLUNK_RUM_ACCESS_TOKEN="${SPLUNK_RUM_ACCESS_TOKEN-}"
+FRONTEND_ROUTE_NAME="${FRONTEND_ROUTE_NAME-}"
+ROLLOUT_TIMEOUT="${ROLLOUT_TIMEOUT-}"
+EXTERNAL_URL_TIMEOUT_SECONDS="${EXTERNAL_URL_TIMEOUT_SECONDS-}"
+DEMO_AUTH_SECRET="${DEMO_AUTH_SECRET-}"
+DEMO_AUTH_PASSWORD="${DEMO_AUTH_PASSWORD-}"
+DEMO_AUTH_SECRET_NAME="streaming-demo-auth"
+DEMO_AUTH_PASSWORD_SOURCE="provided"
 TEMP_DIR=""
 RENDERED_NAMESPACE=""
 
@@ -48,14 +54,23 @@ Options:
   --help
 
 Environment variables:
-  SPLUNK_REALM / SPLUNK_ACCESS_TOKEN   Optional sourcemap upload credentials
+  ENV_FILE                              Optional path to a repo-style env file
+  SPLUNK_REALM / SPLUNK_RUM_ACCESS_TOKEN
+                                        Optional frontend sourcemap upload credentials
+  SPLUNK_ACCESS_TOKEN                   Backward-compatible sourcemap token fallback
   SPLUNK_RUM_APP_NAME                  Optional frontend RUM app name
+  DEMO_AUTH_PASSWORD / DEMO_AUTH_SECRET
+                                        Optional demo login credentials to persist
   EXTERNAL_URL_TIMEOUT_SECONDS         How long to wait for Route/LB hosts
 EOF
 }
 
 log() {
   printf '[deploy-streaming-app] %s\n' "$*"
+}
+
+warn() {
+  printf '[deploy-streaming-app] WARN: %s\n' "$*" >&2
 }
 
 fail() {
@@ -68,6 +83,50 @@ if [[ -z "${REPO_ROOT}" ]]; then
 fi
 
 FRONTEND_DIR="${REPO_ROOT}/frontend"
+ENV_FILE="${ENV_FILE:-${REPO_ROOT}/.env}"
+
+load_env_file() {
+  local env_file="$1"
+  local line normalized key value
+
+  [[ -f "${env_file}" ]] || return 0
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+
+    [[ -z "${line}" || "${line}" == \#* ]] && continue
+
+    normalized="${line}"
+    [[ "${normalized}" == export\ * ]] && normalized="${normalized#export }"
+    [[ "${normalized}" == *=* ]] || continue
+
+    key="${normalized%%=*}"
+    value="${normalized#*=}"
+
+    key="${key%"${key##*[![:space:]]}"}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+
+    if [[ "${key}" != [A-Za-z_][A-Za-z0-9_]* ]]; then
+      continue
+    fi
+
+    if [[ -n "${!key:-}" ]]; then
+      continue
+    fi
+
+    if [[ "${value}" == \"*\" && "${value}" == *\" ]]; then
+      value="${value:1:${#value}-2}"
+    elif [[ "${value}" == \'*\' && "${value}" == *\' ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+
+    export "${key}=${value}"
+  done < "${env_file}"
+}
+
+load_env_file "${ENV_FILE}"
 
 cleanup() {
   if [[ -n "${TEMP_DIR}" && -d "${TEMP_DIR}" ]]; then
@@ -197,6 +256,8 @@ verify_repo_layout() {
 verify_tooling() {
   require_command tar
   require_command sed
+  require_command head
+  require_command tr
   require_command npm
   require_command "${KUBECLI}"
 
@@ -251,7 +312,62 @@ apply_manifest() {
 create_or_update_configmap() {
   local name="$1"
   shift
-  "${KUBECLI}" -n "${NAMESPACE}" create configmap "${name}" "$@" --dry-run=client -o yaml | "${KUBECLI}" apply -f -
+  "${KUBECLI}" -n "${NAMESPACE}" create configmap "${name}" "$@" --dry-run=client -o yaml | "${KUBECLI}" apply --server-side -f -
+}
+
+create_or_update_secret() {
+  local name="$1"
+  shift
+  "${KUBECLI}" -n "${NAMESPACE}" create secret generic "${name}" "$@" --dry-run=client -o yaml | "${KUBECLI}" apply --server-side -f -
+}
+
+random_alnum() {
+  local length="$1"
+  local value=""
+
+  set +o pipefail
+  value="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c "${length}")"
+  set -o pipefail
+
+  [[ -n "${value}" ]] || fail "unable to generate a random credential"
+  printf '%s' "${value}"
+}
+
+package_service_source() {
+  local service_dir="$1"
+  local archive_path="$2"
+  shift 2
+  local -a excludes
+  local extra_path
+
+  excludes=(
+    "--exclude=${service_dir}/target"
+    "--exclude=${service_dir}/build"
+    "--exclude=${service_dir}/.idea"
+    "--exclude=${service_dir}/.vscode"
+    "--exclude=${service_dir}/.DS_Store"
+  )
+
+  for extra_path in "$@"; do
+    excludes+=("--exclude=${service_dir}/${extra_path}")
+  done
+
+  tar -C "${REPO_ROOT}" "${excludes[@]}" -czf "${archive_path}" "${service_dir}"
+}
+
+ensure_demo_auth_secret() {
+  if [[ -z "${DEMO_AUTH_SECRET}" ]]; then
+    DEMO_AUTH_SECRET="$(random_alnum 48)"
+  fi
+
+  if [[ -z "${DEMO_AUTH_PASSWORD}" ]]; then
+    DEMO_AUTH_PASSWORD="$(random_alnum 20)"
+    DEMO_AUTH_PASSWORD_SOURCE="generated"
+  fi
+
+  create_or_update_secret "${DEMO_AUTH_SECRET_NAME}" \
+    --from-literal=DEMO_AUTH_SECRET="${DEMO_AUTH_SECRET}" \
+    --from-literal=DEMO_AUTH_PASSWORD="${DEMO_AUTH_PASSWORD}"
 }
 
 restart_and_wait() {
@@ -384,6 +500,7 @@ ensure_frontend_deps() {
 
 build_frontend() {
   local -a build_env
+  local splunk_upload_token="${SPLUNK_RUM_ACCESS_TOKEN:-${SPLUNK_ACCESS_TOKEN:-}}"
 
   build_env=(
     "APP_VERSION=${APP_VERSION}"
@@ -410,19 +527,21 @@ build_frontend() {
     env "${build_env[@]}" npm run build:production
   )
 
-  if [[ -n "${SPLUNK_REALM:-}" && -n "${SPLUNK_ACCESS_TOKEN:-}" ]]; then
+  if [[ -n "${SPLUNK_REALM:-}" && -n "${splunk_upload_token}" ]]; then
     log "Uploading frontend sourcemaps to Splunk RUM"
-    (
+    if ! (
       cd "${FRONTEND_DIR}"
       env APP_VERSION="${APP_VERSION}" ./node_modules/.bin/splunk-rum sourcemaps upload \
         --app-name "${SPLUNK_RUM_APP_NAME}" \
         --app-version "${APP_VERSION}" \
         --path dist \
         --realm "${SPLUNK_REALM}" \
-        --token "${SPLUNK_ACCESS_TOKEN}"
-    )
+        --token "${splunk_upload_token}"
+    ); then
+      warn "Splunk sourcemap upload failed; continuing deploy because the frontend rollout does not depend on it"
+    fi
   else
-    log "Skipping Splunk sourcemap upload because SPLUNK_REALM and/or SPLUNK_ACCESS_TOKEN are unset"
+    log "Skipping Splunk sourcemap upload because SPLUNK_REALM and/or a sourcemap token are unset"
   fi
 }
 
@@ -434,11 +553,11 @@ create_backend_sources() {
   local ad_archive="${TEMP_DIR}/ad-service-source.tgz"
 
   log "Packaging backend source archives"
-  tar -C "${REPO_ROOT}" --exclude='services/content-service/src/test' -czf "${content_archive}" services/content-service
-  tar -C "${REPO_ROOT}" --exclude='services/media-service/src/test' -czf "${media_archive}" services/media-service
-  tar -C "${REPO_ROOT}" --exclude='services/user-service/src/test' -czf "${user_archive}" services/user-service
-  tar -C "${REPO_ROOT}" -czf "${billing_archive}" services/billing-service
-  tar -C "${REPO_ROOT}" -czf "${ad_archive}" services/ad-service
+  package_service_source services/content-service "${content_archive}" src/test
+  package_service_source services/media-service "${media_archive}" src/test
+  package_service_source services/user-service "${user_archive}" src/test
+  package_service_source services/billing-service "${billing_archive}" src/test
+  package_service_source services/ad-service "${ad_archive}" src/test
 
   create_or_update_configmap content-service-source --from-file=content-service-source.tgz="${content_archive}"
   create_or_update_configmap media-service-source --from-file=media-service-source.tgz="${media_archive}"
@@ -496,6 +615,13 @@ discover_frontend_url() {
 
   printf '\n'
 }
+
+NAMESPACE="${NAMESPACE:-streaming-service-app}"
+PLATFORM="${PLATFORM:-auto}"
+SPLUNK_RUM_APP_NAME="${SPLUNK_RUM_APP_NAME:-streaming-app-frontend}"
+FRONTEND_ROUTE_NAME="${FRONTEND_ROUTE_NAME:-streaming-frontend}"
+ROLLOUT_TIMEOUT="${ROLLOUT_TIMEOUT:-900s}"
+EXTERNAL_URL_TIMEOUT_SECONDS="${EXTERNAL_URL_TIMEOUT_SECONDS:-60}"
 
 validate_dns_label "${NAMESPACE}" "namespace"
 validate_dns_label "${FRONTEND_ROUTE_NAME}" "frontend route name"
@@ -560,10 +686,12 @@ log "Namespace: ${NAMESPACE}"
 log "Frontend service type: ${FRONTEND_SERVICE_TYPE}"
 log "RTSP service type: ${RTSP_SERVICE_TYPE}"
 log "External URL timeout: ${EXTERNAL_URL_TIMEOUT_SECONDS}s"
+log "Env file: ${ENV_FILE}"
 log "Skill path: ${SKILL_DIR}"
 
 create_namespace
 create_backend_sources
+ensure_demo_auth_secret
 
 log "Applying PostgreSQL and backend demo manifests"
 apply_manifest "${REPO_ROOT}/k8s/backend-demo/postgres.yaml"
@@ -628,3 +756,8 @@ else
     printf 'OpenShift note: Routes do not expose RTSP/TCP. Use a LoadBalancer service or a TCP-capable ingress if you need external RTSP.\n'
   fi
 fi
+
+echo
+printf 'Demo login password (%s): %s\n' "${DEMO_AUTH_PASSWORD_SOURCE}" "${DEMO_AUTH_PASSWORD}"
+printf 'Demo auth accounts: ops, platform, programming, qa, exec, staff, billingadmin, finance, controller @ acmebroadcasting.com\n'
+printf 'Persona shortcuts: operator, exec, programming\n'

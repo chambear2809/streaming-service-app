@@ -39,19 +39,39 @@ spec:
             - name: workspace
               mountPath: /workspace
         - name: stage-demo-movie
-          image: busybox:1.36
+          image: jrottenberg/ffmpeg:7.1-alpine
           imagePullPolicy: IfNotPresent
           command:
             - sh
             - -c
             - |
               set -eu
+              FONT_BOLD=/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf
+              FONT_REGULAR=/usr/share/fonts/dejavu/DejaVuSans.ttf
               mkdir -p /opt/demo/library
-              wget -U "AcmeDemoLibrary/1.0" -O /opt/demo/demo.mp4 "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+
+              build_demo_asset() {
+                OUTPUT_PATH="$1"
+                ACCENT_COLOR="$2"
+                TITLE="$3"
+                SUBTITLE="$4"
+                AUDIO_TONE="$5"
+
+                ffmpeg -hide_banner -loglevel warning -y \
+                  -f lavfi -i color=c=0x101820:s=1280x720:r=24:d=30 \
+                  -f lavfi -i sine=frequency="${AUDIO_TONE}":sample_rate=44100:duration=30 \
+                  -vf "drawbox=x=72:y=72:w=1136:h=576:color=${ACCENT_COLOR}:t=6,drawbox=x=120:y=468:w=1040:h=120:color=0x000000@0.24:t=fill,drawtext=fontfile=${FONT_BOLD}:text='STREAMING SERVICE DEMO':fontcolor=white:fontsize=40:x=(w-text_w)/2:y=140,drawtext=fontfile=${FONT_BOLD}:text='${TITLE}':fontcolor=${ACCENT_COLOR}:fontsize=68:x=(w-text_w)/2:y=246,drawtext=fontfile=${FONT_REGULAR}:text='${SUBTITLE}':fontcolor=white:fontsize=30:x=(w-text_w)/2:y=370" \
+                  -shortest \
+                  -c:v libx264 -preset veryfast -pix_fmt yuv420p -r 24 \
+                  -c:a aac -ar 44100 -b:a 128k -movflags +faststart \
+                  "${OUTPUT_PATH}"
+              }
+
+              build_demo_asset /opt/demo/demo.mp4 0xcaa85c 'House Lineup' 'Primary public channel' 440
               cp /opt/demo/demo.mp4 /opt/demo/library/big-buck-bunny.mp4
-              wget -U "AcmeDemoLibrary/1.0" -O /opt/demo/library/elephants-dream.mp4 "https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4"
-              wget -U "AcmeDemoLibrary/1.0" -O /opt/demo/library/sintel.mp4 "https://storage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4"
-              wget -U "AcmeDemoLibrary/1.0" -O /opt/demo/library/tears-of-steel.mp4 "https://storage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
+              build_demo_asset /opt/demo/library/elephants-dream.mp4 0x8fd3dc 'Events Desk' 'Contribution preview reel' 554
+              build_demo_asset /opt/demo/library/sintel.mp4 0xf29d52 'Review Desk' 'Editorial screening loop' 659
+              build_demo_asset /opt/demo/library/tears-of-steel.mp4 0xbddf7a 'Regional Sports' 'Sponsor-ready house package' 784
           volumeMounts:
             - name: demo-media
               mountPath: /opt/demo

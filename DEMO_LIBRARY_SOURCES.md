@@ -1,28 +1,25 @@
-Acme Demo Library Sources
-=========================
+Streaming Demo Library Assets
+=============================
 
-The Kubernetes demo library stages stable MP4 assets into `media-service-demo` at pod startup.
+The Kubernetes demo library is now generated in-cluster by
+`k8s/backend-demo/media-service.yaml` during pod startup.
 
-Titles
-------
-- Big Buck Bunny
-  - Asset path: `big-buck-bunny.mp4`
-  - Source: https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4
-  - License: CC BY 3.0
-- Elephants Dream
-  - Asset path: `elephants-dream.mp4`
-  - Source: https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4
-  - License: CC BY 2.5
-- Sintel
-  - Asset path: `sintel.mp4`
-  - Source: https://storage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4
-  - License: CC BY 3.0
-- Tears of Steel
-  - Asset path: `tears-of-steel.mp4`
-  - Source: https://storage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4
-  - License: CC BY 3.0
+Generated Assets
+----------------
+- `big-buck-bunny.mp4`
+- `elephants-dream.mp4`
+- `sintel.mp4`
+- `tears-of-steel.mp4`
+- `sponsor-break.mp4`
+- `sponsor-stall.mp4`
 
 Notes
 -----
-- The legacy `/api/v1/demo/media/movie.mp4` route is still present for the original Big Buck Bunny MP4 demo source.
-- The live catalog now points at the backend library routes under `/api/v1/demo/media/library/...`.
+- The generated assets are synthetic booth-safe clips built with FFmpeg, so
+  the default rollout no longer depends on downloading public MP4 files from
+  the internet.
+- `/api/v1/demo/media/movie.mp4` still points at the primary generated house
+  asset mounted at `/opt/demo/demo.mp4`.
+- If you want branded or externally sourced media, replace the generation step
+  in `k8s/backend-demo/media-service.yaml` or provide your own asset staging
+  flow before deploy.

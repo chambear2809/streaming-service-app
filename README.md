@@ -134,6 +134,9 @@ Create a repo-root `.env` first:
 cp example.env .env
 ```
 
+The shipped template includes working local backing-service defaults, and the
+canonical deploy script now reads that repo-root `.env` automatically.
+
 ### Local Dependency Services Only
 
 ```bash
@@ -184,6 +187,10 @@ Use `--platform openshift` when you want the frontend exposed through an OpenShi
 
 This namespace-safe deploy flow is the current full-demo entry point. It renders manifests at apply time instead of forcing you to edit checked-in YAML just to change namespaces.
 
+The current demo manifests still compile the Java services inside the cluster.
+That means the cluster needs outbound access to Maven repositories, or an
+equivalent internal mirror, even when container images are already mirrored.
+
 ## Deployment Paths
 
 ### Canonical Full-Demo Path
@@ -192,6 +199,7 @@ This namespace-safe deploy flow is the current full-demo entry point. It renders
 
 - Namespace-safe Kubernetes and OpenShift deployment flow
 - Deploys PostgreSQL plus the current demo slice: `content-service`, `media-service`, `user-service`, `billing-service`, `ad-service`, and `streaming-frontend`
+- Loads the repo-root `.env` automatically when present
 - Supports frontend labeling, Route support on OpenShift, and follow-on ThousandEyes and Splunk workflow guidance
 - Mirrors into Cursor at [`.cursor/skills/deploy-streaming-app/`](.cursor/skills/deploy-streaming-app/)
 
@@ -224,13 +232,16 @@ The full set lives in [`example.env`](example.env). The variables below are the 
 
 - `STREAMING_ENVIRONMENT_LABEL` controls the operator-facing label shown in the broadcast suite
 - `SPLUNK_REALM` selects the Splunk Observability realm
-- `SPLUNK_RUM_ACCESS_TOKEN` is used by the frontend build and [`scripts/frontend/deploy.sh`](scripts/frontend/deploy.sh) for Browser RUM and source map upload
-- `SPLUNK_ACCESS_TOKEN` is used by the dashboard sync flow and is also the token used by the canonical skill deploy path for source map upload today
+- `SPLUNK_RUM_ACCESS_TOKEN` is used by the frontend build, [`scripts/frontend/deploy.sh`](scripts/frontend/deploy.sh), and the canonical deploy path for Browser RUM and source map upload; sourcemap upload is best-effort and warns instead of aborting the deploy when Splunk returns an error
+- `SPLUNK_ACCESS_TOKEN` is used by the dashboard sync flow
 - `SPLUNK_RUM_APP_NAME` overrides the frontend RUM application name
 - `SPLUNK_DEPLOYMENT_ENVIRONMENT` overrides the default deployment environment label
 - `SPLUNK_DEMO_DASHBOARD_GROUP_ID` pins dashboard sync to an existing group when automatic matching would be ambiguous
 - `SPLUNK_VALIDATION_TOKEN` is only needed when the dashboard-write token cannot read SignalFlow metric data
 - `STREAMING_K8S_NAMESPACE` keeps dashboard CPU and infra charts aligned with the deployed namespace
+- `STREAMING_PUBLIC_RTSP_URL` overrides the public RTSP URL baked into static frontend builds when you are not letting the deploy script discover it automatically
+- `DEMO_AUTH_PASSWORD` pins the demo login password instead of letting the canonical deploy generate one
+- `DEMO_AUTH_SECRET` pins the user-service demo signing secret instead of letting the canonical deploy generate one
 
 ### ThousandEyes Test Creation
 

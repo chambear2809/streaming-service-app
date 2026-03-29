@@ -14,7 +14,13 @@ trap cleanup EXIT
 
 kubectl apply -f "${ROOT_DIR}/k8s/frontend/namespace.yaml"
 
-tar -C "${ROOT_DIR}" -czf "${ARCHIVE_PATH}" services/billing-service
+tar -C "${ROOT_DIR}" \
+  --exclude='services/billing-service/target' \
+  --exclude='services/billing-service/build' \
+  --exclude='services/billing-service/src/test' \
+  --exclude='services/billing-service/.idea' \
+  --exclude='services/billing-service/.vscode' \
+  -czf "${ARCHIVE_PATH}" services/billing-service
 
 kubectl -n "${NAMESPACE}" create configmap billing-service-source \
   --from-file=billing-service-source.tgz="${ARCHIVE_PATH}" \

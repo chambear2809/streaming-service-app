@@ -18,21 +18,26 @@ Use this skill when the task is to deploy this repository's demo stack into a Ku
 
 2. Run the bundled deploy script.
    - Entry point: `skills/deploy-streaming-app/scripts/deploy-demo.sh`
-   - The script validates the local repo layout, required CLIs, namespace format, and exposure settings before it touches the cluster.
+   - The script reads the repo-root `.env` by default, then validates the local repo layout, required CLIs, namespace format, and exposure settings before it touches the cluster.
    - It creates the namespace or project, stages service source archives into ConfigMaps, deploys PostgreSQL plus the demo services, builds the frontend, and exposes the UI.
+   - Generated ConfigMaps and Secrets are applied server-side so large staged assets do not fail on the client-side `last-applied-configuration` annotation limit.
    - It renders manifest content at apply time with escaped namespace substitution. Do not edit the checked-in YAML just to switch namespaces.
 
 3. Set frontend labels only when they help the operator surface.
    - Supported flags: `--cluster-label`, `--environment-label`, `--region-label`, `--control-room-label`, `--public-rtsp-url`
    - `namespace` is always overridden so the frontend points at the deployed namespace instead of the hardcoded demo one.
 
-4. Validate the rollout and report the access path.
+4. Set or capture the demo login credentials explicitly.
+   - Supported env vars: `DEMO_AUTH_PASSWORD`, `DEMO_AUTH_SECRET`
+   - If either value is omitted, the deploy script generates it and prints the resulting demo password after rollout.
+
+5. Validate the rollout and report the access path.
    - Check `streaming-postgres`, `content-service-demo`, `media-service-demo`, `user-service-demo`, `billing-service`, `ad-service-demo`, and `streaming-frontend`.
    - On OpenShift, report the Route host.
    - On Kubernetes LoadBalancer services, let the script wait for an external address before giving up.
    - If RTSP is not externally exposed, say that explicitly instead of leaving the old demo URL implied.
 
-5. When the user wants ThousandEyes coverage, set up and validate the ThousandEyes inputs before creating tests.
+6. When the user wants ThousandEyes coverage, set up and validate the ThousandEyes inputs before creating tests.
    - Read `docs/thousandeyes-rtsp-api.md` for the supported test model and the repo scripts.
    - Ensure the repo-root `.env` exists. If it does not, create it from `example.env`.
    - Ask whether the ThousandEyes tests should target `local` cluster-private endpoints or `external` public endpoints. Make the choice explicit before you create or update any tests.
@@ -56,14 +61,14 @@ Use this skill when the task is to deploy this repository's demo stack into a Ku
    - The RTSP control-path test is agent-to-server and can run with only one Enterprise Agent. The UDP and RTP proxy tests still need a valid target agent.
    - For Demo Monkey-driven demos, prefer the `http-server` tests for `/api/v1/demo/public/trace-map` and `/api/v1/demo/public/broadcast/live/index.m3u8`. Those are the endpoints Demo Monkey actually degrades.
 
-6. Create the ThousandEyes tests from the cluster only after the relevant endpoints are reachable.
+7. Create the ThousandEyes tests from the cluster only after the relevant endpoints are reachable.
    - For `local` mode, use `scripts/thousandeyes/deploy-k8s-rtsp-tests.sh` so the job discovers the `media-service-demo-rtsp` LoadBalancer hostname, derives the in-cluster `streaming-frontend` base URL, and creates the ThousandEyes tests from inside Kubernetes.
    - For `external` mode, either export `TE_DEMO_MONKEY_FRONTEND_BASE_URL`, `TE_TRACE_MAP_TEST_URL`, `TE_BROADCAST_TEST_URL`, `TE_RTSP_SERVER`, and `TE_RTSP_PORT` before using the direct API helper, or override those values before running the Kubernetes wrapper so it does not fall back to cluster-local targets.
    - Use `K8S_DRY_RUN=true` first when the user wants manifest verification without creating the Secret, ConfigMap, and Job for real.
    - Use `THOUSANDEYES_JOB_ACTION=create-demo-monkey-http` when the user specifically wants the Demo Monkey-sensitive HTTP tests.
    - Report whether the created tests target `local` or `external` endpoints, the resolved RTSP hostname and port, the frontend base URL or explicit HTTP test URLs, and state clearly if the agent-to-agent tests are partially constrained by Cloud Agent rules.
 
-7. Build the Splunk demo dashboards only after the ThousandEyes tests are live.
+8. Build the Splunk demo dashboards only after the ThousandEyes tests are live.
    - Use `scripts/thousandeyes/create-demo-dashboards.py` so the dashboard group stays reproducible and ordered for the demo.
    - Before calling the Splunk API, check whether `.env` or the current shell already defines `SPLUNK_REALM`, `SPLUNK_ACCESS_TOKEN`, `THOUSANDEYES_BEARER_TOKEN`, and `THOUSANDEYES_ACCOUNT_GROUP_ID`. `SPLUNK_RUM_APP_NAME` and `SPLUNK_DEPLOYMENT_ENVIRONMENT` can fall back to repo defaults, but override them when the deployed demo uses different names.
    - If the user wants to update an existing dashboard group and the group ID is not already known, first consider `--group-name` or the script's automatic single-prefix match. Prompt for `SPLUNK_DEMO_DASHBOARD_GROUP_ID` only when multiple matching groups make the target ambiguous.
@@ -163,6 +168,7 @@ python3 scripts/thousandeyes/create-demo-dashboards.py \
 - cluster access to create namespaces, deployments, services, configmaps, and optionally routes
 - `node`, `npm`, `tar`, and `git` on the local workstation running the skill
 - outbound image pulls from the cluster, unless the required images are mirrored internally
+- outbound access from the cluster to Maven repositories, unless the Java dependencies are mirrored internally
 - outbound API access to `api.thousandeyes.com` when the task includes ThousandEyes setup or agent discovery
 - outbound API access to `api.<realm>.signalfx.com` when the task includes Splunk dashboard creation
 
@@ -171,6 +177,8 @@ python3 scripts/thousandeyes/create-demo-dashboards.py \
 - The deploy flow includes `k8s/backend-demo/postgres.yaml` because `billing-service` needs it.
 - For OpenShift, the script rewrites Maven cache paths to `/tmp/.m2` so in-cluster builds are less dependent on root-owned paths.
 - The frontend build picks up deployment-specific labels at build time through environment overrides in `frontend/scripts/build.mjs`.
+- Splunk RUM sourcemap upload is best-effort. If the Splunk API returns an error after the frontend build completes, the deploy scripts warn and continue with the rollout.
+- The media library is generated in-cluster with FFmpeg, so the default rollout no longer downloads public MP4 assets during pod startup.
 - `namespace` and `FRONTEND_ROUTE_NAME` must be lowercase RFC 1123 labels.
 - External frontend and RTSP URLs are best-effort discoveries. Tune `--external-url-timeout` or `EXTERNAL_URL_TIMEOUT_SECONDS` when the cluster provisions addresses slowly.
 - ThousandEyes automation in this repo is split between `scripts/thousandeyes/create-rtsp-tests.sh` for direct API use and `scripts/thousandeyes/deploy-k8s-rtsp-tests.sh` for the in-cluster Job path.

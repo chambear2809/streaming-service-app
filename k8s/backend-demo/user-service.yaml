@@ -72,10 +72,18 @@ spec:
               value: baggage,b3,tracecontext
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: service.name=$(OTEL_SERVICE_NAME),service.namespace=streaming-service-app,k8s.namespace.name=streaming-service-app,k8s.deployment.name=user-service-demo,deployment.environment=streaming-app
+            - name: DEMO_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: streaming-demo-auth
+                  key: DEMO_AUTH_SECRET
+            - name: DEMO_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: streaming-demo-auth
+                  key: DEMO_AUTH_PASSWORD
             - name: SERVER_PORT
               value: "8080"
-            - name: DEMO_AUTH_SECRET
-              value: acme-broadcasting-demo-auth-secret
           readinessProbe:
             httpGet:
               path: /api/v1/demo/auth/health

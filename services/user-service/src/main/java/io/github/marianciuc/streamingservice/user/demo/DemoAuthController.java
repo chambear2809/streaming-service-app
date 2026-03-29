@@ -54,13 +54,13 @@ public class DemoAuthController {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Value("${demo.auth.secret:acme-broadcasting-demo-auth-secret}")
+    @Value("${demo.auth.secret}")
     private String authSecret;
 
     @Value("${demo.auth.max-age-seconds:43200}")
     private long maxAgeSeconds;
 
-    @Value("${demo.auth.password:password123}")
+    @Value("${demo.auth.password}")
     private String demoPassword;
 
     @GetMapping("/api/v1/demo/auth/health")

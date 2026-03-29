@@ -25,9 +25,14 @@ SPLUNK_REALM=us1
 SPLUNK_RUM_ACCESS_TOKEN=<browser-rum-access-token>
 SPLUNK_RUM_APP_NAME=streaming-app-frontend
 SPLUNK_DEPLOYMENT_ENVIRONMENT=streaming-app
+STREAMING_PUBLIC_RTSP_URL=rtsp://demo.example.com:8554/live
 ```
 
 `SPLUNK_REALM`, `SPLUNK_RUM_ACCESS_TOKEN`, and `SPLUNK_RUM_APP_NAME` are also reused for source map upload during deploy. Keep `SPLUNK_ACCESS_TOKEN` separate for Splunk API or dashboard automation.
+
+`STREAMING_PUBLIC_RTSP_URL` is optional. Leave it blank when the frontend should
+hide the public RTSP chip, or set it when you want the static build to show a
+known external RTSP endpoint.
 
 ## Local Preview
 
