@@ -29,6 +29,9 @@ flowchart TB
     end
 
     subgraph ThousandEyes["ThousandEyes"]
+        TESource["Source Enterprise Agent<br/>Ashburn, Virginia, US"]
+        TETarget["RTP Target Enterprise Agent<br/>Ashburn, Virginia, US"]
+        TECloud["UDP Target Cloud Agent<br/>Singapore"]
         TEHttp["HTTP Tests<br/>broadcast playback + trace map"]
         TEMedia["RTSP / UDP / RTP Tests"]
     end
@@ -62,6 +65,11 @@ flowchart TB
 
     Viewer --> Frontend
     Operator --> Frontend
+
+    TESource --> TEHttp
+    TESource --> TEMedia
+    TETarget --> TEMedia
+    TECloud -. UDP override .-> TEMedia
 
     TEHttp --> Frontend
     TEMedia --> RtspSvc
@@ -114,6 +122,7 @@ flowchart TB
 Diagram notes:
 
 - The current namespace-safe deploy path includes the `Canonical Cluster Demo Slice`.
+- The current ThousandEyes demo config uses source agent `1639905` in `Ashburn, Virginia, US`, RTP target agent `1659237` in `Ashburn, Virginia, US`, and UDP target override `3` in `Singapore`.
 - The `Optional Protected Commerce Services` are present in the repo and in the legacy backend demo flow, but they are not part of the canonical skill deploy by default.
 - Public playback and the public trace pivot both enter through `streaming-frontend`.
 - `media-service-demo` owns the public broadcast path, Demo Monkey state, and the trace-map fanout into `user-service-demo`, `content-service-demo`, `billing-service`, and `ad-service-demo`.

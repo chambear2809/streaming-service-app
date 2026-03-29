@@ -24,6 +24,9 @@ flowchart TB
     end
 
     subgraph ThousandEyes["ThousandEyes"]
+        TESource["Source Enterprise Agent<br/>Ashburn, Virginia, US"]
+        TETarget["RTP Target Enterprise Agent<br/>Ashburn, Virginia, US"]
+        TECloud["UDP Target Cloud Agent<br/>Singapore"]
         TEHttp["HTTP Tests<br/>broadcast playback + trace map"]
         TEMedia["RTSP / UDP / RTP Tests"]
     end
@@ -57,6 +60,11 @@ flowchart TB
 
     Viewer --> Frontend
     Operator --> Frontend
+
+    TESource --> TEHttp
+    TESource --> TEMedia
+    TETarget --> TEMedia
+    TECloud -. UDP override .-> TEMedia
 
     TEHttp --> Frontend
     TEMedia --> RtspSvc
