@@ -39,6 +39,8 @@ spec:
               value: streaming-service-app
             - name: STATIC_ROOT
               value: /srv/frontend
+            - name: SPLUNK_RUM_SCRIPT_PATH
+              value: /srv/frontend-rum/splunk-instrumentation.js
             - name: OTEL_SERVICE_NAME
               value: streaming-frontend
             - name: OTEL_EXPORTER_OTLP_PROTOCOL
@@ -82,7 +84,7 @@ spec:
               mountPath: /srv/frontend
               readOnly: true
             - name: frontend-rum-assets
-              mountPath: /srv/frontend/splunk
+              mountPath: /srv/frontend-rum
               readOnly: true
       volumes:
         - name: frontend-assets

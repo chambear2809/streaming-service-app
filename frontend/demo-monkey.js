@@ -256,6 +256,12 @@ const elements = {
     pivotCopy: document.querySelector("#demo-monkey-pivot-copy"),
     revenueTitle: document.querySelector("#demo-monkey-revenue-title"),
     revenueCopy: document.querySelector("#demo-monkey-revenue-copy"),
+    scriptStep1: document.querySelector("#demo-monkey-script-step1"),
+    scriptStep1Copy: document.querySelector("#demo-monkey-script-step1-copy"),
+    scriptStep2: document.querySelector("#demo-monkey-script-step2"),
+    scriptStep2Copy: document.querySelector("#demo-monkey-script-step2-copy"),
+    scriptStep3: document.querySelector("#demo-monkey-script-step3"),
+    scriptStep3Copy: document.querySelector("#demo-monkey-script-step3-copy"),
     launchTitle: document.querySelector("#demo-monkey-launch-title"),
     launchCopy: document.querySelector("#demo-monkey-launch-copy"),
     launchThousandEyes: document.querySelector("#demo-monkey-launch-thousandeyes"),
@@ -424,6 +430,19 @@ function formatRelativeBreak(startAt, endAt) {
     return formatShortTime(startAt);
 }
 
+function secondsUntil(dateLike) {
+    if (!dateLike) {
+        return null;
+    }
+
+    const date = new Date(dateLike);
+    if (Number.isNaN(date.getTime())) {
+        return null;
+    }
+
+    return Math.round((date.getTime() - Date.now()) / 1000);
+}
+
 function splunkAppBaseUrl() {
     const realm = String(runtimeConfig?.splunkRum?.realm ?? "us1").trim() || "us1";
     return `https://app.${realm}.signalfx.com/`;
@@ -455,27 +474,52 @@ function buildLaunchTargets(config) {
         };
     }
 
-    if (
-        config.slowAdEnabled
-        || config.adLoadFailureEnabled
-        || config.playbackFailureEnabled
-        || config.traceMapFailureEnabled
-        || config.dependencyTimeoutEnabled
-        || config.dependencyFailureEnabled
-    ) {
+    if (config.slowAdEnabled || config.adLoadFailureEnabled) {
         return {
             ...targets,
             primary: "apm",
-            title: "Lead with the application transaction",
-            copy: "Open Splunk APM first for ad decisioning, manifest assembly, or upstream failure analysis, then use Browser RUM and the trace pivot to reinforce impact."
+            title: "Default booth flow: Splunk 02 then 03",
+            copy: "After the sponsor symptom lands on /broadcast, open the user-impact timeline and backend critical path first. Use Browser RUM next and ThousandEyes for baseline and path context."
+        };
+    }
+
+    if (config.traceMapFailureEnabled || config.dependencyTimeoutEnabled || config.dependencyFailureEnabled) {
+        return {
+            ...targets,
+            primary: "thousandEyes",
+            title: "Lead with the trace pivot path",
+            copy: "Start on the public trace pivot or ThousandEyes first, then use the Trace Map deep dive and the APM service map."
+        };
+    }
+
+    if (config.playbackFailureEnabled) {
+        return {
+            ...targets,
+            primary: "apm",
+            title: "Lead with the failed request",
+            copy: "Use the playback failure as the proof point, then move into Browser RUM and Splunk APM to isolate the failing dependency."
+        };
+    }
+
+    if (
+        config.packetLossPercent > 0
+        || config.disconnectAfterKb > 0
+        || config.throttleKbps > 0
+        || config.startupDelayMs > 0
+    ) {
+        return {
+            ...targets,
+            primary: "thousandEyes",
+            title: "Lead with the outside-in symptom",
+            copy: "Open ThousandEyes first for playback and path context, then use Splunk 01 and 02 before you decide whether the issue is backend-driven."
         };
     }
 
     return {
         ...targets,
         primary: "thousandEyes",
-        title: "Lead with the outside-in symptom",
-        copy: "Open ThousandEyes first for experience and path context, then move into Splunk APM and Browser RUM as the story narrows."
+        title: "Default booth setup: start in the app",
+        copy: "Lead with /broadcast and /#operations, arm Ad break delay near the next sponsor pod, then use ThousandEyes for baseline and Splunk for root cause."
     };
 }
 
@@ -634,6 +678,111 @@ function buildPresenterGuide(config, broadcast) {
         pivotCopy: "Start wherever the issue is clearest on air, then move into ThousandEyes, APM, or Browser RUM based on the audience symptom.",
         revenueTitle: "Check the sponsor queue",
         revenueCopy: "Use the queued sponsor pod timing to decide whether the current custom fault meaningfully threatens monetization."
+    };
+}
+
+function buildScriptWalkthrough(config, broadcast) {
+    const adStatus = broadcast?.adStatus ?? {};
+    const podLabel = adStatus.podLabel || "Next sponsor pod";
+    const sponsorLabel = adStatus.sponsorLabel || "the queued sponsor";
+    const secondsToBreak = secondsUntil(adStatus.breakStartAt);
+    const breakWindowLabel = formatRelativeBreak(adStatus.breakStartAt, adStatus.breakEndAt);
+    const breakIsNear = secondsToBreak !== null && secondsToBreak <= 75;
+    const breakIsLive = secondsToBreak !== null && secondsToBreak <= 0;
+    const timingCue = !adStatus.breakStartAt
+        ? "Resolve the next sponsor-break timing before you arm the default booth preset."
+        : breakIsLive
+            ? `${podLabel} is live now. Keep /broadcast visible and let the symptom land on air.`
+            : breakIsNear
+                ? `${podLabel} is ${breakWindowLabel}. This is close enough to arm or keep the preset armed and return to the app.`
+                : `${podLabel} is ${breakWindowLabel}. Wait until the next sponsor pod is under about 1 minute so the audience does not sit through avoidable dead time.`;
+
+    if (!config.enabled) {
+        return {
+            step1Title: "Open /broadcast, then /#operations",
+            step1Copy: "Lead with the public feed, then show the same sponsor timing in Master Control.",
+            step2Title: "Use Ad break delay as the default booth story",
+            step2Copy: timingCue,
+            step3Title: "After the stall, use Splunk 02 then 03",
+            step3Copy: "Keep ThousandEyes in the flow for outside-in baseline and path context. Use Browser RUM after APM."
+        };
+    }
+
+    if (config.slowAdEnabled && !config.adLoadFailureEnabled) {
+        return {
+            step1Title: "Keep /broadcast and /#operations open",
+            step1Copy: `Use ${podLabel} and ${sponsorLabel} as the shared viewer and control-room proof point for the default booth story.`,
+            step2Title: breakIsNear || breakIsLive ? "Return to the app now" : "Keep the preset armed and wait for the next pod",
+            step2Copy: timingCue,
+            step3Title: "After the stall, use Splunk 02 then 03",
+            step3Copy: "Lead with the user-impact timeline and backend critical path. Use Browser RUM after APM and ThousandEyes as supporting path context."
+        };
+    }
+
+    if (config.adLoadFailureEnabled) {
+        return {
+            step1Title: "Keep /broadcast on the sponsor boundary",
+            step1Copy: `Use ${podLabel} and ${sponsorLabel} to make the miss obvious before you pivot.`,
+            step2Title: breakIsNear || breakIsLive ? "Return to the app now" : "Keep the preset armed and wait for the next pod",
+            step2Copy: timingCue,
+            step3Title: "After the miss, open Splunk 03 then Browser RUM",
+            step3Copy: config.nextBreakOnlyEnabled
+                ? "Let the one-break profile clear itself after the miss, then recover. Keep APM focused on media-service-demo and ad-service-demo."
+                : "Keep APM focused on media-service-demo and ad-service-demo, then use Browser RUM to confirm viewer impact."
+        };
+    }
+
+    if (config.traceMapFailureEnabled || config.dependencyTimeoutEnabled || config.dependencyFailureEnabled) {
+        return {
+            step1Title: "Open the public trace pivot and ThousandEyes",
+            step1Copy: "This story is cleaner on the trace-map path than on the viewer player.",
+            step2Title: "Use the degraded fanout as the proof point",
+            step2Copy: "Keep the failing or slow dependency visible before you open the service map.",
+            step3Title: "Use Splunk 04, then the APM service map",
+            step3Copy: "Follow the failing dependency through media-service-demo into the selected upstream service."
+        };
+    }
+
+    if (config.frontendExceptionEnabled) {
+        return {
+            step1Title: "Open the affected page first",
+            step1Copy: "The browser-side fault is the proof point, so keep the client surface visible.",
+            step2Title: "Let the browser exception fire once",
+            step2Copy: "Do not keep refreshing after the first exception unless you want another Browser RUM event.",
+            step3Title: "Use Browser RUM first, then APM if needed",
+            step3Copy: "Only pivot into backend traces if the client failure exposed a server path too."
+        };
+    }
+
+    if (config.playbackFailureEnabled) {
+        return {
+            step1Title: "Keep the viewer path on screen",
+            step1Copy: "Make the playback failure obvious before you pivot into telemetry.",
+            step2Title: "Use the failed request as the proof point",
+            step2Copy: "Once the 503 lands, move immediately into Browser RUM or Splunk APM.",
+            step3Title: "Use APM and Browser RUM together",
+            step3Copy: "Start with the failing request, then isolate the dependency in the trace and service map."
+        };
+    }
+
+    if (config.packetLossPercent > 0 || config.disconnectAfterKb > 0 || config.throttleKbps > 0 || config.startupDelayMs > 0) {
+        return {
+            step1Title: "Open /broadcast, then ThousandEyes",
+            step1Copy: "Lead with the public feed and the playback and trace-map tests.",
+            step2Title: "Use the outside-in symptom first",
+            step2Copy: "Keep the unstable viewer experience visible while the path signal catches up.",
+            step3Title: "Use ThousandEyes first, then Splunk 01 and 02",
+            step3Copy: "Only pivot deeper into APM if the outside-in symptom points at the application path."
+        };
+    }
+
+    return {
+        step1Title: "Lead with the clearest app surface",
+        step1Copy: "Start where the audience can see the symptom most easily.",
+        step2Title: "Use the current sponsor timing as the pacing cue",
+        step2Copy: timingCue,
+        step3Title: "Then choose the matching telemetry pivot",
+        step3Copy: "Use ThousandEyes, Splunk APM, or Browser RUM based on whether the symptom is network, backend, or frontend first."
     };
 }
 
@@ -796,6 +945,7 @@ function render() {
     const broadcast = state.broadcast;
     const adStatus = broadcast?.adStatus ?? {};
     const presenterGuide = buildPresenterGuide(current, broadcast);
+    const scriptWalkthrough = buildScriptWalkthrough(current, broadcast);
     const launchTargets = buildLaunchTargets(current);
     const currentPresetLabel = presetLabel(current.preset);
     const startupDelayValue = current.startupDelayMs || Number.parseInt(elements.latencyValue.value, 10) || 2500;
@@ -853,6 +1003,12 @@ function render() {
     elements.pivotCopy.textContent = presenterGuide.pivotCopy;
     elements.revenueTitle.textContent = presenterGuide.revenueTitle;
     elements.revenueCopy.textContent = presenterGuide.revenueCopy;
+    elements.scriptStep1.textContent = scriptWalkthrough.step1Title;
+    elements.scriptStep1Copy.textContent = scriptWalkthrough.step1Copy;
+    elements.scriptStep2.textContent = scriptWalkthrough.step2Title;
+    elements.scriptStep2Copy.textContent = scriptWalkthrough.step2Copy;
+    elements.scriptStep3.textContent = scriptWalkthrough.step3Title;
+    elements.scriptStep3Copy.textContent = scriptWalkthrough.step3Copy;
     elements.launchTitle.textContent = launchTargets.title;
     elements.launchCopy.textContent = launchTargets.copy;
     elements.launchThousandEyes.href = absoluteUrl(launchTargets.thousandEyes.href);

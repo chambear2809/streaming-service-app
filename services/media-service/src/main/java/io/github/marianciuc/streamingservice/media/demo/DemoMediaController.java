@@ -90,6 +90,10 @@ public class DemoMediaController {
     private static final int MAX_PACKET_LOSS_PERCENT = 100;
     private static final Duration TRACE_MAP_TIMEOUT = Duration.ofSeconds(5);
     private static final Duration PUBLIC_BROADCAST_PROXY_TIMEOUT = Duration.ofSeconds(3);
+    private static final int PUBLIC_BROADCAST_PROXY_RETRIES = 3;
+    private static final Duration PUBLIC_BROADCAST_PROXY_RETRY_DELAY = Duration.ofSeconds(1);
+    private static final Duration PUBLIC_BROADCAST_PLAYLIST_WARMUP_TIMEOUT = Duration.ofSeconds(8);
+    private static final Duration PUBLIC_BROADCAST_PLAYLIST_WARMUP_POLL_INTERVAL = Duration.ofMillis(250);
     private static final Duration RTSP_TERMINAL_JOB_RETENTION = Duration.ofHours(1);
     private static final Duration RTSP_IN_PROGRESS_GRACE_PERIOD = Duration.ofMinutes(15);
     private static final Duration RTSP_CLEANUP_INTERVAL = Duration.ofMinutes(5);
@@ -676,6 +680,23 @@ public class DemoMediaController {
         return toBroadcastStatus(selection);
     }
 
+    @PostMapping("/api/v1/demo/media/broadcast/reset")
+    public BroadcastStatusResponse resetBroadcastJob() {
+        pruneExpiredRtspArtifacts();
+        UUID previousJobId = activeBroadcastJobId.get();
+        RtspJob previousJob = previousJobId == null ? null : rtspJobs.get(previousJobId);
+
+        clearActiveBroadcastJob();
+        restoreCatalogLifecycleAfterBroadcastReset(previousJob);
+        BroadcastSelection selection = resolveBroadcastSelection();
+        try {
+            ensureBroadcastRelayConfigured(selection);
+        } catch (IOException exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Unable to restore the default house loop.");
+        }
+        return toBroadcastStatus(selection);
+    }
+
     @GetMapping("/api/v1/demo/media/movie.mp4")
     public void getDemoMovie(@RequestHeader HttpHeaders headers, HttpServletResponse response) throws IOException {
         serveMediaFile(Path.of(demoMediaFile), headers, response);
@@ -836,6 +857,43 @@ public class DemoMediaController {
                 && READY_STATUS.equals(job.status())
                 && job.capturePath() != null
                 && Files.exists(job.capturePath());
+    }
+
+    private void restoreCatalogLifecycleAfterBroadcastReset(RtspJob job) {
+        if (job == null) {
+            return;
+        }
+
+        String status = String.valueOf(job.status()).toUpperCase(Locale.ROOT);
+        switch (status) {
+            case READY_STATUS -> updateCatalogLifecycleAsync(
+                    job.contentId(),
+                    "QC_REVIEW",
+                    "Review capture ready",
+                    "Captured MP4 review",
+                    null,
+                    "Contribution review"
+            );
+            case CAPTURING_STATUS, TRANSCODING_STATUS, CONNECTING_STATUS -> updateCatalogLifecycleAsync(
+                    job.contentId(),
+                    "INGESTING",
+                    "Contribution feed attached",
+                    "RTSP contribution feed",
+                    null,
+                    null
+            );
+            case ERROR_STATUS -> updateCatalogLifecycleAsync(
+                    job.contentId(),
+                    "INGEST_ERROR",
+                    "Contribution ingest failed",
+                    "Awaiting operator retry",
+                    null,
+                    "Contribution recovery"
+            );
+            default -> {
+                // Leave other catalog states unchanged.
+            }
+        }
     }
 
     private boolean isBroadcastActivatable(RtspJob job) {
@@ -1040,9 +1098,13 @@ public class DemoMediaController {
     }
 
     private boolean publicBroadcastLiveAvailable() {
+        return publicBroadcastLiveAvailable(PUBLIC_BROADCAST_PROXY_TIMEOUT);
+    }
+
+    private boolean publicBroadcastLiveAvailable(Duration timeout) {
         HttpRequest request = HttpRequest.newBuilder(URI.create(PUBLIC_BROADCAST_HLS_BASE_URL + "index.m3u8"))
                 .GET()
-                .timeout(PUBLIC_BROADCAST_PROXY_TIMEOUT)
+                .timeout(timeout)
                 .build();
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
@@ -1144,9 +1206,7 @@ public class DemoMediaController {
 
     private String broadcastSelectionKey(BroadcastSelection selection) {
         String selectionId = selection.jobId() == null ? "demo-loop" : selection.jobId().toString();
-        DemoMonkeyState currentDemoMonkeyState = currentDemoMonkeyState();
-        Instant demoMonkeyUpdatedAt = currentDemoMonkeyState == null ? Instant.EPOCH : currentDemoMonkeyState.updatedAt();
-        return selectionId + ":" + selection.updatedAt().toEpochMilli() + ":" + demoMonkeyUpdatedAt.toEpochMilli();
+        return selectionId + ":" + selection.updatedAt().toEpochMilli();
     }
 
     private BroadcastAdInsertionPlan resolveAdInsertionPlan(BroadcastSelection selection) {
@@ -1199,6 +1259,7 @@ public class DemoMediaController {
         }
 
         String normalizedAsset = assetName == null || assetName.isBlank() ? "index.m3u8" : assetName;
+        boolean playlistRequest = normalizedAsset.endsWith(".m3u8");
         String uri = PUBLIC_BROADCAST_HLS_BASE_URL + normalizedAsset;
         if (queryString != null && !queryString.isBlank()) {
             uri += "?" + queryString;
@@ -1210,7 +1271,7 @@ public class DemoMediaController {
                 .build();
 
         try {
-            HttpResponse<byte[]> upstream = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            HttpResponse<byte[]> upstream = sendPublicBroadcastProxyRequest(request, playlistRequest);
             response.setStatus(upstream.statusCode());
             upstream.headers().firstValue(HttpHeaders.CONTENT_TYPE).ifPresent(response::setContentType);
             upstream.headers().firstValue(HttpHeaders.CACHE_CONTROL).ifPresent(value -> response.setHeader(HttpHeaders.CACHE_CONTROL, value));
@@ -1222,10 +1283,49 @@ public class DemoMediaController {
             try (InputStream inputStream = new java.io.ByteArrayInputStream(upstream.body())) {
                 transferWithDemoMonkey(inputStream, response, upstream.body().length, demoMonkeyPlan);
             }
+        } catch (IOException exception) {
+            if (playlistRequest) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Public broadcast playlist is still warming up.", exception);
+            }
+            throw exception;
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IOException("Public broadcast proxy was interrupted.", exception);
         }
+    }
+
+    private HttpResponse<byte[]> sendPublicBroadcastProxyRequest(HttpRequest request, boolean playlistRequest) throws IOException, InterruptedException {
+        IOException lastFailure = null;
+        Instant retryDeadline = playlistRequest ? Instant.now().plus(PUBLIC_BROADCAST_PLAYLIST_WARMUP_TIMEOUT) : null;
+        int attempt = 0;
+
+        while (true) {
+            attempt += 1;
+            try {
+                return httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            } catch (IOException exception) {
+                lastFailure = exception;
+                if (!shouldRetryPublicBroadcastProxyRequest(playlistRequest, attempt, retryDeadline)) {
+                    break;
+                }
+
+                try {
+                    Thread.sleep((playlistRequest ? PUBLIC_BROADCAST_PLAYLIST_WARMUP_POLL_INTERVAL : PUBLIC_BROADCAST_PROXY_RETRY_DELAY).toMillis());
+                } catch (InterruptedException interruptedException) {
+                    Thread.currentThread().interrupt();
+                    throw interruptedException;
+                }
+            }
+        }
+
+        throw lastFailure == null ? new IOException("Unable to proxy the public broadcast asset.") : lastFailure;
+    }
+
+    private boolean shouldRetryPublicBroadcastProxyRequest(boolean playlistRequest, int attempt, Instant retryDeadline) {
+        if (playlistRequest) {
+            return retryDeadline != null && Instant.now().isBefore(retryDeadline);
+        }
+        return attempt < PUBLIC_BROADCAST_PROXY_RETRIES;
     }
 
     private Instant fileUpdatedAt(Path path) {

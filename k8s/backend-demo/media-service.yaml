@@ -91,24 +91,6 @@ spec:
                 -c:v libx264 -preset veryfast -pix_fmt yuv420p -r 24 -c:a aac -ar 44100 -b:a 128k -movflags +faststart \
                 /opt/demo/library/sponsor-stall.mp4
 
-              mkdir -p /opt/demo/house-loop-segments
-              segment_asset() {
-                INPUT="$1"
-                PREFIX="$2"
-                ffmpeg -hide_banner -loglevel warning -y \
-                  -i "${INPUT}" \
-                  -map 0:v:0 -map 0:a:0 \
-                  -c:v libx264 -preset veryfast -pix_fmt yuv420p -r 24 -g 48 -keyint_min 48 -sc_threshold 0 \
-                  -force_key_frames "expr:gte(t,n_forced*180)" \
-                  -c:a aac -ar 44100 -b:a 128k \
-                  -f segment -segment_time 180 -reset_timestamps 1 \
-                  "/opt/demo/house-loop-segments/${PREFIX}-%03d.mp4"
-              }
-
-              segment_asset /opt/demo/library/big-buck-bunny.mp4 000-big-buck-bunny
-              segment_asset /opt/demo/library/elephants-dream.mp4 100-elephants-dream
-              segment_asset /opt/demo/library/sintel.mp4 200-sintel
-              segment_asset /opt/demo/library/tears-of-steel.mp4 300-tears-of-steel
           volumeMounts:
             - name: demo-media
               mountPath: /opt/demo

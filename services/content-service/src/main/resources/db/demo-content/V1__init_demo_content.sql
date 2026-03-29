@@ -51,7 +51,7 @@ SELECT *
 FROM (
     VALUES
         (
-            '11111111-1111-1111-1111-111111111111',
+            CAST('11111111-1111-1111-1111-111111111111' AS UUID),
             'Big Buck Bunny',
             'A classic Blender open movie featuring a rabbit and three very unlucky woodland bullies.',
             'MOVIE',
@@ -73,7 +73,7 @@ FROM (
             NULL
         ),
         (
-            '22222222-2222-2222-2222-222222222222',
+            CAST('22222222-2222-2222-2222-222222222222' AS UUID),
             'Elephants Dream',
             'A surreal tour through a machine world where two travelers collide over what the place is meant to become.',
             'MOVIE',
@@ -95,7 +95,7 @@ FROM (
             NULL
         ),
         (
-            '33333333-3333-3333-3333-333333333333',
+            CAST('33333333-3333-3333-3333-333333333333' AS UUID),
             'Sintel',
             'A lone traveler searches for a lost dragon companion across frozen valleys and ruined cities.',
             'MOVIE',
@@ -117,7 +117,7 @@ FROM (
             NULL
         ),
         (
-            '44444444-4444-4444-4444-444444444444',
+            CAST('44444444-4444-4444-4444-444444444444' AS UUID),
             'Tears of Steel',
             'A near-future team attempts to repair a broken relationship before a robotic threat overruns Amsterdam.',
             'MOVIE',

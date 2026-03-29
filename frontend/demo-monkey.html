@@ -493,6 +493,24 @@
 
             <div class="demo-monkey-detail-card">
                 <div class="demo-monkey-detail-row">
+                    <span>Step 1</span>
+                    <strong id="demo-monkey-script-step1">Open /broadcast, then /#operations</strong>
+                    <p id="demo-monkey-script-step1-copy">Lead with the public feed, then show the same sponsor timing in Master Control.</p>
+                </div>
+                <div class="demo-monkey-detail-row">
+                    <span>Step 2</span>
+                    <strong id="demo-monkey-script-step2">Use Ad break delay as the default booth story</strong>
+                    <p id="demo-monkey-script-step2-copy">Arm it when the next sponsor pod is close enough that the audience can watch the fault land without dead time.</p>
+                </div>
+                <div class="demo-monkey-detail-row">
+                    <span>Step 3</span>
+                    <strong id="demo-monkey-script-step3">After the symptom, use Splunk 02 then 03</strong>
+                    <p id="demo-monkey-script-step3-copy">Keep ThousandEyes as outside-in baseline and path context. Use Browser RUM after APM.</p>
+                </div>
+            </div>
+
+            <div class="demo-monkey-detail-card">
+                <div class="demo-monkey-detail-row">
                     <span>Launch targets</span>
                     <strong id="demo-monkey-launch-title">Open the right telemetry surface</strong>
                     <p id="demo-monkey-launch-copy">Scenario launch targets follow the NAB story from viewer symptom to root cause.</p>
@@ -511,17 +529,17 @@
                     <div class="demo-monkey-toolbar">
                         <div class="chip-row" id="demo-monkey-presets">
                             <button type="button" data-preset="clear">Clear</button>
-                            <button type="button" data-preset="viewer-startup-spike">Slow startup</button>
-                            <button type="button" data-preset="viewer-brownout">Viewer brownout</button>
-                            <button type="button" data-preset="packet-loss">Packet loss</button>
-                            <button type="button" data-preset="playback-outage">Playback outage</button>
-                            <button type="button" data-preset="trace-map-outage">Trace pivot outage</button>
-                            <button type="button" data-preset="dependency-timeout">Dependency timeout</button>
-                            <button type="button" data-preset="service-specific-failure">Service failure</button>
-                            <button type="button" data-preset="frontend-crash">Frontend crash</button>
                             <button type="button" data-preset="ad-break-delay">Ad break delay</button>
                             <button type="button" data-preset="one-break-sponsor-miss">One-break sponsor miss</button>
                             <button type="button" data-preset="sponsor-pod-miss">Sponsor pod miss</button>
+                            <button type="button" data-preset="viewer-startup-spike">Slow startup</button>
+                            <button type="button" data-preset="viewer-brownout">Viewer brownout</button>
+                            <button type="button" data-preset="packet-loss">Packet loss</button>
+                            <button type="button" data-preset="trace-map-outage">Trace pivot outage</button>
+                            <button type="button" data-preset="dependency-timeout">Dependency timeout</button>
+                            <button type="button" data-preset="service-specific-failure">Service failure</button>
+                            <button type="button" data-preset="playback-outage">Playback outage</button>
+                            <button type="button" data-preset="frontend-crash">Frontend crash</button>
                         </div>
 
                         <div class="demo-monkey-toolbar-toggles">
@@ -692,7 +710,7 @@
                                 <div class="demo-monkey-toggle-copy">
                                     <div class="demo-monkey-toggle-top">
                                         <input id="demo-monkey-slow-ad-enabled" type="checkbox">
-                                        <span>Slow ad</span>
+                                        <span>Ad break delay</span>
                                     </div>
                                     <p>Delay ad decisioning so the live broadcast hits a short stall before the sponsor clip starts.</p>
                                 </div>
@@ -702,7 +720,7 @@
                                 <div class="demo-monkey-toggle-copy">
                                     <div class="demo-monkey-toggle-top">
                                         <input id="demo-monkey-ad-load-failure-enabled" type="checkbox">
-                                        <span>Ad not loading</span>
+                                        <span>Sponsor pod miss</span>
                                     </div>
                                     <p>Force the sponsor clip to fail so the break slot is still reached, but the ad itself does not load.</p>
                                 </div>

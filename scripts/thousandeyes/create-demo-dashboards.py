@@ -214,6 +214,65 @@ def te_test_indexes(
     return tests_by_name, tests_by_id
 
 
+def te_metric_streams(
+    te_api: JsonApi,
+    account_group_id: str,
+) -> List[Dict[str, Any]]:
+    response = te_api.request("GET", "/stream", query={"aid": account_group_id})
+    streams = response if isinstance(response, list) else response.get("streams", [])
+    return [
+        stream
+        for stream in streams
+        if stream.get("enabled") is True
+        and stream.get("type") == "opentelemetry"
+        and stream.get("signal") == "metric"
+    ]
+
+
+def stream_matches_test(stream: Dict[str, Any], test: Dict[str, Any]) -> bool:
+    test_id = str(test.get("testId", "")).strip()
+    if not test_id:
+        return False
+
+    for matched in stream.get("testMatch", []):
+        if str(matched.get("id", "")).strip() == test_id:
+            return True
+
+    if stream.get("testMatch"):
+        return False
+
+    configured_test_types = {
+        str(value).strip()
+        for value in (((stream.get("filters") or {}).get("testTypes") or {}).get("values") or [])
+        if str(value).strip()
+    }
+    if not configured_test_types:
+        return True
+    return str(test.get("type", "")).strip() in configured_test_types
+
+
+def warn_if_missing_rtp_metric_stream(
+    te_api: JsonApi,
+    account_group_id: str,
+    resolved_tests: Dict[str, tuple[Optional[str], Optional[Dict[str, Any]]]],
+) -> None:
+    rtp_name, rtp_test = resolved_tests.get("rtp", (None, None))
+    if not rtp_name or not rtp_test:
+        return
+
+    streams = te_metric_streams(te_api, account_group_id)
+    if any(stream_matches_test(stream, rtp_test) for stream in streams):
+        return
+
+    rtp_id = str(rtp_test.get("testId", "<missing>"))
+    print(
+        "Warning: no enabled ThousandEyes OTel metric stream appears to cover "
+        f"{rtp_name} ({rtp_id}). The RTP dashboard will stay empty until a stream "
+        "includes that test via testMatch or exports the voice test type.",
+        file=sys.stderr,
+    )
+
+
 def configured_test_slots(env_file: Dict[str, str]) -> Dict[str, tuple[str, ...]]:
     slots: Dict[str, tuple[str, ...]] = {}
     for slot, config in TEST_SLOT_CONFIG.items():
@@ -1166,6 +1225,7 @@ def main() -> int:
             "No matching repo ThousandEyes tests were found in the selected account group. "
             "Create the tests first, then rerun the dashboard sync."
         )
+    warn_if_missing_rtp_metric_stream(thousandeyes_api, thousandeyes_account_group_id, resolved_tests)
     specs = dashboard_specs(
         resolved_tests,
         thousandeyes_account_group_id,

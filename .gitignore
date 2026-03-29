@@ -1,9 +1,9 @@
-.idea
+.idea/
 .env
-.idea
 
 # Ignore macOS system files
 .DS_Store
+
 # Ignore temporary files
 tmp/
 temp/
@@ -22,13 +22,12 @@ logs
 node_modules/
 frontend/node_modules/
 
+# Ignore Python cache artifacts
+__pycache__/
+*.pyc
+
 # Ignore Lombok generated files
 .lombok/
-
-# Ignore Maven files
-/.mvn/
-!/.mvn/wrapper/maven-wrapper.jar
-target/
 
 # Ignore repo-local tool caches
 /.tools/

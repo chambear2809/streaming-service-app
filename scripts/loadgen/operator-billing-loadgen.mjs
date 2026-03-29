@@ -31,6 +31,7 @@ Options:
   --order-complete-ratio <ratio>   Fraction of cycles that move a PAID order to COMPLETED. Default: 0.15
   --rtsp-job-ratio <ratio>         Fraction of cycles that create an RTSP job. Default: 0.35
   --take-live-ratio <ratio>        Fraction of cycles that take a job live if one is ready. Default: 0.20
+  --restore-house-loop <bool>      Reset the public channel to the house loop after the run. Default: true
   --help                           Show this help text.
 
 Environment variable equivalents:
@@ -51,7 +52,12 @@ Environment variable equivalents:
   LOADGEN_OPERATOR_ORDER_COMPLETE_RATIO
   LOADGEN_OPERATOR_RTSP_JOB_RATIO
   LOADGEN_OPERATOR_TAKE_LIVE_RATIO
+  LOADGEN_OPERATOR_RESTORE_HOUSE_LOOP
 `;
+
+const BROADCAST_STATUS_DEMO_LOOP = "DEMO_LOOP";
+const BROADCAST_SOURCE_TYPE_DEMO = "DEMO_LIBRARY";
+const BROADCAST_SOURCE_TYPE_RTSP = "RTSP_CONTRIBUTION";
 
 const ACTIVE_ORDER_STATUSES = new Set(["CREATED", "SCHEDULED"]);
 const COMPLETABLE_ORDER_STATUSES = new Set(["PAID"]);
@@ -68,12 +74,35 @@ async function main() {
     validateConfig(config);
 
     const metrics = createMetrics();
+    const runContext = await captureRunContext(config, metrics);
     const endsAt = Date.now() + config.durationMs;
-    await Promise.all(
-        Array.from({ length: config.concurrency }, (_, index) => runWorker(index + 1, config, metrics, endsAt))
-    );
+    let runError = null;
+    let cleanupError = null;
+
+    try {
+        await Promise.all(
+            Array.from({ length: config.concurrency }, (_, index) => runWorker(index + 1, config, metrics, endsAt))
+        );
+    } catch (error) {
+        runError = error;
+    }
+
+    try {
+        await restoreHouseLoopAfterRun(config, metrics, runContext);
+    } catch (error) {
+        cleanupError = error;
+        metrics.failures += 1;
+        console.warn(`[cleanup] ${error.message}`);
+    }
 
     console.log(JSON.stringify(finalizeMetrics(metrics), null, 2));
+
+    if (runError) {
+        throw runError;
+    }
+    if (cleanupError) {
+        throw cleanupError;
+    }
 }
 
 function createMetrics() {
@@ -87,6 +116,7 @@ function createMetrics() {
         invoicePaymentsCaptured: 0,
         rtspJobs: 0,
         broadcastsActivated: 0,
+        broadcastsReset: 0,
         ordersCreated: 0,
         ordersSettled: 0,
         ordersCompleted: 0,
@@ -146,7 +176,7 @@ async function runCycle(workerId, config, metrics, cookie) {
         metricLabel: "auth.session"
     });
 
-    const [catalog, rtspJobs, invoices, customers] = await Promise.all([
+    const [catalogResponse, rtspJobsResponse, invoicesResponse, customers] = await Promise.all([
         requestJson(config.baseUrl, "/api/v1/demo/content", config, metrics, {
             cookie,
             metricLabel: "content.catalog"
@@ -163,6 +193,9 @@ async function runCycle(workerId, config, metrics, cookie) {
     ]);
 
     metrics.customerReads += 1;
+    const catalog = normalizeArray(catalogResponse.payload);
+    const rtspJobs = normalizeArray(rtspJobsResponse.payload);
+    const invoices = normalizeArray(invoicesResponse.payload);
 
     const customer = pickRandom(customers);
     if (!customer?.id) {
@@ -175,7 +208,7 @@ async function runCycle(workerId, config, metrics, cookie) {
     }
 
     if (shouldRun(config.paymentRatio)) {
-        const openInvoice = normalizeArray(invoices)
+        const openInvoice = invoices
             .find((invoice) => ["OPEN", "PAST_DUE"].includes(String(invoice?.status ?? "").toUpperCase()) && Number(invoice?.balanceDue ?? 0) > 0);
         if (openInvoice) {
             await captureInvoicePayment(config.baseUrl, cookie, openInvoice, config, metrics);
@@ -198,13 +231,13 @@ async function runCycle(workerId, config, metrics, cookie) {
         metrics.commerceWorkspaceReads += 1;
     }
 
-    if (shouldRun(config.rtspJobRatio) && Array.isArray(catalog) && catalog.length) {
+    if (shouldRun(config.rtspJobRatio) && catalog.length) {
         await createRtspJob(config.baseUrl, cookie, pickCatalogItem(catalog), config, metrics);
         metrics.rtspJobs += 1;
     }
 
     if (shouldRun(config.takeLiveRatio)) {
-        const activatableJob = normalizeArray(rtspJobs)
+        const activatableJob = rtspJobs
             .find((job) => ["CAPTURING", "TRANSCODING", "READY"].includes(String(job?.status ?? "").toUpperCase()));
         if (activatableJob?.jobId) {
             await requestJson(
@@ -286,6 +319,53 @@ async function runCycle(workerId, config, metrics, cookie) {
         `[worker ${workerId}] cycle complete: ${metrics.billingEvents} billing events, ${metrics.ordersCreated} orders, ` +
         `${metrics.ordersSettled} paid transitions, ${metrics.rtspJobs} rtsp jobs, ${metrics.invoicePaymentsCaptured} invoice payments`
     );
+}
+
+async function captureRunContext(config, metrics) {
+    if (!config.restoreHouseLoop) {
+        return { initialBroadcast: null };
+    }
+
+    try {
+        const response = await requestJson(config.baseUrl, "/api/v1/demo/public/broadcast/current", config, metrics, {
+            metricLabel: "broadcast.current.setup"
+        });
+        return { initialBroadcast: response.payload };
+    } catch (error) {
+        console.warn(`[setup] ${error.message}`);
+        return { initialBroadcast: null };
+    }
+}
+
+async function restoreHouseLoopAfterRun(config, metrics, runContext) {
+    if (!config.restoreHouseLoop || metrics.broadcastsActivated < 1) {
+        return;
+    }
+
+    const initialSourceType = String(runContext.initialBroadcast?.sourceType ?? "").toUpperCase();
+    if (initialSourceType === BROADCAST_SOURCE_TYPE_RTSP) {
+        console.log("[cleanup] Skipping house-loop restore because the channel started on a live contribution.");
+        return;
+    }
+
+    const cookie = await login(config.baseUrl, config, metrics);
+    const response = await requestJson(config.baseUrl, "/api/v1/demo/media/broadcast/reset", config, metrics, {
+        cookie,
+        method: "POST",
+        payload: {},
+        metricLabel: "media.broadcast_reset"
+    });
+
+    const status = String(response.payload?.status ?? "").toUpperCase();
+    const sourceType = String(response.payload?.sourceType ?? "").toUpperCase();
+    if (status !== BROADCAST_STATUS_DEMO_LOOP || sourceType !== BROADCAST_SOURCE_TYPE_DEMO) {
+        throw new Error(
+            `Broadcast cleanup did not restore the demo loop. Current status: ${status || "unknown"} / ${sourceType || "unknown"}`
+        );
+    }
+
+    metrics.broadcastsReset += 1;
+    console.log(`[cleanup] Restored the public channel to ${response.payload?.title ?? "the house loop"}.`);
 }
 
 async function fetchCustomerDirectory(baseUrl, cookie, config, metrics) {
@@ -385,6 +465,7 @@ async function createBillingEvent(baseUrl, cookie, accountId, catalog, config, m
     await requestJson(baseUrl, "/api/v1/billing/events", config, metrics, {
         cookie,
         method: "POST",
+        expectedStatuses: [201],
         metricLabel: "billing.events.create",
         payload: {
             eventId: randomUUID(),
@@ -415,6 +496,7 @@ async function captureInvoicePayment(baseUrl, cookie, invoice, config, metrics) 
     await requestJson(baseUrl, "/api/v1/billing/events", config, metrics, {
         cookie,
         method: "POST",
+        expectedStatuses: [201],
         metricLabel: "billing.events.capture_payment",
         payload: {
             eventId: randomUUID(),
@@ -696,6 +778,7 @@ function parseArgs(argv, env) {
         orderCompleteRatio: Number.parseFloat(env.LOADGEN_OPERATOR_ORDER_COMPLETE_RATIO ?? "0.15"),
         rtspJobRatio: Number.parseFloat(env.LOADGEN_OPERATOR_RTSP_JOB_RATIO ?? "0.35"),
         takeLiveRatio: Number.parseFloat(env.LOADGEN_OPERATOR_TAKE_LIVE_RATIO ?? "0.20"),
+        restoreHouseLoop: parseBoolean(env.LOADGEN_OPERATOR_RESTORE_HOUSE_LOOP ?? "true", "LOADGEN_OPERATOR_RESTORE_HOUSE_LOOP"),
         helpRequested: false
     };
 
@@ -767,6 +850,10 @@ function parseArgs(argv, env) {
                 config.takeLiveRatio = Number.parseFloat(next);
                 index += 1;
                 break;
+            case "--restore-house-loop":
+                config.restoreHouseLoop = parseBoolean(next, "--restore-house-loop");
+                index += 1;
+                break;
             case "--help":
                 config.helpRequested = true;
                 break;
@@ -807,6 +894,17 @@ function validateConfig(config) {
             throw new Error(`${label} must be between 0 and 1. Received: ${ratio}`);
         }
     }
+}
+
+function parseBoolean(value, label) {
+    const normalized = String(value).trim().toLowerCase();
+    if (["1", "true", "yes", "on"].includes(normalized)) {
+        return true;
+    }
+    if (["0", "false", "no", "off"].includes(normalized)) {
+        return false;
+    }
+    throw new Error(`${label} must be a boolean value. Received: ${value}`);
 }
 
 function parseDuration(value) {

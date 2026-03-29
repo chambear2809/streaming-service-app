@@ -231,6 +231,10 @@ The in-cluster test flow and the direct API helper now both default to `RTSP-TCP
 
 The dashboard sync script also validates that the ThousandEyes metric series behind the dashboard charts are present in Splunk for the selected test IDs. If your dashboard-write token cannot read metric data, set `SPLUNK_VALIDATION_TOKEN` or pass `--skip-te-metric-validation`.
 
+For the RTP dashboard, ThousandEyes test results alone are not enough. An enabled ThousandEyes OTel metric stream must also include the RTP test through `testMatch` or export the `voice` test type. Otherwise Splunk receives no `rtp.client.request.*` series even when the ThousandEyes RTP test itself is healthy. The dashboard sync helper now warns when the repo RTP test exists but no enabled metric stream appears to cover it.
+
+When you update a ThousandEyes data stream, remember that the `v7` update API overwrites list fields such as `testMatch` instead of appending to them. Preserve the existing `testMatch` entries when you add the RTP test.
+
 ## Key Environment Variables
 
 Where to configure them:

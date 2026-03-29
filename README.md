@@ -1,135 +1,273 @@
 # Streaming Service App
 
-This repository contains a microservices-based streaming platform plus a lightweight broadcast-style demo frontend. The core platform is oriented around subscription video streaming, while the demo layer exposes auth, content, and media slices in a way that is easier to review as an operator-facing broadcasting experience.
+Streaming Service App is a Java/Spring microservices repository plus a lightweight Node.js frontend used to present the platform as a broadcast-style operations demo.
 
-The subscription management system is integrated with Stripe for payment processing and subscription status management. Every day at midnight, the subscription service checks for subscriptions that are about to expire and automatically renews or cancels them based on user settings and payment status.
+The repository contains more services than the current cluster demo deploys. The most useful way to approach it is:
+
+- treat `skills/deploy-streaming-app/scripts/deploy-demo.sh` as the canonical full-demo deploy path today
+- treat the rest of `services/` as the broader codebase, including services that are still useful for local development, legacy demo flows, or protected load generation
+
+## What The Repo Contains
+
+- Canonical cluster demo slice: PostgreSQL, `content-service`, `media-service`, `user-service`, `billing-service`, `ad-service`, and the `streaming-frontend` gateway/UI.
+- Additional business-domain services present in the repo and in the legacy backend demo flow: `customer-service`, `payment-service`, `subscription-service`, and `order-service`.
+- Additional service directories not part of the current Kubernetes demo manifests: `config-server`, `discovery-server`, `gateway`, `comments-service`, `moderation-service`, and `notification-service`.
+- Demo-focused automation for Kubernetes or OpenShift deployment, Splunk Observability, ThousandEyes, and public or protected load generation.
+
+## Architecture Diagram
+
+```mermaid
+flowchart TB
+    subgraph Clients["User And Operator Surfaces"]
+        Viewer["Viewer Browser<br/>/broadcast"]
+        Operator["Operator Browser<br/>/, /#operations, /demo-monkey"]
+    end
+
+    subgraph ThousandEyes["ThousandEyes"]
+        TEHttp["HTTP Tests<br/>broadcast playback + trace map"]
+        TEMedia["RTSP / UDP / RTP Tests"]
+    end
+
+    subgraph Edge["Frontend Edge"]
+        Frontend["streaming-frontend<br/>Node gateway + static UI"]
+    end
+
+    subgraph Canonical["Canonical Cluster Demo Slice"]
+        Media["media-service-demo<br/>public broadcast, Demo Monkey, trace map"]
+        Relay["rtsp-restreamer + MediaMTX<br/>HLS/RTSP relay inside media pod"]
+        RtspSvc["media-service-demo-rtsp<br/>public RTSP service"]
+        User["user-service-demo<br/>demo auth/session"]
+        Content["content-service-demo<br/>catalog"]
+        Billing["billing-service<br/>billing APIs"]
+        Ad["ad-service-demo<br/>sponsor timing and issues"]
+        Postgres["streaming-postgres<br/>PostgreSQL"]
+    end
+
+    subgraph Optional["Optional Protected Commerce Services<br/>legacy backend demo or extended protected load"]
+        Customer["customer-service-demo"]
+        Payment["payment-service-demo"]
+        Subscription["subscription-service-demo"]
+        Order["order-service-demo"]
+    end
+
+    subgraph Splunk["Splunk Observability Cloud"]
+        RUM["Browser RUM + Session Replay"]
+        APM["APM + Service Map + Demo Dashboards"]
+    end
+
+    Viewer --> Frontend
+    Operator --> Frontend
+
+    TEHttp --> Frontend
+    TEMedia --> RtspSvc
+
+    Frontend --> User
+    Frontend --> Content
+    Frontend --> Media
+    Frontend --> Billing
+    Frontend --> Ad
+    Frontend -. protected only .-> Customer
+    Frontend -. protected only .-> Payment
+    Frontend -. protected only .-> Subscription
+    Frontend -. protected only .-> Order
+
+    Media --> Relay
+    RtspSvc --> Relay
+    Media --> User
+    Media --> Content
+    Media --> Billing
+    Media --> Ad
+
+    User --> Postgres
+    Content --> Postgres
+    Media --> Postgres
+    Billing --> Postgres
+    Ad --> Postgres
+    Customer -. optional .-> Postgres
+    Payment -. optional .-> Postgres
+    Subscription -. optional .-> Postgres
+    Order -. optional .-> Postgres
+
+    Viewer -. browser telemetry .-> RUM
+    Operator -. browser telemetry .-> RUM
+
+    Frontend -. Node OTel .-> APM
+    Media -. Java OTel .-> APM
+    User -. Java OTel .-> APM
+    Content -. Java OTel .-> APM
+    Billing -. Java OTel .-> APM
+    Ad -. Java OTel .-> APM
+    Customer -. optional OTel .-> APM
+    Payment -. optional OTel .-> APM
+    Subscription -. optional OTel .-> APM
+    Order -. optional OTel .-> APM
+
+    TEHttp -. connector + dashboards .-> APM
+    TEMedia -. connector + dashboards .-> APM
+```
+
+Diagram notes:
+
+- The current namespace-safe deploy path includes the `Canonical Cluster Demo Slice`.
+- The `Optional Protected Commerce Services` are present in the repo and in the legacy backend demo flow, but they are not part of the canonical skill deploy by default.
+- Public playback and the public trace pivot both enter through `streaming-frontend`.
+- `media-service-demo` owns the public broadcast path, Demo Monkey state, and the trace-map fanout into `user-service-demo`, `content-service-demo`, `billing-service`, and `ad-service-demo`.
 
 ## Technology Stack
-The project employs the following technologies:
-- Java JDK 22
-- JWT
-- MinIO (S3)
-- Redis
-- FFmpeg
-- Kafka
-- Spring Boot: A framework for building microservices.
-- Spring Security: Manages authentication and authorization.
-- Feign: A declarative HTTP client for microservices.
-- Spring Data JPA: Facilitates interaction with relational databases.
-- PostgreSQL: A relational database for storing core information.
-- MongoDB: A NoSQL database for managing schema-less data.
-- Eureka: A service registry for managing microservices.
-- Spring Cloud Config: Enables centralized configuration management.
-- Flyway Migration: Handles database versioning.
-- Zookeeper: Coordinates distributed systems.
-- Gateway: An API gateway for routing requests.
-- Quartz: A task scheduler for managing periodic operations.
-- Stripe: Integrates with a payment system for handling subscriptions and payments.
 
-## Diagrams
-All use case and architecture diagrams related to the project can be found in the diagrams folder. This folder contains visualizations that aid in understanding the structure and interactions of the system components.
+- Java 22, Spring Boot 3.3.2, Spring Cloud 2023.0.3
+- Node.js, npm, and esbuild for the frontend build
+- PostgreSQL with Flyway migrations
+- Kafka and Zookeeper
+- Redis and MinIO
+- MongoDB for parts of the broader service set
+- JWT-based auth, Feign clients, Eureka, Config Server, Quartz, and Stripe integration
+- Docker Compose for local dependency services
+- Kubernetes or OpenShift for the current demo deployment flows
+- Splunk Observability Cloud and ThousandEyes for tracing, RUM, dashboards, and synthetic tests
 
 ## Start Here
 
-Choose the path that matches how you want to work with the repo:
-
-1. Local dependency services only:
+Create a repo-root `.env` first:
 
 ```bash
 cp example.env .env
+```
+
+### Local Dependency Services Only
+
+```bash
 docker compose up -d
 ```
 
-This brings up the backing services from [docker-compose.yml](/Users/alecchamberlain/Documents/GitHub/streaming-service-app/docker-compose.yml) such as PostgreSQL, Kafka, Redis, MinIO, MongoDB, Zipkin, and Vault. It does not boot every application service for you.
+This starts the shared backing services from [`docker-compose.yml`](docker-compose.yml): PostgreSQL, Zipkin, Vault, Kafka, Zookeeper, MailDev, Redis, MinIO, and MongoDB.
 
-2. Frontend-only local preview:
+It does not boot every Java service in the repo for you.
 
-- See [frontend/README.md](/Users/alecchamberlain/Documents/GitHub/streaming-service-app/frontend/README.md) for the static build and preview flow.
+### Frontend-Only Local Preview
 
-3. Full Kubernetes or OpenShift demo deployment:
+For a static preview of the broadcast UI:
 
 ```bash
-cp example.env .env
+cd frontend
+npm install
+npm run build
+python3 -m http.server 8080 -d dist
+```
+
+Then open `http://localhost:8080`.
+
+This mode serves built frontend assets only. Protected backend APIs are not proxied here, so the UI falls back to seeded demo content where it can.
+
+See [`frontend/README.md`](frontend/README.md) for the frontend-specific workflow.
+
+### Build Or Test An Individual Service
+
+There is no root Maven aggregator POM in this repository. Build services by pointing the Maven wrapper at the service you want:
+
+```bash
+./mvnw -f services/billing-service/pom.xml test
+./mvnw -f services/media-service/pom.xml package -DskipTests
+```
+
+### Canonical Kubernetes Or OpenShift Demo Deployment
+
+Use the skill-backed deploy script by default:
+
+```bash
 bash skills/deploy-streaming-app/scripts/deploy-demo.sh \
   --platform kubernetes \
   --namespace streaming-demo
 ```
 
-- Use `--platform openshift` when you want the UI exposed through an OpenShift Route.
-- The lower-level split deploy scripts remain available at `scripts/backend-demo/deploy.sh` and `scripts/frontend/deploy.sh`, but `skills/deploy-streaming-app/scripts/deploy-demo.sh` is the canonical full-demo entry point.
+Use `--platform openshift` when you want the frontend exposed through an OpenShift Route instead of a standard Kubernetes `LoadBalancer` path.
 
-4. Observability and synthetic-test setup:
+This namespace-safe deploy flow is the current full-demo entry point. It renders manifests at apply time instead of forcing you to edit checked-in YAML just to change namespaces.
 
-- See [docs/thousandeyes-rtsp-api.md](/Users/alecchamberlain/Documents/GitHub/streaming-service-app/docs/thousandeyes-rtsp-api.md) for the ThousandEyes and Splunk dashboard workflow.
-- See [docs/distributed-tracing.md](/Users/alecchamberlain/Documents/GitHub/streaming-service-app/docs/distributed-tracing.md) for the tracing setup used by the cluster demo.
+## Deployment Paths
 
-## Broadcast Demo Surfaces
+### Canonical Full-Demo Path
 
-- `frontend/` contains the broadcast-style operations portal with the protected library, player, lineup wall, rundown, Demo Monkey controls, and RTSP ingest review surfaces.
-- `scripts/backend-demo/deploy.sh` packages and deploys PostgreSQL plus the content, media, user, billing, ad, customer, payment, subscription, and order demo services, then hands off to the frontend deploy.
-- `scripts/frontend/deploy.sh` builds the static frontend, uploads Splunk Browser RUM source maps when configured, and exposes the UI through the frontend service.
-- `services/billing-service/` adds invoice, line-item, business-event, balance-due, and account-summary APIs above raw payment processing, with JWT-protected billing routes and a public `GET /api/v1/billing/health` readiness endpoint.
+[`skills/deploy-streaming-app/scripts/deploy-demo.sh`](skills/deploy-streaming-app/scripts/deploy-demo.sh)
 
-## Deployment Automation
+- Namespace-safe Kubernetes and OpenShift deployment flow
+- Deploys PostgreSQL plus the current demo slice: `content-service`, `media-service`, `user-service`, `billing-service`, `ad-service`, and `streaming-frontend`
+- Supports frontend labeling, Route support on OpenShift, and follow-on ThousandEyes and Splunk workflow guidance
+- Mirrors into Cursor at [`.cursor/skills/deploy-streaming-app/`](.cursor/skills/deploy-streaming-app/)
 
-- `skills/deploy-streaming-app/` contains the repo's Codex skill for deploying the demo stack into Kubernetes or OpenShift without editing checked-in manifests.
-- `.cursor/skills/deploy-streaming-app/` mirrors the same workflow in Cursor's project-skill layout.
-- `skills/deploy-streaming-app/scripts/deploy-demo.sh` is the canonical deploy entry point shared by both skill layouts.
+### Lower-Level Legacy Split Deploy Scripts
+
+- [`scripts/backend-demo/deploy.sh`](scripts/backend-demo/deploy.sh)
+- [`scripts/frontend/deploy.sh`](scripts/frontend/deploy.sh)
+
+These older scripts still work, but they behave differently from the canonical skill flow:
+
+- they apply the checked-in manifests directly in the fixed `streaming-service-app` namespace
+- the backend split deploy includes a broader service set than the canonical skill path, including `customer-service`, `payment-service`, `subscription-service`, and `order-service`
+- they are useful when you need that older service mix or want lower-level iteration without the namespace-aware skill wrapper
+
+## Repo Layout
+
+- [`frontend/`](frontend/) contains the broadcast-style UI, built static assets, and the Node.js gateway that serves assets and proxies demo APIs
+- [`services/`](services/) contains independently buildable Spring Boot services
+- [`k8s/`](k8s/) contains the checked-in frontend and backend demo manifests
+- [`scripts/`](scripts/) contains deploy helpers, ThousandEyes automation, and load generators
+- [`skills/deploy-streaming-app/`](skills/deploy-streaming-app/) contains the repo's Codex skill for full-demo deployment
+- [`docs/`](docs/) contains tracing, ThousandEyes, and loadgen walkthroughs
+- [`diagrams/`](diagrams/) contains architecture and data-model diagrams
 
 ## Common Environment Variables
 
-Create the repo-root `.env` from `example.env` when you want a concrete place to keep operator-specific settings:
+The full set lives in [`example.env`](example.env). The variables below are the ones most likely to matter first.
 
-```bash
-cp example.env .env
-```
+### Frontend, Source Maps, And Splunk Observability
 
-Frontend build, source maps, and Splunk Observability:
+- `STREAMING_ENVIRONMENT_LABEL` controls the operator-facing label shown in the broadcast suite
+- `SPLUNK_REALM` selects the Splunk Observability realm
+- `SPLUNK_RUM_ACCESS_TOKEN` is used by the frontend build and [`scripts/frontend/deploy.sh`](scripts/frontend/deploy.sh) for Browser RUM and source map upload
+- `SPLUNK_ACCESS_TOKEN` is used by the dashboard sync flow and is also the token used by the canonical skill deploy path for source map upload today
+- `SPLUNK_RUM_APP_NAME` overrides the frontend RUM application name
+- `SPLUNK_DEPLOYMENT_ENVIRONMENT` overrides the default deployment environment label
+- `SPLUNK_DEMO_DASHBOARD_GROUP_ID` pins dashboard sync to an existing group when automatic matching would be ambiguous
+- `SPLUNK_VALIDATION_TOKEN` is only needed when the dashboard-write token cannot read SignalFlow metric data
+- `STREAMING_K8S_NAMESPACE` keeps dashboard CPU and infra charts aligned with the deployed namespace
 
-- `SPLUNK_REALM`
-- `SPLUNK_RUM_ACCESS_TOKEN` for Browser RUM injection and source map upload
-- `SPLUNK_ACCESS_TOKEN` for Splunk API calls such as dashboard sync
-- `SPLUNK_RUM_APP_NAME` when you want to override the default RUM app name
-- `SPLUNK_DEPLOYMENT_ENVIRONMENT` when you want to override the default environment label
-- `SPLUNK_DEMO_DASHBOARD_GROUP_ID` when you want to update a specific dashboard group
-- `SPLUNK_VALIDATION_TOKEN` when the dashboard-write token cannot read SignalFlow metric data
-- `STREAMING_K8S_NAMESPACE` when the demo was deployed outside the default namespace
+### ThousandEyes Test Creation
 
-ThousandEyes test creation:
-
-- `THOUSANDEYES_BEARER_TOKEN` is required for all ThousandEyes API flows
-- `TE_SOURCE_AGENT_IDS` is required for test creation
+- `THOUSANDEYES_BEARER_TOKEN` is required for ThousandEyes API calls
+- `THOUSANDEYES_ACCOUNT_GROUP_ID` is recommended for deterministic org selection and is required by dashboard sync
+- `TE_SOURCE_AGENT_IDS` supplies the source agent IDs for test creation
 - `TE_TARGET_AGENT_ID` is required for the RTP proxy test and acts as the default target for the UDP media-path test
-- `TE_UDP_TARGET_AGENT_ID` is an optional override when the UDP media-path test should target a different agent than RTP
-- `THOUSANDEYES_ACCOUNT_GROUP_ID` is recommended when you want deterministic org or account-group targeting, and it is required later for dashboard sync
-- `TE_RTSP_SERVER` and `TE_RTSP_PORT` are needed for the direct API flow or when the Kubernetes wrapper cannot discover the RTSP endpoint automatically
-- Choose the target mode before deriving URLs:
-  - `local` keeps the default `svc.cluster.local` frontend targets for same-network Enterprise Agents
-  - `external` requires browser-facing or internet-reachable RTSP and frontend targets
-- In `external` mode, set `TE_DEMO_MONKEY_FRONTEND_BASE_URL` or explicit `TE_TRACE_MAP_TEST_URL` and `TE_BROADCAST_TEST_URL`
+- `TE_UDP_TARGET_AGENT_ID` optionally overrides the UDP media-path target when it should differ from the RTP target
+- `TE_RTSP_SERVER` and `TE_RTSP_PORT` are needed for the direct API flow or when the Kubernetes wrapper cannot discover RTSP automatically
+- `TE_DEMO_MONKEY_FRONTEND_BASE_URL`, `TE_TRACE_MAP_TEST_URL`, and `TE_BROADCAST_TEST_URL` control the Demo Monkey-sensitive HTTP test targets
+- `TE_A2A_THROUGHPUT_MEASUREMENTS=false` is required when the UDP media-path test uses a Cloud Agent endpoint because ThousandEyes rejects UDP throughput measurements in that configuration
+
+Choose the ThousandEyes target mode explicitly before deriving URLs:
+
+- `local` keeps the default `svc.cluster.local` targets for same-network Enterprise Agents
+- `external` requires browser-facing or internet-reachable frontend and RTSP targets
 
 ## Observability And Synthetic Tests
 
-- `scripts/thousandeyes/create-rtsp-tests.sh` creates the RTSP-adjacent and Demo Monkey-sensitive HTTP tests directly through the ThousandEyes `v7` API. It reads the repo-root `.env` by default and exposes:
-  - `list-orgs` and `list-account-groups` for account-group discovery
-  - `list-agents` for source and target agent selection
-  - `create-all` for the full test bundle
-- `scripts/thousandeyes/deploy-k8s-rtsp-tests.sh` creates the same tests from a one-shot Kubernetes Job after discovering the RTSP service endpoint and deriving the in-cluster frontend base URL.
-- `scripts/thousandeyes/create-demo-dashboards.py` creates or updates the Splunk Observability dashboard group for the demo flow.
+The main docs are:
 
-Detailed walkthroughs live in the docs:
+- [`docs/distributed-tracing.md`](docs/distributed-tracing.md)
+- [`docs/thousandeyes-rtsp-api.md`](docs/thousandeyes-rtsp-api.md)
 
-- [docs/thousandeyes-rtsp-api.md](/Users/alecchamberlain/Documents/GitHub/streaming-service-app/docs/thousandeyes-rtsp-api.md) covers both ThousandEyes creation paths and dashboard sync.
-- [docs/distributed-tracing.md](/Users/alecchamberlain/Documents/GitHub/streaming-service-app/docs/distributed-tracing.md) covers the tracing and Splunk Observability setup used by the Kubernetes demo.
+The main scripts are:
 
-Important behavior to know before you run the observability flows:
+- [`scripts/thousandeyes/create-rtsp-tests.sh`](scripts/thousandeyes/create-rtsp-tests.sh) for direct ThousandEyes API workflows
+- [`scripts/thousandeyes/deploy-k8s-rtsp-tests.sh`](scripts/thousandeyes/deploy-k8s-rtsp-tests.sh) for the in-cluster Kubernetes Job wrapper
+- [`scripts/thousandeyes/create-demo-dashboards.py`](scripts/thousandeyes/create-demo-dashboards.py) for Splunk Observability dashboard sync
+
+Important behavior:
 
 - The direct ThousandEyes helper can use the token's default account group when `THOUSANDEYES_ACCOUNT_GROUP_ID` is omitted, but dashboard sync requires both `THOUSANDEYES_BEARER_TOKEN` and `THOUSANDEYES_ACCOUNT_GROUP_ID`.
-- Use `THOUSANDEYES_JOB_ACTION=create-demo-monkey-http` when you only want the two HTTP tests that Demo Monkey actually degrades.
-- If `TE_UDP_TARGET_AGENT_ID` or `TE_TARGET_AGENT_ID` points at a Cloud Agent for the UDP media-path test, set `TE_A2A_THROUGHPUT_MEASUREMENTS=false` because ThousandEyes rejects UDP throughput measurements with a Cloud Agent endpoint.
-- Dashboard sync requires `SPLUNK_REALM`, `SPLUNK_ACCESS_TOKEN`, `THOUSANDEYES_BEARER_TOKEN`, and `THOUSANDEYES_ACCOUNT_GROUP_ID`. `SPLUNK_VALIDATION_TOKEN` is optional and is only needed when the write token cannot read SignalFlow metric data.
-- If the ThousandEyes tests were created with non-default names or duplicate names exist, set the matching `TE_*_TEST_NAME` or `TE_*_TEST_ID` overrides before running dashboard sync.
-- The dashboard sync script skips missing repo test dashboards instead of creating empty placeholders, and it supports `--skip-te-metric-validation` when you need to bypass the post-sync SignalFlow data check.
+- Use `THOUSANDEYES_JOB_ACTION=create-demo-monkey-http` when you only want the two Demo Monkey-sensitive HTTP tests.
+- If the UDP media-path test uses a Cloud Agent endpoint, set `TE_A2A_THROUGHPUT_MEASUREMENTS=false`.
+- The RTP dashboard only populates when an enabled ThousandEyes OTel metric stream includes the RTP test through `testMatch` or exports the `voice` test type.
+- Dashboard sync supports `--skip-te-metric-validation` when you need to bypass the post-sync SignalFlow data check.
 
 Example dashboard sync:
 
@@ -139,13 +277,30 @@ python3 scripts/thousandeyes/create-demo-dashboards.py
 
 ## Load Generators
 
-- `scripts/loadgen/broadcast-loadgen.mjs` simulates viewer sessions against the public broadcast page, status API, HLS playlists, segments, and optional trace-map pivots.
-- `scripts/loadgen/deploy-k8s-broadcast-loadgen.sh` pushes that public loadgen into the Kubernetes cluster as either a one-shot `Job` or a recurring `CronJob`, with profile presets and operator actions for apply, status, pause, resume, trigger, and delete.
-- `docs/broadcast-loadgen.md` documents the public workload model, the in-cluster launch flow, the safer `90 viewer / 10m` booth-default profile, the separate `120 viewer / 12m` stress profile, and the recurring `CronJob` controls.
-- `scripts/loadgen/operator-billing-loadgen.mjs` simulates protected operator activity through the demo frontend, including Accounts, Payments, Commerce, billing events, RTSP control, and order lifecycle transitions.
-- `scripts/loadgen/deploy-k8s-operator-billing-loadgen.sh` pushes that protected loadgen into the Kubernetes cluster as either a one-shot `Job` or a recurring `CronJob`, with profile presets and the same apply/status/pause/resume/trigger workflow.
-- `docs/operator-billing-loadgen.md` documents the protected workload mix, the in-cluster launch flow, the booth-default profile, and the recurring `CronJob` controls.
+### Public Broadcast Load
+
+- Script: [`scripts/loadgen/broadcast-loadgen.mjs`](scripts/loadgen/broadcast-loadgen.mjs)
+- Kubernetes wrapper: [`scripts/loadgen/deploy-k8s-broadcast-loadgen.sh`](scripts/loadgen/deploy-k8s-broadcast-loadgen.sh)
+- Docs: [`docs/broadcast-loadgen.md`](docs/broadcast-loadgen.md)
+
+This workload targets the public broadcast page, status API, HLS manifests, segments, and optional trace-map pivots. It supports one-shot `Job` mode and recurring `CronJob` mode in Kubernetes.
+
+### Protected Operator, Billing, And Commerce Load
+
+- Script: [`scripts/loadgen/operator-billing-loadgen.mjs`](scripts/loadgen/operator-billing-loadgen.mjs)
+- Kubernetes wrapper: [`scripts/loadgen/deploy-k8s-operator-billing-loadgen.sh`](scripts/loadgen/deploy-k8s-operator-billing-loadgen.sh)
+- Docs: [`docs/operator-billing-loadgen.md`](docs/operator-billing-loadgen.md)
+
+This workload expects the broader protected service set to be reachable through the frontend, including `customer-service`, `payment-service`, `subscription-service`, and `order-service`.
+
+The canonical skill deploy path does not deploy those services today. If you want the full protected commerce workload, use the legacy backend demo deploy path or otherwise make those upstream services reachable in the namespace behind `streaming-frontend`.
+
+## Diagrams And Demo Material
+
+- [`diagrams/`](diagrams/) contains architecture and data-model visuals
+- [`demo-operator-runbook.md`](demo-operator-runbook.md) and [`demo-script.md`](demo-script.md) capture live demo flow notes
+- [`DEMO_LIBRARY_SOURCES.md`](DEMO_LIBRARY_SOURCES.md) documents the seeded demo media set
 
 ## License
 
-This project is distributed under the MIT License. For more details, please refer to the LICENSE file located in the root directory of the project.
+This project is distributed under the MIT License. See [`LICENSE`](LICENSE).

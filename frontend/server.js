@@ -6,6 +6,7 @@ const { pipeline } = require("node:stream");
 const port = Number.parseInt(process.env.PORT ?? process.env.SERVER_PORT ?? "8080", 10);
 const host = process.env.HOST ?? "0.0.0.0";
 const staticRoot = process.env.STATIC_ROOT ?? __dirname;
+const rumScriptPath = process.env.SPLUNK_RUM_SCRIPT_PATH ?? null;
 const namespace = process.env.K8S_NAMESPACE ?? "streaming-service-app";
 const upstreamRequestTimeoutMs = Number.parseInt(process.env.UPSTREAM_REQUEST_TIMEOUT_MS ?? "5000", 10);
 const errorLogThrottleMs = Number.parseInt(process.env.ERROR_LOG_THROTTLE_MS ?? "30000", 10);
@@ -42,6 +43,8 @@ const CONTENT_TYPES = {
     ".map": "application/json; charset=utf-8",
     ".txt": "text/plain; charset=utf-8"
 };
+
+const MALFORMED_STATIC_PATH = Symbol("malformed_static_path");
 
 const roleCapabilities = {
     billing_admin: ["operations", "governance", "billing", "billing_write"],
@@ -99,6 +102,12 @@ const protectedProxyRules = [
     },
     {
         prefix: "/api/v1/demo/media/broadcast/jobs/",
+        methods: ["POST"],
+        capabilities: ["ingest"],
+        upstream: { hostname: serviceHost("media-service-demo"), port: 80 }
+    },
+    {
+        exact: "/api/v1/demo/media/broadcast/reset",
         methods: ["POST"],
         capabilities: ["ingest"],
         upstream: { hostname: serviceHost("media-service-demo"), port: 80 }
@@ -343,6 +352,11 @@ const server = http.createServer(async (req, res) => {
 
         if (pathname === "/demo-monkey") {
             redirect(res, "/demo-monkey.html");
+            return;
+        }
+
+        if (pathname === "/splunk-instrumentation.js") {
+            await serveRumScript(res);
             return;
         }
 
@@ -629,6 +643,14 @@ function buildProxyHeaders(req, options = {}) {
 async function serveStatic(res, requestPath) {
     const relativePath = requestPath === "/" ? "/index.html" : requestPath;
     const filePath = resolveStaticPath(relativePath);
+    if (filePath === MALFORMED_STATIC_PATH) {
+        writeJson(res, 400, {
+            error: "invalid_asset_path",
+            message: "The requested frontend asset path is malformed."
+        });
+        return;
+    }
+
     const indexPath = resolveStaticPath("/index.html");
     const shouldFallbackToIndex = !filePath && !path.extname(relativePath);
     const targetPath = filePath ?? (shouldFallbackToIndex ? indexPath : null);
@@ -641,27 +663,29 @@ async function serveStatic(res, requestPath) {
         return;
     }
 
-    const contentType = CONTENT_TYPES[path.extname(targetPath).toLowerCase()] ?? "application/octet-stream";
-    res.statusCode = 200;
-    res.setHeader("content-type", contentType);
+    streamStaticFile(res, targetPath);
+}
 
-    const stream = fs.createReadStream(targetPath);
-    stream.on("error", (error) => {
-        console.error("Static asset read failed", error);
-        if (!res.headersSent) {
-            writeJson(res, 500, {
-                error: "asset_read_failed",
-                message: "The frontend asset could not be read."
-            });
-        } else {
-            res.destroy(error);
-        }
-    });
-    stream.pipe(res);
+async function serveRumScript(res) {
+    if (!rumScriptPath || !fs.existsSync(rumScriptPath)) {
+        writeJson(res, 404, {
+            error: "asset_not_found",
+            message: "The requested frontend asset is not available."
+        });
+        return;
+    }
+
+    streamStaticFile(res, rumScriptPath);
 }
 
 function resolveStaticPath(requestPath) {
-    const decodedPath = decodeURIComponent(requestPath);
+    let decodedPath;
+    try {
+        decodedPath = decodeURIComponent(requestPath);
+    } catch {
+        return MALFORMED_STATIC_PATH;
+    }
+
     const relativePath = decodedPath.replace(/^\/+/, "");
     const resolvedRoot = path.resolve(staticRoot);
     const candidate = path.resolve(resolvedRoot, relativePath);
@@ -681,6 +705,26 @@ function resolveStaticPath(requestPath) {
     }
 
     return null;
+}
+
+function streamStaticFile(res, targetPath) {
+    const contentType = CONTENT_TYPES[path.extname(targetPath).toLowerCase()] ?? "application/octet-stream";
+    res.statusCode = 200;
+    res.setHeader("content-type", contentType);
+
+    const stream = fs.createReadStream(targetPath);
+    stream.on("error", (error) => {
+        console.error("Static asset read failed", error);
+        if (!res.headersSent) {
+            writeJson(res, 500, {
+                error: "asset_read_failed",
+                message: "The frontend asset could not be read."
+            });
+        } else {
+            res.destroy(error);
+        }
+    });
+    stream.pipe(res);
 }
 
 function matchRule(rules, pathname, method) {

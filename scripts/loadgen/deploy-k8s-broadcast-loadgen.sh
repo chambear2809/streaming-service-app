@@ -14,13 +14,14 @@ LOADGEN_CRONJOB_NAME="${LOADGEN_CRONJOB_NAME:-broadcast-loadgen-recurring}"
 LOADGEN_CRON_SCHEDULE="${LOADGEN_CRON_SCHEDULE:-*/15 * * * *}"
 LOADGEN_CRON_CONCURRENCY_POLICY="${LOADGEN_CRON_CONCURRENCY_POLICY:-Forbid}"
 LOADGEN_CRON_SUSPEND="${LOADGEN_CRON_SUSPEND:-false}"
-LOADGEN_CRON_SUCCESS_HISTORY="${LOADGEN_CRON_SUCCESS_HISTORY:-1}"
-LOADGEN_CRON_FAILED_HISTORY="${LOADGEN_CRON_FAILED_HISTORY:-2}"
+LOADGEN_CRON_SUCCESS_HISTORY="${LOADGEN_CRON_SUCCESS_HISTORY:-0}"
+LOADGEN_CRON_FAILED_HISTORY="${LOADGEN_CRON_FAILED_HISTORY:-1}"
 LOADGEN_TRIGGER_JOB_NAME="${LOADGEN_TRIGGER_JOB_NAME:-}"
 LOADGEN_SCRIPT_CONFIGMAP_NAME="${LOADGEN_SCRIPT_CONFIGMAP_NAME:-broadcast-loadgen-script}"
 LOADGEN_IMAGE="${LOADGEN_IMAGE:-node:22-alpine}"
 LOADGEN_IMAGE_PULL_POLICY="${LOADGEN_IMAGE_PULL_POLICY:-IfNotPresent}"
-LOADGEN_TTL_SECONDS="${LOADGEN_TTL_SECONDS:-600}"
+LOADGEN_TTL_SECONDS="${LOADGEN_TTL_SECONDS:-120}"
+LOADGEN_AUTO_DELETE_JOB="${LOADGEN_AUTO_DELETE_JOB:-true}"
 LOADGEN_CPU_REQUEST="${LOADGEN_CPU_REQUEST:-250m}"
 LOADGEN_CPU_LIMIT="${LOADGEN_CPU_LIMIT:-1000m}"
 LOADGEN_MEMORY_REQUEST="${LOADGEN_MEMORY_REQUEST:-256Mi}"
@@ -189,6 +190,14 @@ delete_cronjob_if_needed() {
   kubectl -n "${NAMESPACE}" delete cronjob "${LOADGEN_CRONJOB_NAME}" --ignore-not-found=true >/dev/null
 }
 
+delete_completed_job() {
+  if [[ "${K8S_DRY_RUN}" == "true" || "${LOADGEN_AUTO_DELETE_JOB}" != "true" ]]; then
+    return 0
+  fi
+
+  kubectl -n "${NAMESPACE}" delete job "${LOADGEN_JOB_NAME}" --ignore-not-found=true >/dev/null
+}
+
 wait_and_stream_logs() {
   if [[ "${K8S_DRY_RUN}" == "true" ]]; then
     return 0
@@ -197,6 +206,7 @@ wait_and_stream_logs() {
   kubectl -n "${NAMESPACE}" wait --for=condition=complete "job/${LOADGEN_JOB_NAME}" --timeout=7200s
   echo
   kubectl -n "${NAMESPACE}" logs "job/${LOADGEN_JOB_NAME}"
+  delete_completed_job
 }
 
 show_job_status() {
