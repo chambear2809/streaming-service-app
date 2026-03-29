@@ -10,6 +10,7 @@ demo:
 03 Backend Critical Path
 04 Deep Dive: Trace Map Path
 05 Deep Dive: Broadcast Playback Path
+06 Deep Dive: RTP Media Quality
 
 The script reads the repo-root .env by default. Exported shell variables win.
 """
@@ -50,6 +51,7 @@ TEST_TYPE_ENDPOINTS = (
 TEST_LABELS = {
     "rtsp": "RTSP",
     "udp": "UDP media",
+    "rtp": "RTP",
     "trace_map": "Trace map",
     "broadcast_playback": "Broadcast playback",
 }
@@ -943,6 +945,28 @@ def dashboard_specs(
                     te_chart("UDP latency trend", f"network.latency for {udp_name}.", "network.latency", account_group_id, udp_id, udp_name),
                     te_chart("UDP jitter trend", f"network.jitter for {udp_name}.", "network.jitter", account_group_id, udp_id, udp_name),
                     te_chart("UDP packet loss trend", f"network.loss for {udp_name}.", "network.loss", account_group_id, udp_id, udp_name),
+                ),
+            )
+        )
+
+    rtp_name, rtp = matched_test(resolved_tests, "rtp")
+    if rtp:
+        rtp_id = str(rtp["testId"])
+        specs.append(
+            DashboardSpec(
+                key="rtp_detail",
+                aliases=("RTP-Stream-Proxy", "06 RTP-Stream-Proxy", "06 Deep Dive: RTP Media Quality"),
+                name="06 Deep Dive: RTP Media Quality",
+                description=(
+                    f"Deep dive for {rtp_name} test {rtp_id}. Use this when the RTP proxy path looks suspicious "
+                    "and you need voice-quality telemetry for MOS, loss, discards, duration, and packet delay variation."
+                ),
+                charts=(
+                    te_chart("RTP MOS trend", f"rtp.client.request.mos for {rtp_name}.", "rtp.client.request.mos", account_group_id, rtp_id, rtp_name),
+                    te_chart("RTP frame loss trend", f"rtp.client.request.loss for {rtp_name}.", "rtp.client.request.loss", account_group_id, rtp_id, rtp_name),
+                    te_chart("RTP discards trend", f"rtp.client.request.discards for {rtp_name}.", "rtp.client.request.discards", account_group_id, rtp_id, rtp_name),
+                    te_chart("RTP stream duration", f"rtp.client.request.duration for {rtp_name}.", "rtp.client.request.duration", account_group_id, rtp_id, rtp_name),
+                    te_chart("RTP packet delay variation", f"rtp.client.request.pdv for {rtp_name}.", "rtp.client.request.pdv", account_group_id, rtp_id, rtp_name),
                 ),
             )
         )

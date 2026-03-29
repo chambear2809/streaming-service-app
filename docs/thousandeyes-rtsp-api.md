@@ -187,8 +187,9 @@ The script keeps the dashboards ordered for the walkthrough:
 - `01 Start Here: Network Symptoms`
 - `02 Pivot: User Impact To Root Cause`
 - `03 Backend Critical Path`
-- `04 Deep Dive: RTSP Control Path`
-- `05 Deep Dive: UDP Media Path`
+- `04 Deep Dive: Trace Map Path`
+- `05 Deep Dive: Broadcast Playback Path`
+- `06 Deep Dive: RTP Media Quality`
 
 Before you call the Splunk API, make sure the repo-root `.env` or your current shell defines:
 
