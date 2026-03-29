@@ -56,7 +56,7 @@ public interface CustomerService {
      * @param username the username pattern to filter customers by.
      * @return a paginated response containing a list of customer DTOs.
      */
-    PaginationResponse<List<CustomerDto>> findAllByFilter(Integer page, Integer pageSize, String country, String email, String id, boolean isEmailVerified, String username);
+    PaginationResponse<List<CustomerDto>> findAllByFilter(Integer page, Integer pageSize, String country, String email, String id, Boolean isEmailVerified, String username);
 
     /**
      * Finds a customer by their unique identifier.

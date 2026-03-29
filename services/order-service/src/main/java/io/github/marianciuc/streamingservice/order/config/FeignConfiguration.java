@@ -23,10 +23,6 @@
 package io.github.marianciuc.streamingservice.order.config;
 
 import feign.RequestInterceptor;
-import feign.RequestTemplate;
-import io.github.marianciuc.jwtsecurity.service.JsonWebTokenService;
-import lombok.RequiredArgsConstructor;
-import org.apache.http.HttpHeaders;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -38,31 +34,11 @@ import org.springframework.context.annotation.Configuration;
  *
  */
 @Configuration
-@RequiredArgsConstructor
 public class FeignConfiguration {
-
-
-    /**
-     * The service for generating JSON Web Tokens.
-     */
-    private final JsonWebTokenService jsonWebTokenService;
-
-
-    /**
-     * Intercepts outgoing Feign requests to add an authorization header.
-     *
-     * <p>The authorization header is set with a generated security token.</p>
-     *
-     * @return The request interceptor.
-     */
     @Bean
     public RequestInterceptor requestInterceptor() {
-        return new RequestInterceptor() {
-
-            @Override
-            public void apply(RequestTemplate requestTemplate) {
-                requestTemplate.header(HttpHeaders.AUTHORIZATION, jsonWebTokenService.generateServiceToken());
-            }
+        return requestTemplate -> {
+            // Demo mode: do not inject service-to-service auth headers here.
         };
     }
 }

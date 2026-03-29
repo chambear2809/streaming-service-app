@@ -58,13 +58,13 @@ public class EpisodeServiceImpl implements EpisodeService {
     public UUID updateEpisode(UUID episodeId, EpisodeDto episodeDto) {
         Episode episode = this.getEpisodeEntity(episodeId);
 
-        if (!episodeDto.title().isBlank()) episode.setTitle(episodeDto.title());
+        if (episodeDto.title() != null && !episodeDto.title().isBlank()) episode.setTitle(episodeDto.title());
         if (episodeDto.duration() != null) episode.setDuration(episodeDto.duration());
         if (episodeDto.number() != null) episode.setNumber(episodeDto.number());
         if (episodeDto.releaseDate() != null) episode.setReleaseDate(episodeDto.releaseDate());
-        if (!episodeDto.description().isBlank()) episode.setDescription(episodeDto.description());
+        if (episodeDto.description() != null && !episodeDto.description().isBlank()) episode.setDescription(episodeDto.description());
 
-        return null;
+        return repository.save(episode).getId();
     }
 
     @Override

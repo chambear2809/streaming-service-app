@@ -2,9 +2,12 @@ package io.github.marianciuc.streamingservice.billing.controller;
 
 import io.github.marianciuc.streamingservice.billing.dto.request.CreateBillingInvoiceRequest;
 import io.github.marianciuc.streamingservice.billing.dto.request.CreateBillingLineItemRequest;
+import io.github.marianciuc.streamingservice.billing.dto.request.CreateBillingBusinessEventRequest;
 import io.github.marianciuc.streamingservice.billing.dto.request.UpdateBillingInvoiceStatusRequest;
 import io.github.marianciuc.streamingservice.billing.dto.response.BillingAccountSummaryResponse;
+import io.github.marianciuc.streamingservice.billing.dto.response.BillingBusinessEventResponse;
 import io.github.marianciuc.streamingservice.billing.dto.response.BillingInvoiceResponse;
+import io.github.marianciuc.streamingservice.billing.enums.BillingBusinessEventType;
 import io.github.marianciuc.streamingservice.billing.enums.InvoiceStatus;
 import io.github.marianciuc.streamingservice.billing.service.BillingService;
 import jakarta.validation.Valid;
@@ -68,5 +71,20 @@ public class BillingController {
     @GetMapping("/accounts/{userId}/summary")
     public ResponseEntity<BillingAccountSummaryResponse> getAccountSummary(@PathVariable UUID userId) {
         return ResponseEntity.ok(billingService.getAccountSummary(userId));
+    }
+
+    @PostMapping("/events")
+    public ResponseEntity<BillingBusinessEventResponse> recordBusinessEvent(
+            @RequestBody @Valid CreateBillingBusinessEventRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(billingService.recordBusinessEvent(request));
+    }
+
+    @GetMapping("/events")
+    public ResponseEntity<List<BillingBusinessEventResponse>> listBusinessEvents(
+            @RequestParam(required = false) UUID userId,
+            @RequestParam(required = false) BillingBusinessEventType eventType
+    ) {
+        return ResponseEntity.ok(billingService.listBusinessEvents(userId, eventType));
     }
 }

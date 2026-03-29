@@ -12,7 +12,6 @@ import com.stripe.exception.StripeException;
 import com.stripe.model.PaymentIntent;
 import com.stripe.param.PaymentIntentCreateParams;
 import io.github.marianciuc.streamingservice.payment.dto.common.TransactionDto;
-import io.github.marianciuc.streamingservice.payment.dto.responses.PaginationResponse;
 import io.github.marianciuc.streamingservice.payment.entity.CardHolder;
 import io.github.marianciuc.streamingservice.payment.entity.JWTUserPrincipal;
 import io.github.marianciuc.streamingservice.payment.entity.Transaction;
@@ -29,7 +28,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
@@ -85,8 +83,7 @@ public class TransactionServiceImpl implements TransactionService {
 
     @Override
     public TransactionDto findTransaction(UUID transactionId) {
-
-        return null;
+        return TransactionDto.toDto(findTransactionEntity(transactionId));
     }
 
     @Override
@@ -98,24 +95,20 @@ public class TransactionServiceImpl implements TransactionService {
     public List<TransactionDto> getTransactions(Integer page, Integer size, String sort, PaymentStatus status, UUID userId) {
         Sort.Direction sortDirection = Sort.Direction.fromString(sort);
         Pageable pageable = PageRequest.of(page, size, Sort.by(sortDirection, "amount"));
+        var authentication = SecurityContextHolder.getContext().getAuthentication();
+        UUID effectiveUserId = userId;
 
-        if (SecurityContextHolder.getContext().getAuthentication().getPrincipal() instanceof JWTUserPrincipal jwtUserPrincipal) {
-            if (jwtUserPrincipal.getAuthorities().stream()
-                    .anyMatch(auth -> auth.getAuthority().equals("ROLE_ADMIN"))) {
-                userId = (userId != null) ? userId : jwtUserPrincipal.getUserId();
-            } else {
-                userId = jwtUserPrincipal.getUserId();
-            }
-            Specification<Transaction> specification = TransactionSpecification.buildSpec(status, userId);
-            Page<Transaction> transactionPage = repository.findAll(specification, pageable);
-
-            PaginationResponse<List<TransactionDto>> response = new PaginationResponse<>(
-                    transactionPage.getTotalPages(),
-                    transactionPage.getNumber(),
-                    transactionPage.getNumberOfElements(),
-                    transactionPage.getContent().stream().map(TransactionDto::toDto).toList()
-            );
+        if (authentication != null && authentication.getPrincipal() instanceof JWTUserPrincipal jwtUserPrincipal) {
+            boolean isAdmin = jwtUserPrincipal.getAuthorities().stream()
+                    .anyMatch(auth -> auth.getAuthority().equals("ROLE_ADMIN"));
+            effectiveUserId = isAdmin ? userId : jwtUserPrincipal.getUserId();
         }
-        throw new AccessDeniedException("Access denied");
+
+        Specification<Transaction> specification = TransactionSpecification.buildSpec(status, effectiveUserId);
+        Page<Transaction> transactionPage = repository.findAll(specification, pageable);
+
+        return transactionPage.getContent().stream()
+                .map(TransactionDto::toDto)
+                .toList();
     }
 }

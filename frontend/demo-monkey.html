@@ -6,7 +6,7 @@
     <title>Acme Broadcasting Incident Simulation Console</title>
     <link rel="stylesheet" href="./styles.css">
     <script src="./config.js"></script>
-    <script type="module" src="./splunk/splunk-instrumentation.js"></script>
+    <script type="module" src="./splunk-instrumentation.js"></script>
     <style>
         body.demo-monkey-body {
             min-height: 100vh;
@@ -513,7 +513,14 @@
                             <button type="button" data-preset="clear">Clear</button>
                             <button type="button" data-preset="viewer-startup-spike">Slow startup</button>
                             <button type="button" data-preset="viewer-brownout">Viewer brownout</button>
+                            <button type="button" data-preset="packet-loss">Packet loss</button>
+                            <button type="button" data-preset="playback-outage">Playback outage</button>
+                            <button type="button" data-preset="trace-map-outage">Trace pivot outage</button>
+                            <button type="button" data-preset="dependency-timeout">Dependency timeout</button>
+                            <button type="button" data-preset="service-specific-failure">Service failure</button>
+                            <button type="button" data-preset="frontend-crash">Frontend crash</button>
                             <button type="button" data-preset="ad-break-delay">Ad break delay</button>
+                            <button type="button" data-preset="one-break-sponsor-miss">One-break sponsor miss</button>
                             <button type="button" data-preset="sponsor-pod-miss">Sponsor pod miss</button>
                         </div>
 
@@ -583,6 +590,21 @@
                                     <option value="768">768 KiB</option>
                                 </select>
                             </label>
+
+                            <label class="demo-monkey-toggle-row">
+                                <div class="demo-monkey-toggle-copy">
+                                    <div class="demo-monkey-toggle-top">
+                                        <input id="demo-monkey-packet-loss-enabled" type="checkbox">
+                                        <span>Packet loss</span>
+                                    </div>
+                                    <p>Abort a percentage of playback and broadcast transfers early so the feed looks lossy and intermittent.</p>
+                                </div>
+                                <select id="demo-monkey-packet-loss-value">
+                                    <option value="10">10% of transfers</option>
+                                    <option value="20">20% of transfers</option>
+                                    <option value="35">35% of transfers</option>
+                                </select>
+                            </label>
                         </div>
                     </section>
 
@@ -612,6 +634,38 @@
                                     </div>
                                     <p>Force the public trace pivot to fan out across upstream services and then return HTTP 503.</p>
                                 </div>
+                            </label>
+
+                            <label class="demo-monkey-toggle-row">
+                                <div class="demo-monkey-toggle-copy">
+                                    <div class="demo-monkey-toggle-top">
+                                        <input id="demo-monkey-dependency-timeout-enabled" type="checkbox">
+                                        <span>Dependency timeout</span>
+                                    </div>
+                                    <p>Force the selected upstream service in the public trace pivot to time out instead of returning promptly.</p>
+                                </div>
+                                <select id="demo-monkey-dependency-timeout-service">
+                                    <option value="user-service-demo">User service</option>
+                                    <option value="content-service-demo">Content service</option>
+                                    <option value="billing-service">Billing service</option>
+                                    <option value="ad-service-demo">Ad service</option>
+                                </select>
+                            </label>
+
+                            <label class="demo-monkey-toggle-row">
+                                <div class="demo-monkey-toggle-copy">
+                                    <div class="demo-monkey-toggle-top">
+                                        <input id="demo-monkey-dependency-failure-enabled" type="checkbox">
+                                        <span>Service failure</span>
+                                    </div>
+                                    <p>Force the selected upstream service in the public trace pivot to return a synthetic HTTP 503.</p>
+                                </div>
+                                <select id="demo-monkey-dependency-failure-service">
+                                    <option value="user-service-demo">User service</option>
+                                    <option value="content-service-demo">Content service</option>
+                                    <option value="billing-service">Billing service</option>
+                                    <option value="ad-service-demo">Ad service</option>
+                                </select>
                             </label>
 
                             <label class="demo-monkey-toggle-row demo-monkey-toggle-row-single">

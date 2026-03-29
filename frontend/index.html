@@ -6,7 +6,7 @@
     <title>Acme Broadcasting Operations Suite</title>
     <link rel="stylesheet" href="./styles.css">
     <script src="./config.js"></script>
-    <script type="module" src="./splunk/splunk-instrumentation.js"></script>
+    <script type="module" src="./splunk-instrumentation.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js"></script>
     <script type="module" src="./app.js"></script>
 </head>
@@ -17,26 +17,39 @@
             <span class="brand-mark"></span>
             <span class="brand-copy">
                 <strong>Acme Broadcasting Network</strong>
-                <span>Network operations suite</span>
+                <span>Operations suite</span>
             </span>
         </a>
 
-        <nav class="nav">
-            <a href="#home" data-page-link="home">Command Center</a>
-            <a href="#player" data-page-link="player">Screening</a>
-            <a href="#library" data-page-link="library">Programming</a>
-            <a href="#operations" data-page-link="operations" data-role-scope="operations">Master Control</a>
-            <a href="#billing" data-page-link="billing" data-role-scope="billing">Revenue</a>
-        </nav>
+        <button class="nav-toggle" id="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">
+            <span class="nav-toggle-bar"></span>
+            <span class="nav-toggle-bar"></span>
+            <span class="nav-toggle-bar"></span>
+            <span class="nav-toggle-label">Menu</span>
+        </button>
 
-        <div class="topbar-tools">
-            <span class="catalog-pill" id="catalog-status"></span>
-            <button class="button button-ghost" id="surprise-me" type="button">Route priority title</button>
-            <button class="button button-ghost presentation-toggle" id="presentation-toggle" type="button" aria-pressed="false">Presentation mode</button>
-            <div class="session-chip" id="session-chip"></div>
-            <button class="button button-ghost" id="sign-out" type="button" hidden>Sign out</button>
+        <div class="topbar-nav-shell" id="topbar-nav-shell">
+            <nav class="nav" id="primary-nav">
+                <a href="#home" data-page-link="home">Command Center</a>
+                <a href="#player" data-page-link="player">Screening</a>
+                <a href="#library" data-page-link="library">Programming</a>
+                <a href="#operations" data-page-link="operations" data-role-scope="operations">Master Control</a>
+                <a href="#billing" data-page-link="billing" data-role-scope="billing">Revenue</a>
+                <a href="#accounts" data-page-link="accounts" data-role-scope="billing">Accounts</a>
+                <a href="#payments" data-page-link="payments" data-role-scope="billing">Payments</a>
+                <a href="#commerce" data-page-link="commerce" data-role-scope="billing">Commerce</a>
+            </nav>
+
+            <div class="topbar-tools">
+                <span class="catalog-pill" id="catalog-status"></span>
+                <button class="button button-ghost" id="surprise-me" type="button">Route priority title</button>
+                <button class="button button-ghost presentation-toggle" id="presentation-toggle" type="button" aria-pressed="false">Presentation mode</button>
+                <div class="session-chip" id="session-chip"></div>
+                <button class="button button-ghost" id="sign-out" type="button" hidden>Sign out</button>
+            </div>
         </div>
     </header>
+    <button class="nav-backdrop" id="nav-backdrop" type="button" hidden aria-label="Close navigation"></button>
 
     <section class="suite-strip">
         <article class="suite-strip-card">
@@ -61,13 +74,10 @@
         <div class="auth-panel">
             <div class="auth-copy">
                 <p class="eyebrow">Live Demo Launch</p>
-                <h1>Start with the viewer, then pivot into the broadcast operation.</h1>
-                <p>
-                    Open the public channel first, show the queued sponsor break, then step into the protected operator
-                    suite only when you need to explain what changed across the network, application, and revenue path.
-                </p>
+                <h1>Start public, then step into the control room when the story needs more detail.</h1>
+                <p>Lead with the live channel, show the sponsor break, then pivot into the protected suite for operational context.</p>
                 <div class="tag-row">
-                    <span>Viewer symptom</span>
+                    <span>Viewer path</span>
                     <span>Sponsor timing</span>
                     <span>Operator handoff</span>
                 </div>
@@ -92,7 +102,7 @@
 
                 <div class="hero-actions auth-launch-actions">
                     <a class="button button-solid" id="launch-broadcast-link" href="/broadcast">Open live broadcast</a>
-                    <a class="button button-ghost" id="launch-trace-link" href="/api/v1/demo/public/trace-map" target="_blank" rel="noreferrer">See network symptom</a>
+                    <a class="button button-ghost" id="launch-trace-link" href="/api/v1/demo/public/trace-map" target="_blank" rel="noreferrer">Open trace pivot</a>
                     <button class="button button-ghost" type="button" data-launch-persona="operator" data-launch-page="operations">Enter operator suite</button>
                 </div>
             </div>
@@ -101,8 +111,8 @@
                 <section class="auth-form auth-quick-card">
                     <div class="auth-form-heading">
                         <span>Booth personas</span>
-                        <strong>Enter the right view in one click</strong>
-                        <p>Viewer stays on the public channel. Operator and executive personas open the protected suite with the right scope.</p>
+                        <strong>Open the right view in one click</strong>
+                        <p>Viewer stays public. Operator and executive personas land in the protected suite.</p>
                     </div>
                     <div class="launch-grid" id="launch-persona-grid">
                         <button class="button button-solid" type="button" data-launch-persona="viewer">Viewer</button>
@@ -114,12 +124,14 @@
                 <section class="auth-form auth-quick-card">
                     <div class="auth-form-heading">
                         <span>Scenario shortcuts</span>
-                        <strong>Arm the storyline without manual fault toggles</strong>
-                        <p>Each shortcut signs into the protected suite if needed, applies the incident profile, and lands in Master Control.</p>
+                        <strong>Arm the storyline fast</strong>
+                        <p>Each shortcut signs in if needed, applies the incident profile, and opens Master Control.</p>
                     </div>
                     <div class="launch-grid" id="launch-scenario-grid">
                         <button class="button button-ghost" type="button" data-launch-scenario="viewer-startup-spike">Slow startup</button>
+                        <button class="button button-ghost" type="button" data-launch-scenario="playback-outage">Playback outage</button>
                         <button class="button button-ghost" type="button" data-launch-scenario="ad-break-delay">Ad stall</button>
+                        <button class="button button-ghost" type="button" data-launch-scenario="frontend-crash">Frontend crash</button>
                         <button class="button button-ghost" type="button" data-launch-scenario="sponsor-pod-miss">Sponsor miss</button>
                         <button class="button button-ghost" type="button" data-launch-scenario="clear">Recovery</button>
                     </div>
@@ -130,8 +142,8 @@
                 <form class="auth-form" id="auth-form">
                     <div class="auth-form-heading">
                         <span>Manual operator sign-in</span>
-                        <strong>Use a named Acme Broadcasting account</strong>
-                        <p>Fallback access for presenters who want to switch to a specific internal role manually.</p>
+                        <strong>Use a named Acme account</strong>
+                        <p>Fallback access when you need a specific internal role.</p>
                     </div>
 
                     <label>
@@ -160,9 +172,9 @@
                 <p class="billboard-text" id="featured-description"></p>
 
                 <div class="hero-actions">
-                    <button class="button button-solid" id="play-featured" type="button">Route to screening</button>
-                    <button class="button button-ghost" id="save-featured" type="button">Stage for desk</button>
-                    <a class="button button-ghost" href="#library">Open programming catalog</a>
+                    <button class="button button-solid" id="play-featured" type="button">Open in screening</button>
+                    <button class="button button-ghost" id="save-featured" type="button">Save to desk queue</button>
+                    <a class="button button-ghost" href="#library">Open catalog</a>
                 </div>
 
                 <div class="stat-grid">
@@ -337,52 +349,63 @@
                 <div class="library-grid" id="library-grid"></div>
             </div>
 
-            <aside class="library-rail">
-                <div class="section-heading compact">
-                    <p class="eyebrow">Operational Context</p>
-                    <h2>Catalog readiness</h2>
-                    <p id="ops-summary-copy"></p>
-                </div>
+            <details class="surface-disclosure rail-disclosure" open>
+                <summary class="surface-disclosure-summary">
+                    <div class="surface-disclosure-summary-copy">
+                        <span>Catalog context</span>
+                        <strong>Operational readiness</strong>
+                        <p>Quick health, runtime, and saved-work context for the library.</p>
+                    </div>
+                    <span class="surface-disclosure-indicator" aria-hidden="true"></span>
+                </summary>
 
-                <div class="summary-stack">
-                    <article class="signal-card compact-card">
-                        <span>Library size</span>
-                        <strong id="ops-library-size"></strong>
-                        <p>Titles currently available in this session.</p>
-                    </article>
-                    <article class="signal-card compact-card">
-                        <span>Playback ready</span>
-                        <strong id="ops-stream-ready"></strong>
-                        <p>Titles with a valid backend playback path.</p>
-                    </article>
-                    <article class="signal-card compact-card">
-                        <span>In progress</span>
-                        <strong id="ops-in-progress"></strong>
-                        <p>Titles with saved watch progress.</p>
-                    </article>
-                </div>
+                <aside class="library-rail surface-disclosure-body">
+                    <div class="section-heading compact">
+                        <p class="eyebrow">Operational Context</p>
+                        <h2>Catalog readiness</h2>
+                        <p id="ops-summary-copy"></p>
+                    </div>
 
-                <div class="meta-list">
-                    <div>
-                        <span>Cluster</span>
-                        <strong id="cluster-context"></strong>
+                    <div class="summary-stack">
+                        <article class="signal-card compact-card">
+                            <span>Library size</span>
+                            <strong id="ops-library-size"></strong>
+                            <p>Titles in this session.</p>
+                        </article>
+                        <article class="signal-card compact-card">
+                            <span>Playback ready</span>
+                            <strong id="ops-stream-ready"></strong>
+                            <p>Titles with a valid playback path.</p>
+                        </article>
+                        <article class="signal-card compact-card">
+                            <span>In progress</span>
+                            <strong id="ops-in-progress"></strong>
+                            <p>Titles with saved progress.</p>
+                        </article>
                     </div>
-                    <div>
-                        <span>Namespace</span>
-                        <strong id="deployment-namespace"></strong>
-                    </div>
-                    <div>
-                        <span>Runtime</span>
-                        <strong id="runtime-mode"></strong>
-                    </div>
-                    <div>
-                        <span>Saved titles</span>
-                        <strong id="saved-count-label"></strong>
-                    </div>
-                </div>
 
-                <button class="button button-ghost" id="refresh-catalog" type="button">Refresh library</button>
-            </aside>
+                    <div class="meta-list">
+                        <div>
+                            <span>Cluster</span>
+                            <strong id="cluster-context"></strong>
+                        </div>
+                        <div>
+                            <span>Namespace</span>
+                            <strong id="deployment-namespace"></strong>
+                        </div>
+                        <div>
+                            <span>Runtime</span>
+                            <strong id="runtime-mode"></strong>
+                        </div>
+                        <div>
+                            <span>Saved titles</span>
+                            <strong id="saved-count-label"></strong>
+                        </div>
+                    </div>
+
+                    <button class="button button-ghost" id="refresh-catalog" type="button">Refresh library</button>
+                </aside>
+            </details>
         </section>
 
         <section class="section intelligence-board page-section" id="operations" data-page="operations" data-role-scope="operations">
@@ -433,145 +456,189 @@
                 </article>
             </div>
 
-            <div class="ops-console-grid">
-                <section class="ops-console-panel" data-role-scope="ingest">
-                    <div class="section-heading compact">
-                        <p class="eyebrow">Contribution Intake</p>
-                        <h2>Register a live source</h2>
-                        <p id="rtsp-intake-copy"></p>
+            <details class="surface-disclosure" open>
+                <summary class="surface-disclosure-summary">
+                    <div class="surface-disclosure-summary-copy">
+                        <span>Contribution</span>
+                        <strong>Intake and register</strong>
+                        <p>Create live source captures and review the ingest queue.</p>
                     </div>
+                    <span class="surface-disclosure-indicator" aria-hidden="true"></span>
+                </summary>
 
-                    <form class="rtsp-form" id="rtsp-job-form">
-                        <label>
-                            Target title
-                            <select id="rtsp-target-content"></select>
-                        </label>
-
-                        <label>
-                            RTSP source URL
-                            <input id="rtsp-source-url" type="url" placeholder="rtsp://demo.acmebroadcasting.local/live" autocomplete="off">
-                        </label>
-
-                        <label>
-                            Capture window
-                            <select id="rtsp-duration">
-                                <option value="300">5 minutes</option>
-                                <option value="900">15 minutes</option>
-                                <option value="1800">30 minutes</option>
-                                <option value="3600">60 minutes</option>
-                            </select>
-                        </label>
-
-                        <div class="form-actions">
-                            <button class="button button-solid" id="rtsp-submit" type="submit">Create ingest job</button>
-                            <button class="button button-ghost" id="rtsp-refresh" type="button">Refresh register</button>
-                        </div>
-
-                        <p class="auth-message" id="rtsp-form-message"></p>
-                    </form>
-                </section>
-
-                <aside class="ops-console-panel">
-                    <div class="section-heading compact">
-                        <p class="eyebrow">Contribution Register</p>
-                        <h2>Recent ingest activity</h2>
-                        <p>Use this register to review contribution status, open finished captures, and take approved feeds to air.</p>
-                    </div>
-
-                    <div class="job-list" id="rtsp-jobs"></div>
-                </aside>
-            </div>
-
-            <section class="ops-console-panel sponsor-ops-panel">
-                <div class="section-heading compact">
-                    <p class="eyebrow">Sponsor Operations</p>
-                    <h2>Decisioning override and break controls</h2>
-                    <p id="ad-issue-summary">Loading current sponsor decisioning posture. Use this desk to inject decisioning delay or failed sponsor clips without opening the separate incident console.</p>
-                </div>
-
-                <form class="demo-monkey-form" id="ad-issue-form">
-                    <div class="billing-form-grid">
-                        <label>
-                            Fault profile
-                            <select id="ad-issue-preset">
-                                <option value="clear">Clear</option>
-                                <option value="slow-decisioning">Slow decisioning</option>
-                                <option value="failed-ads">Fail ad loads</option>
-                                <option value="slow-and-failed">Slow and fail</option>
-                            </select>
-                        </label>
-
-                        <label>
-                            Delay ms
-                            <input id="ad-issue-delay" type="number" min="0" max="15000" step="250" value="0">
-                        </label>
-                    </div>
-
-                    <div class="demo-monkey-control-grid sponsor-ops-grid">
-                        <label class="demo-monkey-toggle-card">
-                            <div class="demo-monkey-toggle-top">
-                                <input id="ad-issue-enabled" type="checkbox">
-                                <span>Enable issue</span>
+                <div class="surface-disclosure-body">
+                    <div class="ops-console-grid">
+                        <section class="ops-console-panel" data-role-scope="ingest">
+                            <div class="section-heading compact">
+                                <p class="eyebrow">Contribution Intake</p>
+                                <h2>Register a live source</h2>
+                                <p id="rtsp-intake-copy"></p>
                             </div>
-                            <p>Turn on injected sponsor decisioning delay or break failure conditions.</p>
-                        </label>
 
-                        <label class="demo-monkey-toggle-card">
-                            <div class="demo-monkey-toggle-top">
-                                <input id="ad-issue-fail-load" type="checkbox">
-                                <span>Fail sponsor clip</span>
+                            <form class="rtsp-form" id="rtsp-job-form">
+                                <label>
+                                    Target title
+                                    <select id="rtsp-target-content"></select>
+                                </label>
+
+                                <label>
+                                    RTSP source URL
+                                    <input id="rtsp-source-url" type="url" placeholder="rtsp://demo.acmebroadcasting.local/live" autocomplete="off">
+                                </label>
+
+                                <label>
+                                    Capture window
+                                    <select id="rtsp-duration">
+                                        <option value="300">5 minutes</option>
+                                        <option value="900">15 minutes</option>
+                                        <option value="1800">30 minutes</option>
+                                        <option value="3600">60 minutes</option>
+                                    </select>
+                                </label>
+
+                                <div class="form-actions">
+                                    <button class="button button-solid" id="rtsp-submit" type="submit">Create ingest job</button>
+                                    <button class="button button-ghost" id="rtsp-refresh" type="button">Refresh register</button>
+                                </div>
+
+                                <p class="auth-message" id="rtsp-form-message"></p>
+                            </form>
+                        </section>
+
+                        <aside class="ops-console-panel">
+                            <div class="section-heading compact">
+                                <p class="eyebrow">Contribution Register</p>
+                                <h2>Recent ingest activity</h2>
+                                <p>Review status, open finished captures, and route approved feeds to air.</p>
                             </div>
-                            <p>Force the sponsor clip to miss its break slot while leaving the rest of the distribution path intact.</p>
-                        </label>
+
+                            <div class="job-list" id="rtsp-jobs"></div>
+                        </aside>
                     </div>
-
-                    <div class="form-actions">
-                        <button class="button button-solid" id="ad-issue-apply" type="submit">Apply override</button>
-                        <button class="button button-ghost" id="ad-issue-clear" type="button">Clear override</button>
-                    </div>
-
-                    <p class="auth-message" id="ad-issue-message"></p>
-                </form>
-            </section>
-
-            <section class="ops-console-panel demo-monkey-panel">
-                <div class="section-heading compact">
-                    <p class="eyebrow">Incident Simulation</p>
-                    <h2>Controlled playback, sponsor, and observability faults</h2>
-                    <p id="demo-monkey-scope"></p>
                 </div>
+            </details>
 
-                <div class="demo-monkey-shell">
-                    <div class="signal-card demo-monkey-active-card">
-                        <span>Current posture</span>
-                        <strong id="demo-monkey-profile"></strong>
-                        <p id="demo-monkey-detail"></p>
-                        <div class="endpoint-chip">
-                            <span>Last updated</span>
-                            <code id="demo-monkey-updated-at"></code>
-                        </div>
+            <details class="surface-disclosure" open>
+                <summary class="surface-disclosure-summary">
+                    <div class="surface-disclosure-summary-copy">
+                        <span>Sponsor operations</span>
+                        <strong>Break controls</strong>
+                        <p>Apply sponsor delay or clip failure conditions without opening the full incident console.</p>
                     </div>
+                    <span class="surface-disclosure-indicator" aria-hidden="true"></span>
+                </summary>
 
-                    <form class="demo-monkey-form" id="demo-monkey-form">
-                        <div class="chip-row demo-monkey-presets" id="demo-monkey-presets">
-                            <button type="button" data-preset="clear">Clear</button>
-                            <button type="button" data-preset="viewer-startup-spike">Slow startup</button>
-                            <button type="button" data-preset="viewer-brownout">Viewer brownout</button>
-                            <button type="button" data-preset="ad-break-delay">Ad break delay</button>
-                            <button type="button" data-preset="sponsor-pod-miss">Sponsor pod miss</button>
+                <div class="surface-disclosure-body">
+                    <section class="ops-console-panel sponsor-ops-panel">
+                        <div class="section-heading compact">
+                            <p class="eyebrow">Sponsor Operations</p>
+                            <h2>Decisioning override and break controls</h2>
+                            <p id="ad-issue-summary">Loading current sponsor decisioning posture.</p>
                         </div>
 
-                        <label class="billing-toggle">
-                            <input id="demo-monkey-enabled" type="checkbox">
-                            <span>Enable incident simulation across viewer, trace, and sponsor paths</span>
-                        </label>
+                        <form class="demo-monkey-form" id="ad-issue-form">
+                            <div class="billing-form-grid">
+                                <label>
+                                    Fault profile
+                                    <select id="ad-issue-preset">
+                                        <option value="clear">Clear</option>
+                                        <option value="slow-decisioning">Slow decisioning</option>
+                                        <option value="failed-ads">Fail ad loads</option>
+                                        <option value="slow-and-failed">Slow and fail</option>
+                                    </select>
+                                </label>
 
-                        <label class="billing-toggle">
-                            <input id="demo-monkey-next-break-only" type="checkbox">
-                            <span>Next sponsor pod only</span>
-                        </label>
+                                <label>
+                                    Delay ms
+                                    <input id="ad-issue-delay" type="number" min="0" max="15000" step="250" value="0">
+                                </label>
+                            </div>
 
-                        <div class="demo-monkey-control-grid">
+                            <div class="demo-monkey-control-grid sponsor-ops-grid">
+                                <label class="demo-monkey-toggle-card">
+                                    <div class="demo-monkey-toggle-top">
+                                        <input id="ad-issue-enabled" type="checkbox">
+                                        <span>Enable issue</span>
+                                    </div>
+                                    <p>Inject sponsor decisioning delay or break failure conditions.</p>
+                                </label>
+
+                                <label class="demo-monkey-toggle-card">
+                                    <div class="demo-monkey-toggle-top">
+                                        <input id="ad-issue-fail-load" type="checkbox">
+                                        <span>Fail sponsor clip</span>
+                                    </div>
+                                    <p>Force the sponsor clip to miss its break slot while the rest of the feed continues.</p>
+                                </label>
+                            </div>
+
+                            <div class="form-actions">
+                                <button class="button button-solid" id="ad-issue-apply" type="submit">Apply override</button>
+                                <button class="button button-ghost" id="ad-issue-clear" type="button">Clear override</button>
+                            </div>
+
+                            <p class="auth-message" id="ad-issue-message"></p>
+                        </form>
+                    </section>
+                </div>
+            </details>
+
+            <details class="surface-disclosure" open>
+                <summary class="surface-disclosure-summary">
+                    <div class="surface-disclosure-summary-copy">
+                        <span>Incident simulation</span>
+                        <strong>Fault controls</strong>
+                        <p>Playback, dependency, sponsor, and browser failures in one place.</p>
+                    </div>
+                    <span class="surface-disclosure-indicator" aria-hidden="true"></span>
+                </summary>
+
+                <div class="surface-disclosure-body">
+                    <section class="ops-console-panel demo-monkey-panel">
+                        <div class="section-heading compact">
+                            <p class="eyebrow">Incident Simulation</p>
+                            <h2>Controlled playback, sponsor, and observability faults</h2>
+                            <p id="demo-monkey-scope"></p>
+                        </div>
+
+                        <div class="demo-monkey-shell">
+                            <div class="signal-card demo-monkey-active-card">
+                                <span>Current posture</span>
+                                <strong id="demo-monkey-profile"></strong>
+                                <p id="demo-monkey-detail"></p>
+                                <div class="endpoint-chip">
+                                    <span>Last updated</span>
+                                    <code id="demo-monkey-updated-at"></code>
+                                </div>
+                            </div>
+
+                            <form class="demo-monkey-form" id="demo-monkey-form">
+                                <div class="chip-row demo-monkey-presets" id="demo-monkey-presets">
+                                    <button type="button" data-preset="clear">Clear</button>
+                                    <button type="button" data-preset="viewer-startup-spike">Slow startup</button>
+                                    <button type="button" data-preset="viewer-brownout">Viewer brownout</button>
+                                    <button type="button" data-preset="packet-loss">Packet loss</button>
+                                    <button type="button" data-preset="playback-outage">Playback outage</button>
+                                    <button type="button" data-preset="trace-map-outage">Trace pivot outage</button>
+                                    <button type="button" data-preset="dependency-timeout">Dependency timeout</button>
+                                    <button type="button" data-preset="service-specific-failure">Service failure</button>
+                                    <button type="button" data-preset="frontend-crash">Frontend crash</button>
+                                    <button type="button" data-preset="ad-break-delay">Ad break delay</button>
+                                    <button type="button" data-preset="one-break-sponsor-miss">One-break sponsor miss</button>
+                                    <button type="button" data-preset="sponsor-pod-miss">Sponsor pod miss</button>
+                                </div>
+
+                                <label class="billing-toggle">
+                                    <input id="demo-monkey-enabled" type="checkbox">
+                                    <span>Enable incident simulation across viewer, trace, and sponsor paths</span>
+                                </label>
+
+                                <label class="billing-toggle">
+                                    <input id="demo-monkey-next-break-only" type="checkbox">
+                                    <span>Next sponsor pod only</span>
+                                </label>
+
+                                <div class="demo-monkey-control-grid">
                             <label class="demo-monkey-toggle-card">
                                 <div class="demo-monkey-toggle-top">
                                     <input id="demo-monkey-latency-enabled" type="checkbox">
@@ -612,6 +679,19 @@
 
                             <label class="demo-monkey-toggle-card">
                                 <div class="demo-monkey-toggle-top">
+                                    <input id="demo-monkey-packet-loss-enabled" type="checkbox">
+                                    <span>Packet loss</span>
+                                </div>
+                                <select id="demo-monkey-packet-loss-value">
+                                    <option value="10">10% of transfers</option>
+                                    <option value="20">20% of transfers</option>
+                                    <option value="35">35% of transfers</option>
+                                </select>
+                                <p>Abort a percentage of playback and broadcast transfers early so the viewer path looks lossy and intermittent.</p>
+                            </label>
+
+                            <label class="demo-monkey-toggle-card">
+                                <div class="demo-monkey-toggle-top">
                                     <input id="demo-monkey-playback-failure-enabled" type="checkbox">
                                     <span>Playback 503</span>
                                 </div>
@@ -624,6 +704,34 @@
                                     <span>Trace pivot 503</span>
                                 </div>
                                 <p>Force the public trace pivot to fan out across upstream services and then return HTTP 503 for the ThousandEyes handoff story.</p>
+                            </label>
+
+                            <label class="demo-monkey-toggle-card">
+                                <div class="demo-monkey-toggle-top">
+                                    <input id="demo-monkey-dependency-timeout-enabled" type="checkbox">
+                                    <span>Dependency timeout</span>
+                                </div>
+                                <select id="demo-monkey-dependency-timeout-service">
+                                    <option value="user-service-demo">User service</option>
+                                    <option value="content-service-demo">Content service</option>
+                                    <option value="billing-service">Billing service</option>
+                                    <option value="ad-service-demo">Ad service</option>
+                                </select>
+                                <p>Force the selected upstream service in the public trace pivot to time out instead of returning promptly.</p>
+                            </label>
+
+                            <label class="demo-monkey-toggle-card">
+                                <div class="demo-monkey-toggle-top">
+                                    <input id="demo-monkey-dependency-failure-enabled" type="checkbox">
+                                    <span>Service failure</span>
+                                </div>
+                                <select id="demo-monkey-dependency-failure-service">
+                                    <option value="user-service-demo">User service</option>
+                                    <option value="content-service-demo">Content service</option>
+                                    <option value="billing-service">Billing service</option>
+                                    <option value="ad-service-demo">Ad service</option>
+                                </select>
+                                <p>Force the selected upstream service in the public trace pivot to return a synthetic HTTP 503.</p>
                             </label>
 
                             <label class="demo-monkey-toggle-card">
@@ -651,15 +759,17 @@
                             </label>
                         </div>
 
-                        <div class="form-actions">
-                            <button class="button button-solid" id="demo-monkey-apply" type="submit">Apply faults</button>
-                            <button class="button button-ghost" id="demo-monkey-disable" type="button">Disable simulation</button>
-                        </div>
+                                <div class="form-actions">
+                                    <button class="button button-solid" id="demo-monkey-apply" type="submit">Apply faults</button>
+                                    <button class="button button-ghost" id="demo-monkey-disable" type="button">Disable simulation</button>
+                                </div>
 
-                        <p class="auth-message" id="demo-monkey-message"></p>
-                    </form>
+                                <p class="auth-message" id="demo-monkey-message"></p>
+                            </form>
+                        </div>
+                    </section>
                 </div>
-            </section>
+            </details>
         </section>
 
         <section class="section billing-layout page-section" id="billing" data-page="billing" data-role-scope="billing">
@@ -724,102 +834,424 @@
                 </div>
 
                 <aside class="billing-rail">
-                    <div class="ops-console-panel">
-                        <div class="section-heading compact">
-                            <p class="eyebrow">Account Desk</p>
-                            <h2>Summary and invoice detail</h2>
-                            <p id="billing-source-copy"></p>
-                        </div>
+                    <details class="surface-disclosure" open>
+                        <summary class="surface-disclosure-summary">
+                            <div class="surface-disclosure-summary-copy">
+                                <span>Account desk</span>
+                                <strong>Summary and invoice detail</strong>
+                                <p>Selected account status, sync posture, and invoice detail.</p>
+                            </div>
+                            <span class="surface-disclosure-indicator" aria-hidden="true"></span>
+                        </summary>
 
-                        <div class="meta-list">
-                            <div>
-                                <span>Data source</span>
-                                <strong id="billing-source-label"></strong>
-                            </div>
-                            <div>
-                                <span>Billing health</span>
-                                <strong id="billing-health-label"></strong>
-                            </div>
-                            <div>
-                                <span>Selected invoice</span>
-                                <strong id="billing-selected-label"></strong>
-                            </div>
-                            <div>
-                                <span>Last sync</span>
-                                <strong id="billing-last-sync"></strong>
+                        <div class="surface-disclosure-body">
+                            <div class="ops-console-panel">
+                                <div class="section-heading compact">
+                                    <p class="eyebrow">Account Desk</p>
+                                    <h2>Summary and invoice detail</h2>
+                                    <p id="billing-source-copy"></p>
+                                </div>
+
+                                <div class="meta-list">
+                                    <div>
+                                        <span>Data source</span>
+                                        <strong id="billing-source-label"></strong>
+                                    </div>
+                                    <div>
+                                        <span>Billing health</span>
+                                        <strong id="billing-health-label"></strong>
+                                    </div>
+                                    <div>
+                                        <span>Selected invoice</span>
+                                        <strong id="billing-selected-label"></strong>
+                                    </div>
+                                    <div>
+                                        <span>Last sync</span>
+                                        <strong id="billing-last-sync"></strong>
+                                    </div>
+                                </div>
+
+                                <div class="billing-detail" id="billing-detail"></div>
                             </div>
                         </div>
+                    </details>
 
-                        <div class="billing-detail" id="billing-detail"></div>
+                    <details class="surface-disclosure" open data-role-scope="billing_write">
+                        <summary class="surface-disclosure-summary">
+                            <div class="surface-disclosure-summary-copy">
+                                <span>Revenue composer</span>
+                                <strong>Record a commercial event</strong>
+                                <p>Create a new business event and let the ledger stage the invoice.</p>
+                            </div>
+                            <span class="surface-disclosure-indicator" aria-hidden="true"></span>
+                        </summary>
+
+                        <div class="surface-disclosure-body">
+                            <div class="ops-console-panel">
+                                <div class="section-heading compact">
+                                    <p class="eyebrow">Revenue Event Composer</p>
+                                    <h2>Record a new commercial event</h2>
+                                    <p>Book a contract or renewal event and let the billing ledger generate the invoice.</p>
+                                </div>
+
+                                <form class="billing-form" id="billing-create-form">
+                                    <label>
+                                        Account
+                                        <select id="billing-create-account"></select>
+                                    </label>
+
+                                    <label>
+                                        Line item title
+                                        <input id="billing-line-title" type="text" placeholder="Transmission window">
+                                    </label>
+
+                                    <div class="billing-form-grid">
+                                        <label>
+                                            Quantity
+                                            <input id="billing-line-quantity" type="number" min="1" step="1" value="1">
+                                        </label>
+
+                                        <label>
+                                            Unit amount
+                                            <input id="billing-line-amount" type="number" min="0" step="0.01" placeholder="1250.00">
+                                        </label>
+                                    </div>
+
+                                    <div class="billing-form-grid">
+                                        <label>
+                                            Billing cycle
+                                            <select id="billing-cycle">
+                                                <option value="ONE_TIME">One-time</option>
+                                                <option value="MONTHLY">Monthly</option>
+                                                <option value="QUARTERLY">Quarterly</option>
+                                                <option value="ANNUAL">Annual</option>
+                                            </select>
+                                        </label>
+
+                                        <label>
+                                            Due date
+                                            <input id="billing-due-date" type="date">
+                                        </label>
+                                    </div>
+
+                                    <label>
+                                        Notes
+                                        <textarea id="billing-notes" rows="3" placeholder="Notes for the finance desk or payment reference"></textarea>
+                                    </label>
+
+                                    <div class="form-actions">
+                                        <button class="button button-solid" id="billing-create-submit" type="submit">Record event</button>
+                                    </div>
+
+                                    <p class="auth-message" id="billing-form-message"></p>
+                                </form>
+                            </div>
+                        </div>
+                    </details>
+                </aside>
+            </div>
+        </section>
+
+        <section class="section billing-layout page-section" id="accounts" data-page="accounts" data-role-scope="billing">
+            <div class="section-heading compact">
+                <p class="eyebrow">Account Directory</p>
+                <h2>Customer profiles and account context</h2>
+                <p id="accounts-portfolio-copy"></p>
+            </div>
+
+            <div class="signal-grid billing-overview-grid">
+                <article class="signal-card">
+                    <span>Accounts in scope</span>
+                    <strong id="accounts-total-count"></strong>
+                    <p>The number of customer profiles in the active directory view.</p>
+                </article>
+                <article class="signal-card">
+                    <span>Email verified</span>
+                    <strong id="accounts-verified-count"></strong>
+                    <p>Profiles that are ready for billing and service follow-up.</p>
+                </article>
+                <article class="signal-card">
+                    <span>Newsletter enabled</span>
+                    <strong id="accounts-newsletter-count"></strong>
+                    <p>Customers that opted into promotional communication.</p>
+                </article>
+                <article class="signal-card">
+                    <span>Selected country</span>
+                    <strong id="accounts-selected-country"></strong>
+                    <p>The region currently tied to the selected customer.</p>
+                </article>
+            </div>
+
+            <div class="billing-workspace">
+                <div class="billing-main">
+                    <div class="billing-toolbar">
+                        <label class="search-field">
+                            <span>Search</span>
+                            <input id="accounts-search" type="search" placeholder="Filter by email, handle, or country">
+                        </label>
+
+                        <button class="button button-ghost" id="accounts-refresh" type="button">Refresh directory</button>
                     </div>
 
-                    <div class="ops-console-panel" data-role-scope="billing_write">
+                    <div class="invoice-list" id="accounts-list"></div>
+                </div>
+
+                <aside class="billing-rail">
+                    <details class="surface-disclosure" open>
+                        <summary class="surface-disclosure-summary">
+                            <div class="surface-disclosure-summary-copy">
+                                <span>Profile desk</span>
+                                <strong>Selected customer summary</strong>
+                                <p>Live or preview profile context for the customer in focus.</p>
+                            </div>
+                            <span class="surface-disclosure-indicator" aria-hidden="true"></span>
+                        </summary>
+
+                        <div class="surface-disclosure-body">
+                            <div class="ops-console-panel">
+                                <div class="section-heading compact">
+                                    <p class="eyebrow">Profile Detail</p>
+                                    <h2>Customer summary</h2>
+                                    <p id="accounts-source-copy"></p>
+                                </div>
+
+                                <div class="meta-list">
+                                    <div>
+                                        <span>Data source</span>
+                                        <strong id="accounts-source-label"></strong>
+                                    </div>
+                                    <div>
+                                        <span>Selected customer</span>
+                                        <strong id="accounts-selected-label"></strong>
+                                    </div>
+                                    <div>
+                                        <span>Contact</span>
+                                        <strong id="accounts-contact-label"></strong>
+                                    </div>
+                                    <div>
+                                        <span>Last sync</span>
+                                        <strong id="accounts-last-sync"></strong>
+                                    </div>
+                                </div>
+
+                                <div class="billing-detail" id="accounts-detail"></div>
+                            </div>
+                        </div>
+                    </details>
+                </aside>
+            </div>
+        </section>
+
+        <section class="section billing-layout page-section" id="payments" data-page="payments" data-role-scope="billing">
+            <div class="section-heading compact">
+                <p class="eyebrow">Payments Desk</p>
+                <h2>Card-holder context and transaction history</h2>
+                <p id="payments-portfolio-copy"></p>
+            </div>
+
+            <div class="signal-grid billing-overview-grid">
+                <article class="signal-card">
+                    <span>Total processed</span>
+                    <strong id="payments-total-processed"></strong>
+                    <p>The total transaction value in the current customer slice.</p>
+                </article>
+                <article class="signal-card">
+                    <span>Successful</span>
+                    <strong id="payments-success-count"></strong>
+                    <p>Payments that cleared successfully for the selected customer.</p>
+                </article>
+                <article class="signal-card">
+                    <span>Pending or failed</span>
+                    <strong id="payments-pending-count"></strong>
+                    <p>Transactions that still need review or follow-up.</p>
+                </article>
+                <article class="signal-card">
+                    <span>Latest activity</span>
+                    <strong id="payments-last-activity"></strong>
+                    <p>The most recent transaction timestamp in this payment view.</p>
+                </article>
+            </div>
+
+            <div class="billing-workspace">
+                <div class="billing-main">
+                    <div class="billing-toolbar">
+                        <label class="search-field">
+                            <span>Status</span>
+                            <select id="payments-status-filter">
+                                <option value="ALL">All statuses</option>
+                                <option value="SUCCESS">Success</option>
+                                <option value="PENDING">Pending</option>
+                                <option value="FAILED">Failed</option>
+                                <option value="REFUNDED">Refunded</option>
+                            </select>
+                        </label>
+
+                        <button class="button button-ghost" id="payments-refresh" type="button">Refresh payments</button>
+                    </div>
+
+                    <div class="invoice-list" id="payments-transaction-list"></div>
+                </div>
+
+                <aside class="billing-rail">
+                    <details class="surface-disclosure" open>
+                        <summary class="surface-disclosure-summary">
+                            <div class="surface-disclosure-summary-copy">
+                                <span>Payment profile</span>
+                                <strong>Card-holder summary</strong>
+                                <p>Billing contact, address, and transaction sync posture for the selected customer.</p>
+                            </div>
+                            <span class="surface-disclosure-indicator" aria-hidden="true"></span>
+                        </summary>
+
+                        <div class="surface-disclosure-body">
+                            <div class="ops-console-panel">
+                                <div class="section-heading compact">
+                                    <p class="eyebrow">Payment Profile</p>
+                                    <h2>Card-holder detail</h2>
+                                    <p id="payments-source-copy"></p>
+                                </div>
+
+                                <div class="meta-list">
+                                    <div>
+                                        <span>Data source</span>
+                                        <strong id="payments-source-label"></strong>
+                                    </div>
+                                    <div>
+                                        <span>Selected customer</span>
+                                        <strong id="payments-selected-label"></strong>
+                                    </div>
+                                    <div>
+                                        <span>Profile state</span>
+                                        <strong id="payments-profile-label"></strong>
+                                    </div>
+                                    <div>
+                                        <span>Last sync</span>
+                                        <strong id="payments-last-sync"></strong>
+                                    </div>
+                                </div>
+
+                                <div class="billing-detail" id="payments-card-holder-detail"></div>
+                            </div>
+                        </div>
+                    </details>
+                </aside>
+            </div>
+        </section>
+
+        <section class="section billing-layout page-section" id="commerce" data-page="commerce" data-role-scope="billing">
+            <div class="section-heading compact">
+                <p class="eyebrow">Commerce Console</p>
+                <h2>Plans, active subscription, and order flow</h2>
+                <p id="commerce-portfolio-copy"></p>
+            </div>
+
+            <div class="signal-grid billing-overview-grid">
+                <article class="signal-card">
+                    <span>Active plan</span>
+                    <strong id="commerce-active-plan"></strong>
+                    <p>The current live or preview subscription for the selected customer.</p>
+                </article>
+                <article class="signal-card">
+                    <span>Order history</span>
+                    <strong id="commerce-order-count"></strong>
+                    <p>Orders recorded for the customer in focus.</p>
+                </article>
+                <article class="signal-card">
+                    <span>Open workflow</span>
+                    <strong id="commerce-open-order-count"></strong>
+                    <p>Orders that still need payment or completion.</p>
+                </article>
+                <article class="signal-card">
+                    <span>Total booked</span>
+                    <strong id="commerce-total-amount"></strong>
+                    <p>The total commerce value across the current order history.</p>
+                </article>
+            </div>
+
+            <div class="billing-workspace">
+                <div class="billing-main">
+                    <div class="billing-toolbar">
                         <div class="section-heading compact">
-                            <p class="eyebrow">Invoice Composer</p>
-                            <h2>Stage a new invoice</h2>
-                            <p>Create a desk, network, or event invoice without leaving the revenue operations surface.</p>
+                            <p class="eyebrow">Selected account</p>
+                            <h2 id="commerce-selected-heading">Customer not selected</h2>
+                            <p>Choose a plan, create an order, and push it through the demo lifecycle.</p>
                         </div>
 
-                        <form class="billing-form" id="billing-create-form">
-                            <label>
-                                Account
-                                <select id="billing-create-account"></select>
-                            </label>
-
-                            <label>
-                                Line item title
-                                <input id="billing-line-title" type="text" placeholder="Transmission window">
-                            </label>
-
-                            <div class="billing-form-grid">
-                                <label>
-                                    Quantity
-                                    <input id="billing-line-quantity" type="number" min="1" step="1" value="1">
-                                </label>
-
-                                <label>
-                                    Unit amount
-                                    <input id="billing-line-amount" type="number" min="0" step="0.01" placeholder="1250.00">
-                                </label>
-                            </div>
-
-                            <div class="billing-form-grid">
-                                <label>
-                                    Billing cycle
-                                    <select id="billing-cycle">
-                                        <option value="ONE_TIME">One-time</option>
-                                        <option value="MONTHLY">Monthly</option>
-                                        <option value="QUARTERLY">Quarterly</option>
-                                        <option value="ANNUAL">Annual</option>
-                                    </select>
-                                </label>
-
-                                <label>
-                                    Due date
-                                    <input id="billing-due-date" type="date">
-                                </label>
-                            </div>
-
-                            <label>
-                                Notes
-                                <textarea id="billing-notes" rows="3" placeholder="Notes for the finance desk or payment reference"></textarea>
-                            </label>
-
-                            <div class="form-actions">
-                                <button class="button button-solid" id="billing-create-submit" type="submit">Create invoice</button>
-                            </div>
-
-                            <p class="auth-message" id="billing-form-message"></p>
-                        </form>
+                        <button class="button button-ghost" id="commerce-refresh" type="button">Refresh commerce</button>
                     </div>
+
+                    <div class="workspace-stack">
+                        <section>
+                            <div class="section-heading compact">
+                                <p class="eyebrow">Subscription catalog</p>
+                                <h2>Available plans</h2>
+                                <p>Choose the next plan to stage for the selected customer.</p>
+                            </div>
+                            <div class="invoice-list" id="commerce-plan-list"></div>
+                        </section>
+
+                        <section>
+                            <div class="section-heading compact">
+                                <p class="eyebrow">Order history</p>
+                                <h2>Pending and completed orders</h2>
+                                <p>The selected customer’s order stream and current status.</p>
+                            </div>
+                            <div class="invoice-list" id="commerce-order-list"></div>
+                        </section>
+                    </div>
+                </div>
+
+                <aside class="billing-rail">
+                    <details class="surface-disclosure" open>
+                        <summary class="surface-disclosure-summary">
+                            <div class="surface-disclosure-summary-copy">
+                                <span>Commerce detail</span>
+                                <strong>Active plan and order actions</strong>
+                                <p>Use the selected plan and order to drive the live or preview commerce flow.</p>
+                            </div>
+                            <span class="surface-disclosure-indicator" aria-hidden="true"></span>
+                        </summary>
+
+                        <div class="surface-disclosure-body">
+                            <div class="ops-console-panel">
+                                <div class="section-heading compact">
+                                    <p class="eyebrow">Order Action Rail</p>
+                                    <h2>Selected commerce state</h2>
+                                    <p id="commerce-source-copy"></p>
+                                </div>
+
+                                <div class="meta-list">
+                                    <div>
+                                        <span>Data source</span>
+                                        <strong id="commerce-source-label"></strong>
+                                    </div>
+                                    <div>
+                                        <span>Selected customer</span>
+                                        <strong id="commerce-selected-label"></strong>
+                                    </div>
+                                    <div>
+                                        <span>Active subscription</span>
+                                        <strong id="commerce-active-label"></strong>
+                                    </div>
+                                    <div>
+                                        <span>Last sync</span>
+                                        <strong id="commerce-last-sync"></strong>
+                                    </div>
+                                </div>
+
+                                <div class="billing-detail" id="commerce-detail"></div>
+                                <p class="auth-message" id="commerce-message"></p>
+                            </div>
+                        </div>
+                    </details>
                 </aside>
             </div>
         </section>
     </main>
 
     <footer class="footer">
-        <p>Acme Broadcasting unifies programming, master control, sponsor operations, contribution intake, and revenue review inside one operator workspace.</p>
-        <p>The suite remains role-aware so platform, programming, executive, and finance users each land in the desk that matches their responsibility.</p>
+        <p>Acme Broadcasting brings programming, control-room workflows, sponsor operations, contribution intake, and revenue review into one workspace.</p>
+        <p>The suite stays role-aware so platform, programming, executive, and finance users land in the desk that matches their scope.</p>
     </footer>
 </div>
 </body>

@@ -28,15 +28,16 @@ import io.github.marianciuc.streamingservice.subscription.dto.CreateOrderRequest
 import io.github.marianciuc.streamingservice.subscription.dto.OrderResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 
-@FeignClient(value = "ORDER_SERVICE", configuration = FeignConfiguration.class)
+@FeignClient(name = "order-service-client", url = "${order.service.url:http://localhost:8080}", configuration = FeignConfiguration.class)
 @Headers({
         "Accept: application/json",
         "Content-Type: application/json"
 })
 public interface OrderClient {
-    @RequestMapping(method = RequestMethod.POST)
-    ResponseEntity<OrderResponse> createOrder(CreateOrderRequest orderRequest);
+    @RequestMapping(method = RequestMethod.POST, path = "/api/v1/orders")
+    ResponseEntity<OrderResponse> createOrder(@RequestBody CreateOrderRequest orderRequest);
 }

@@ -29,3 +29,6 @@ frontend/node_modules/
 /.mvn/
 !/.mvn/wrapper/maven-wrapper.jar
 target/
+
+# Ignore repo-local tool caches
+/.tools/

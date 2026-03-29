@@ -106,7 +106,7 @@ public class UsernamePasswordAuthenticationFilter extends AbstractAuthentication
         Token accessToken = accessTokenFactory.apply(refreshToken);
 
         String refreshTokenString = refreshTokenSerializer.apply(refreshToken);
-        String accessTokenString = accessTokenSerializer.apply(refreshToken);
+        String accessTokenString = accessTokenSerializer.apply(accessToken);
 
         TokenPair tokenPair = new TokenPair(accessTokenString, accessToken.expiresAt().toString(),
                 refreshTokenString, refreshToken.expiresAt().toString());

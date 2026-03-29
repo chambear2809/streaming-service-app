@@ -40,6 +40,99 @@ const demoMonkeyPresets = {
         slowAdEnabled: false,
         adLoadFailureEnabled: false
     },
+    "packet-loss": {
+        label: "Packet loss",
+        enabled: true,
+        preset: "packet-loss",
+        startupDelayMs: 0,
+        throttleKbps: 0,
+        disconnectAfterKb: 0,
+        packetLossPercent: 20,
+        playbackFailureEnabled: false,
+        traceMapFailureEnabled: false,
+        dependencyTimeoutEnabled: false,
+        dependencyTimeoutService: "",
+        dependencyFailureEnabled: false,
+        dependencyFailureService: "",
+        frontendExceptionEnabled: false,
+        slowAdEnabled: false,
+        adLoadFailureEnabled: false
+    },
+    "playback-outage": {
+        label: "Playback outage",
+        enabled: true,
+        preset: "playback-outage",
+        startupDelayMs: 0,
+        throttleKbps: 0,
+        disconnectAfterKb: 0,
+        playbackFailureEnabled: true,
+        traceMapFailureEnabled: false,
+        frontendExceptionEnabled: false,
+        slowAdEnabled: false,
+        adLoadFailureEnabled: false
+    },
+    "trace-map-outage": {
+        label: "Trace pivot outage",
+        enabled: true,
+        preset: "trace-map-outage",
+        startupDelayMs: 0,
+        throttleKbps: 0,
+        disconnectAfterKb: 0,
+        playbackFailureEnabled: false,
+        traceMapFailureEnabled: true,
+        frontendExceptionEnabled: false,
+        slowAdEnabled: false,
+        adLoadFailureEnabled: false
+    },
+    "dependency-timeout": {
+        label: "Dependency timeout",
+        enabled: true,
+        preset: "dependency-timeout",
+        startupDelayMs: 0,
+        throttleKbps: 0,
+        disconnectAfterKb: 0,
+        packetLossPercent: 0,
+        playbackFailureEnabled: false,
+        traceMapFailureEnabled: false,
+        dependencyTimeoutEnabled: true,
+        dependencyTimeoutService: "ad-service-demo",
+        dependencyFailureEnabled: false,
+        dependencyFailureService: "",
+        frontendExceptionEnabled: false,
+        slowAdEnabled: false,
+        adLoadFailureEnabled: false
+    },
+    "service-specific-failure": {
+        label: "Service failure",
+        enabled: true,
+        preset: "service-specific-failure",
+        startupDelayMs: 0,
+        throttleKbps: 0,
+        disconnectAfterKb: 0,
+        packetLossPercent: 0,
+        playbackFailureEnabled: false,
+        traceMapFailureEnabled: false,
+        dependencyTimeoutEnabled: false,
+        dependencyTimeoutService: "",
+        dependencyFailureEnabled: true,
+        dependencyFailureService: "billing-service",
+        frontendExceptionEnabled: false,
+        slowAdEnabled: false,
+        adLoadFailureEnabled: false
+    },
+    "frontend-crash": {
+        label: "Frontend crash",
+        enabled: true,
+        preset: "frontend-crash",
+        startupDelayMs: 0,
+        throttleKbps: 0,
+        disconnectAfterKb: 0,
+        playbackFailureEnabled: false,
+        traceMapFailureEnabled: false,
+        frontendExceptionEnabled: true,
+        slowAdEnabled: false,
+        adLoadFailureEnabled: false
+    },
     "ad-break-delay": {
         label: "Ad break delay",
         enabled: true,
@@ -52,6 +145,20 @@ const demoMonkeyPresets = {
         frontendExceptionEnabled: false,
         slowAdEnabled: true,
         adLoadFailureEnabled: false
+    },
+    "one-break-sponsor-miss": {
+        label: "One-break sponsor miss",
+        enabled: true,
+        preset: "one-break-sponsor-miss",
+        startupDelayMs: 0,
+        throttleKbps: 0,
+        disconnectAfterKb: 0,
+        playbackFailureEnabled: false,
+        traceMapFailureEnabled: false,
+        frontendExceptionEnabled: false,
+        slowAdEnabled: true,
+        adLoadFailureEnabled: true,
+        nextBreakOnlyEnabled: true
     },
     "sponsor-pod-miss": {
         label: "Sponsor pod miss",
@@ -107,6 +214,24 @@ const demoMonkeyPresets = {
     }
 };
 
+const demoMonkeyDependencyOptions = [
+    { value: "user-service-demo", label: "User service" },
+    { value: "content-service-demo", label: "Content service" },
+    { value: "billing-service", label: "Billing service" },
+    { value: "ad-service-demo", label: "Ad service" }
+];
+
+const defaultDemoMonkeyDependencyService = "ad-service-demo";
+const roleCapabilities = {
+    billing_admin: ["operations", "governance", "billing", "billing_write"],
+    finance_analyst: ["operations", "billing", "billing_write"],
+    platform_admin: ["operations", "governance", "ingest", "billing", "billing_write"],
+    programming_manager: ["operations", "governance", "ingest"],
+    executive: ["operations", "governance", "billing"],
+    qa_reviewer: ["operations"],
+    staff_operator: ["operations"]
+};
+
 const elements = {
     summary: document.querySelector("#demo-monkey-summary"),
     status: document.querySelector("#demo-monkey-status"),
@@ -147,8 +272,14 @@ const elements = {
     throttleValue: document.querySelector("#demo-monkey-throttle-value"),
     disconnectEnabled: document.querySelector("#demo-monkey-disconnect-enabled"),
     disconnectValue: document.querySelector("#demo-monkey-disconnect-value"),
+    packetLossEnabled: document.querySelector("#demo-monkey-packet-loss-enabled"),
+    packetLossValue: document.querySelector("#demo-monkey-packet-loss-value"),
     playbackFailureEnabled: document.querySelector("#demo-monkey-playback-failure-enabled"),
     traceMapFailureEnabled: document.querySelector("#demo-monkey-trace-map-failure-enabled"),
+    dependencyTimeoutEnabled: document.querySelector("#demo-monkey-dependency-timeout-enabled"),
+    dependencyTimeoutService: document.querySelector("#demo-monkey-dependency-timeout-service"),
+    dependencyFailureEnabled: document.querySelector("#demo-monkey-dependency-failure-enabled"),
+    dependencyFailureService: document.querySelector("#demo-monkey-dependency-failure-service"),
     frontendExceptionEnabled: document.querySelector("#demo-monkey-frontend-exception-enabled"),
     slowAdEnabled: document.querySelector("#demo-monkey-slow-ad-enabled"),
     adLoadFailureEnabled: document.querySelector("#demo-monkey-ad-load-failure-enabled"),
@@ -164,8 +295,13 @@ const state = {
         startupDelayMs: 0,
         throttleKbps: 0,
         disconnectAfterKb: 0,
+        packetLossPercent: 0,
         playbackFailureEnabled: false,
         traceMapFailureEnabled: false,
+        dependencyTimeoutEnabled: false,
+        dependencyTimeoutService: "",
+        dependencyFailureEnabled: false,
+        dependencyFailureService: "",
         frontendExceptionEnabled: false,
         slowAdEnabled: false,
         adLoadFailureEnabled: false,
@@ -194,6 +330,11 @@ const state = {
 
 let lastFrontendFaultKey = "";
 let presentationFallbackEnabled = false;
+
+function hasRoleCapability(role, capability) {
+    const permissions = roleCapabilities[String(role ?? "").trim().toLowerCase()] ?? roleCapabilities.staff_operator;
+    return permissions.includes(capability);
+}
 
 function absoluteUrl(path) {
     try {
@@ -314,7 +455,14 @@ function buildLaunchTargets(config) {
         };
     }
 
-    if (config.slowAdEnabled || config.adLoadFailureEnabled || config.playbackFailureEnabled || config.traceMapFailureEnabled) {
+    if (
+        config.slowAdEnabled
+        || config.adLoadFailureEnabled
+        || config.playbackFailureEnabled
+        || config.traceMapFailureEnabled
+        || config.dependencyTimeoutEnabled
+        || config.dependencyFailureEnabled
+    ) {
         return {
             ...targets,
             primary: "apm",
@@ -344,6 +492,12 @@ function presetLabel(preset) {
             .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
             .join(" ")
         : "Custom";
+}
+
+function dependencyLabel(serviceName) {
+    const normalized = String(serviceName ?? "").trim().toLowerCase();
+    const match = demoMonkeyDependencyOptions.find((option) => option.value === normalized);
+    return match?.label ?? (normalized ? presetLabel(normalized) : "Selected dependency");
 }
 
 function normalizeBroadcast(payload) {
@@ -414,6 +568,30 @@ function buildPresenterGuide(config, broadcast) {
         };
     }
 
+    if (config.dependencyFailureEnabled) {
+        const serviceLabel = dependencyLabel(config.dependencyFailureService);
+        return {
+            storyHeadline: "A selected dependency is failing",
+            storyCopy: `${serviceLabel} is returning a synthetic failure inside the public trace pivot, giving you a clean service-map handoff without taking the whole viewer path down.`,
+            pivotTitle: "Trace pivot then Splunk APM",
+            pivotCopy: "Use the degraded dependency fanout first, then follow the failing hop through the application transaction and service map.",
+            revenueTitle: "Diagnosis is focused",
+            revenueCopy: "The outage is isolated to the selected upstream service, which is ideal for a dependency-specific troubleshooting drill."
+        };
+    }
+
+    if (config.dependencyTimeoutEnabled) {
+        const serviceLabel = dependencyLabel(config.dependencyTimeoutService);
+        return {
+            storyHeadline: "A selected dependency is timing out",
+            storyCopy: `${serviceLabel} is timing out during the trace fanout, which makes latency and timeout handling visible without forcing a blanket 503.`,
+            pivotTitle: "Synthetic trace then APM",
+            pivotCopy: "Start on the slowed or degraded trace pivot, then move into the downstream timeout and retry behavior in Splunk APM.",
+            revenueTitle: "Response budgets are burning down",
+            revenueCopy: "Timeout pressure is building on the selected dependency, which is ideal for retry, queueing, and saturation troubleshooting."
+        };
+    }
+
     if (config.frontendExceptionEnabled) {
         return {
             storyHeadline: "Frontend regression is visible",
@@ -425,10 +603,12 @@ function buildPresenterGuide(config, broadcast) {
         };
     }
 
-    if (config.disconnectAfterKb > 0 || config.throttleKbps > 0 || config.startupDelayMs > 0) {
+    if (config.packetLossPercent > 0 || config.disconnectAfterKb > 0 || config.throttleKbps > 0 || config.startupDelayMs > 0) {
         return {
             storyHeadline: "Viewer startup is degraded",
-            storyCopy: "The stream feels slow or unstable before it fully fails, which is the cleanest outside-in opening for the NAB story.",
+            storyCopy: config.packetLossPercent > 0
+                ? "The stream path is lossy and unstable, so outside-in tools should show intermittent playback failures before the application stack looks hard down."
+                : "The stream feels slow or unstable before it fully fails, which is the cleanest outside-in opening for the NAB story.",
             pivotTitle: "ThousandEyes then Splunk APM",
             pivotCopy: "Start on the external experience and path degradation, then follow the same transaction into the service map and trace waterfall.",
             revenueTitle: "Audience patience is dropping",
@@ -472,11 +652,20 @@ function buildSummary(config) {
     if (config.disconnectAfterKb > 0) {
         effects.push(`connection reset after ${config.disconnectAfterKb} KiB`);
     }
+    if (config.packetLossPercent > 0) {
+        effects.push(`${config.packetLossPercent}% of playback transfers drop before completion`);
+    }
     if (config.playbackFailureEnabled) {
         effects.push("playback responses return HTTP 503");
     }
     if (config.traceMapFailureEnabled) {
         effects.push("trace pivot returns HTTP 503");
+    }
+    if (config.dependencyTimeoutEnabled && config.dependencyTimeoutService) {
+        effects.push(`${dependencyLabel(config.dependencyTimeoutService)} times out in the trace pivot`);
+    }
+    if (config.dependencyFailureEnabled && config.dependencyFailureService) {
+        effects.push(`${dependencyLabel(config.dependencyFailureService)} returns HTTP 503 in the trace pivot`);
     }
     if (config.frontendExceptionEnabled) {
         effects.push("browser exception fires on page load");
@@ -506,8 +695,13 @@ function normalize(payload) {
         startupDelayMs: Number.parseInt(payload?.startupDelayMs, 10) || 0,
         throttleKbps: Number.parseInt(payload?.throttleKbps, 10) || 0,
         disconnectAfterKb: Number.parseInt(payload?.disconnectAfterKb, 10) || 0,
+        packetLossPercent: Number.parseInt(payload?.packetLossPercent, 10) || 0,
         playbackFailureEnabled: Boolean(payload?.playbackFailureEnabled),
         traceMapFailureEnabled: Boolean(payload?.traceMapFailureEnabled),
+        dependencyTimeoutEnabled: Boolean(payload?.dependencyTimeoutEnabled),
+        dependencyTimeoutService: String(payload?.dependencyTimeoutService ?? ""),
+        dependencyFailureEnabled: Boolean(payload?.dependencyFailureEnabled),
+        dependencyFailureService: String(payload?.dependencyFailureService ?? ""),
         frontendExceptionEnabled: Boolean(payload?.frontendExceptionEnabled),
         slowAdEnabled: Boolean(payload?.slowAdEnabled),
         adLoadFailureEnabled: Boolean(payload?.adLoadFailureEnabled),
@@ -682,8 +876,14 @@ function render() {
     elements.throttleValue.value = String(throttleValue);
     elements.disconnectEnabled.checked = current.disconnectAfterKb > 0;
     elements.disconnectValue.value = String(disconnectValue);
+    elements.packetLossEnabled.checked = current.packetLossPercent > 0;
+    elements.packetLossValue.value = String(current.packetLossPercent || Number.parseInt(elements.packetLossValue.value, 10) || 20);
     elements.playbackFailureEnabled.checked = current.playbackFailureEnabled;
     elements.traceMapFailureEnabled.checked = current.traceMapFailureEnabled;
+    elements.dependencyTimeoutEnabled.checked = current.dependencyTimeoutEnabled;
+    elements.dependencyTimeoutService.value = current.dependencyTimeoutService || elements.dependencyTimeoutService.value || defaultDemoMonkeyDependencyService;
+    elements.dependencyFailureEnabled.checked = current.dependencyFailureEnabled;
+    elements.dependencyFailureService.value = current.dependencyFailureService || elements.dependencyFailureService.value || defaultDemoMonkeyDependencyService;
     elements.frontendExceptionEnabled.checked = current.frontendExceptionEnabled;
     elements.slowAdEnabled.checked = current.slowAdEnabled;
     elements.adLoadFailureEnabled.checked = current.adLoadFailureEnabled;
@@ -705,8 +905,17 @@ function buildRequest({ preset = "custom" } = {}) {
         startupDelayMs: enabled && elements.latencyEnabled.checked ? Number.parseInt(elements.latencyValue.value, 10) || 0 : 0,
         throttleKbps: enabled && elements.throttleEnabled.checked ? Number.parseInt(elements.throttleValue.value, 10) || 0 : 0,
         disconnectAfterKb: enabled && elements.disconnectEnabled.checked ? Number.parseInt(elements.disconnectValue.value, 10) || 0 : 0,
+        packetLossPercent: enabled && elements.packetLossEnabled.checked ? Number.parseInt(elements.packetLossValue.value, 10) || 0 : 0,
         playbackFailureEnabled: enabled && elements.playbackFailureEnabled.checked,
         traceMapFailureEnabled: enabled && elements.traceMapFailureEnabled.checked,
+        dependencyTimeoutEnabled: enabled && elements.dependencyTimeoutEnabled.checked,
+        dependencyTimeoutService: enabled && elements.dependencyTimeoutEnabled.checked
+            ? elements.dependencyTimeoutService.value || defaultDemoMonkeyDependencyService
+            : "",
+        dependencyFailureEnabled: enabled && elements.dependencyFailureEnabled.checked,
+        dependencyFailureService: enabled && elements.dependencyFailureEnabled.checked
+            ? elements.dependencyFailureService.value || defaultDemoMonkeyDependencyService
+            : "",
         frontendExceptionEnabled: enabled && elements.frontendExceptionEnabled.checked,
         slowAdEnabled: enabled && elements.slowAdEnabled.checked,
         adLoadFailureEnabled: enabled && elements.adLoadFailureEnabled.checked,
@@ -761,25 +970,26 @@ async function loadWriteAccess(silent = false) {
             credentials: "same-origin"
         });
 
-        state.canWrite = response.ok;
+        const payload = response.ok ? await response.json().catch(() => ({})) : null;
+        state.canWrite = response.ok && hasRoleCapability(payload?.user?.role ?? payload?.role, "governance");
         render();
 
-        if (!response.ok && !silent) {
-            setMessage("Sign in through master control to change incident simulation.", true);
+        if (!state.canWrite && !silent) {
+            setMessage("Open master control with a governance-capable role to change incident simulation.", true);
         }
     } catch (error) {
         console.warn("Unable to resolve incident-simulation write access.", error);
         state.canWrite = false;
         render();
         if (!silent) {
-            setMessage("Unable to verify operator access for incident simulation.", true);
+            setMessage("Unable to verify governance access for incident simulation.", true);
         }
     }
 }
 
 async function updateStatus(request, successMessage) {
     if (!state.canWrite) {
-        setMessage("Sign in through master control to change incident simulation.", true);
+        setMessage("Open master control with a governance-capable role to change incident simulation.", true);
         return;
     }
 
@@ -798,7 +1008,7 @@ async function updateStatus(request, successMessage) {
         if (response.status === 401) {
             state.canWrite = false;
             render();
-            setMessage("Sign in through master control to change incident simulation.", true);
+            setMessage("Open master control with a governance-capable role to change incident simulation.", true);
             return;
         }
         if (!response.ok) {
@@ -817,7 +1027,7 @@ async function updateStatus(request, successMessage) {
 
 async function handlePresetClick(event) {
     if (!state.canWrite) {
-        setMessage("Sign in through master control to change incident simulation.", true);
+        setMessage("Open master control with a governance-capable role to change incident simulation.", true);
         return;
     }
 
@@ -842,7 +1052,7 @@ async function handleSubmit(event) {
     event.preventDefault();
 
     if (!state.canWrite) {
-        setMessage("Sign in through master control to change incident simulation.", true);
+        setMessage("Open master control with a governance-capable role to change incident simulation.", true);
         return;
     }
 
@@ -852,17 +1062,20 @@ async function handleSubmit(event) {
         && request.startupDelayMs <= 0
         && request.throttleKbps <= 0
         && request.disconnectAfterKb <= 0
+        && request.packetLossPercent <= 0
         && !request.playbackFailureEnabled
         && !request.traceMapFailureEnabled
+        && !request.dependencyTimeoutEnabled
+        && !request.dependencyFailureEnabled
         && !request.frontendExceptionEnabled
         && !request.slowAdEnabled
         && !request.adLoadFailureEnabled
     ) {
-        setMessage("Enable at least one playback, sponsor, trace, or browser fault or disable simulation.", true);
+        setMessage("Enable at least one network, playback, dependency, sponsor, trace, or browser fault or disable simulation.", true);
         return;
     }
 
-    setMessage(request.enabled ? "Applying playback, sponsor, and browser incident conditions..." : "Disabling incident simulation...", false);
+    setMessage(request.enabled ? "Applying network, dependency, playback, sponsor, and browser incident conditions..." : "Disabling incident simulation...", false);
     await updateStatus(
         request,
         request.enabled ? "Incident simulation changes applied across the operating surfaces." : "Incident simulation bypassed."
@@ -871,7 +1084,7 @@ async function handleSubmit(event) {
 
 async function disableMonkey() {
     if (!state.canWrite) {
-        setMessage("Sign in through master control to change incident simulation.", true);
+        setMessage("Open master control with a governance-capable role to change incident simulation.", true);
         return;
     }
 

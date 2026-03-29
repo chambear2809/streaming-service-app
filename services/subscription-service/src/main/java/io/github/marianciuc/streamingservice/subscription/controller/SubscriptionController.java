@@ -1,6 +1,6 @@
 package io.github.marianciuc.streamingservice.subscription.controller;
 
-import io.github.marianciuc.jwtsecurity.service.JwtUserDetails;
+import io.github.marianciuc.streamingservice.subscription.dto.OrderCreationEventKafkaDto;
 import io.github.marianciuc.streamingservice.subscription.dto.SubscriptionRequest;
 import io.github.marianciuc.streamingservice.subscription.dto.SubscriptionResponse;
 import io.github.marianciuc.streamingservice.subscription.dto.UserSubscriptionDto;
@@ -10,7 +10,6 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -63,9 +62,8 @@ public class SubscriptionController {
     }
 
     @GetMapping("/active")
-    public ResponseEntity<UserSubscriptionDto> getActiveSubscription(Authentication authentication, @RequestParam(required = false, value = "id") UUID uuid) {
-        JwtUserDetails jwtUserDetails = (JwtUserDetails) authentication;
-        return ResponseEntity.ok(userSubscriptionService.getActiveSubscription(jwtUserDetails, uuid));
+    public ResponseEntity<UserSubscriptionDto> getActiveSubscription(@RequestParam(value = "id") UUID uuid) {
+        return ResponseEntity.ok(userSubscriptionService.getActiveSubscription(uuid));
     }
 
     /**
@@ -95,12 +93,15 @@ public class SubscriptionController {
         return ResponseEntity.ok().build();
     }
 
-    @PostMapping
-    public ResponseEntity<Void> cancelSubscription(Authentication authentication, @RequestParam(value = "id", required = false) UUID id) {
-        JwtUserDetails jwtUserDetails = (JwtUserDetails) authentication;
-        if (jwtUserDetails.isService() && id != null) {
-            userSubscriptionService.cancelSubscription(id);
-        } else userSubscriptionService.cancelSubscription(jwtUserDetails);
+    @PostMapping("/cancel")
+    public ResponseEntity<Void> cancelSubscription(@RequestParam(value = "id") UUID id) {
+        userSubscriptionService.cancelSubscription(id);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/activate-order")
+    public ResponseEntity<Void> activateOrder(@RequestBody OrderCreationEventKafkaDto request) {
+        userSubscriptionService.subscribeUser(request);
         return ResponseEntity.ok().build();
     }
 }

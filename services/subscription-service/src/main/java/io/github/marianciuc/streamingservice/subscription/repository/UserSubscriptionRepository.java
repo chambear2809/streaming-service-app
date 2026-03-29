@@ -16,5 +16,7 @@ public interface UserSubscriptionRepository extends JpaRepository<UserSubscripti
 
     Optional<UserSubscriptions> findFirstByUserId(UUID id);
 
-    Optional<UserSubscriptions> findByUserIdAndStatus(UUID id, SubscriptionStatus status);
+    List<UserSubscriptions> findAllByUserIdAndStatusOrderByEndDateDesc(UUID id, SubscriptionStatus status);
+
+    Optional<UserSubscriptions> findFirstByUserIdAndStatusOrderByEndDateDesc(UUID id, SubscriptionStatus status);
 }

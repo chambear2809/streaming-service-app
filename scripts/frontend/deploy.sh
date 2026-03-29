@@ -52,6 +52,7 @@ FRONTEND_DIR="${ROOT_DIR}/frontend"
 DIST_DIR="${FRONTEND_DIR}/dist"
 APP_VERSION="${APP_VERSION:-$(git -C "${ROOT_DIR}" rev-parse --short HEAD)}"
 SPLUNK_RUM_APP_NAME="${SPLUNK_RUM_APP_NAME:-streaming-app-frontend}"
+SPLUNK_RUM_ACCESS_TOKEN="${SPLUNK_RUM_ACCESS_TOKEN:-}"
 
 kubectl apply -f "${ROOT_DIR}/k8s/frontend/namespace.yaml"
 
@@ -67,7 +68,7 @@ fi
   APP_VERSION="${APP_VERSION}" npm run build:production
 )
 
-if [[ -n "${SPLUNK_REALM:-}" && -n "${SPLUNK_ACCESS_TOKEN:-}" ]]; then
+if [[ -n "${SPLUNK_REALM:-}" && -n "${SPLUNK_RUM_ACCESS_TOKEN:-}" ]]; then
   (
     cd "${FRONTEND_DIR}"
     APP_VERSION="${APP_VERSION}" ./node_modules/.bin/splunk-rum sourcemaps upload \
@@ -75,10 +76,10 @@ if [[ -n "${SPLUNK_REALM:-}" && -n "${SPLUNK_ACCESS_TOKEN:-}" ]]; then
       --app-version "${APP_VERSION}" \
       --path dist \
       --realm "${SPLUNK_REALM}" \
-      --token "${SPLUNK_ACCESS_TOKEN}"
+      --token "${SPLUNK_RUM_ACCESS_TOKEN}"
   )
 else
-  echo "Skipping Splunk source map upload because SPLUNK_REALM and/or SPLUNK_ACCESS_TOKEN are not set."
+  echo "Skipping Splunk source map upload because SPLUNK_REALM and/or SPLUNK_RUM_ACCESS_TOKEN are not set."
 fi
 
 kubectl -n "${NAMESPACE}" create configmap "${CONFIGMAP_NAME}" \

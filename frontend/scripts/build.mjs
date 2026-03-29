@@ -27,7 +27,7 @@ const runtimeOverrides = Object.fromEntries(
 const splunkRumOverrides = Object.fromEntries(
     Object.entries({
         realm: readEnvOverride("SPLUNK_REALM"),
-        rumAccessToken: readEnvOverride("SPLUNK_ACCESS_TOKEN"),
+        rumAccessToken: readEnvOverride("SPLUNK_RUM_ACCESS_TOKEN"),
         applicationName: readEnvOverride("SPLUNK_RUM_APP_NAME"),
         deploymentEnvironment: readEnvOverride("SPLUNK_DEPLOYMENT_ENVIRONMENT")
     }).filter(([, value]) => value !== undefined)

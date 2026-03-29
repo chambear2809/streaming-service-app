@@ -109,20 +109,23 @@ public class CustomerServiceImpl implements CustomerService {
     }
 
     @Override
-    public PaginationResponse<List<CustomerDto>> findAllByFilter(Integer page, Integer pageSize, String country, String email, String id, boolean isEmailVerified, String username) {
-        Pageable pageable = PageRequest.of(page, pageSize);
+    public PaginationResponse<List<CustomerDto>> findAllByFilter(Integer page, Integer pageSize, String country, String email, String id, Boolean isEmailVerified, String username) {
+        int requestedPage = page == null ? 1 : Math.max(page, 1);
+        int requestedPageSize = pageSize == null ? 10 : Math.max(pageSize, 1);
+        Pageable pageable = PageRequest.of(requestedPage - 1, requestedPageSize);
 
         Specification<Customer> spec = Specification.where(
                         Optional.ofNullable(country).map(CustomerSpecification::hasCountry).orElse(null))
                 .and(Optional.ofNullable(email).map(CustomerSpecification::emailStartsWith).orElse(null))
                 .and(Optional.ofNullable(username).map(CustomerSpecification::usernameStartsWith).orElse(null))
-                .and(CustomerSpecification.isEmailVerified(isEmailVerified));
+                .and(Optional.ofNullable(id).map(CustomerSpecification::idStartsWith).orElse(null))
+                .and(Optional.ofNullable(isEmailVerified).map(CustomerSpecification::isEmailVerified).orElse(null));
 
         Page<Customer> customerPage = this.repository.findAll(spec, pageable);
 
         return new PaginationResponse<>(
                 customerPage.getTotalPages(),
-                customerPage.getNumber(),
+                customerPage.getNumber() + 1,
                 customerPage.getSize(),
                 customerPage.getContent().stream().map(CustomerDto::to).toList()
         );

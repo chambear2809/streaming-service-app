@@ -22,7 +22,6 @@
 
 package io.github.marianciuc.streamingservice.subscription.service;
 
-import io.github.marianciuc.jwtsecurity.service.JwtUserDetails;
 import io.github.marianciuc.streamingservice.subscription.dto.OrderCreationEventKafkaDto;
 import io.github.marianciuc.streamingservice.subscription.dto.UserSubscriptionDto;
 import io.github.marianciuc.streamingservice.subscription.entity.SubscriptionStatus;
@@ -46,9 +45,8 @@ public interface UserSubscriptionService {
 
     void cancelSubscription(UserSubscriptions userSubscription) throws OperationNotSupportedException;
     void cancelSubscription(UUID id);
-    void cancelSubscription(JwtUserDetails jwtUserDetails);
 
     List<UserSubscriptions> getAllUserSubscriptionsByStatusAndEndDate(SubscriptionStatus status, LocalDate endDate);
 
-    UserSubscriptionDto getActiveSubscription(JwtUserDetails jwtUserDetails, UUID uuid);
+    UserSubscriptionDto getActiveSubscription(UUID userId);
 }

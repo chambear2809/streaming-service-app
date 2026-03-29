@@ -3,13 +3,14 @@ package io.github.marianciuc.streamingservice.order.controller;
 import io.github.marianciuc.streamingservice.order.dto.OrderRequest;
 import io.github.marianciuc.streamingservice.order.dto.OrderResponse;
 import io.github.marianciuc.streamingservice.order.entity.Order;
-import io.github.marianciuc.streamingservice.order.service.impl.OrderServiceImpl;
+import io.github.marianciuc.streamingservice.order.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -17,26 +18,41 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class OrderController {
 
-    private final OrderServiceImpl orderService;
+    private final OrderService orderService;
 
     @PostMapping
     public ResponseEntity<OrderResponse> createOrder(@RequestBody OrderRequest orderRequest, Authentication authentication) {
         return ResponseEntity.ok(orderService.createOrder(orderRequest, authentication));
     }
 
-    @PutMapping
-    public ResponseEntity<UUID> updatePlan(@RequestBody OrderRequest orderRequest) {
-        return null;
+    @PutMapping("/{id}")
+    public ResponseEntity<OrderResponse> updatePlan(@PathVariable UUID id, @RequestBody OrderRequest orderRequest, Authentication authentication) {
+        return ResponseEntity.ok(orderService.updateOrder(id, orderRequest, authentication));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<OrderResponse> getOrder(@PathVariable UUID id) {
+        return ResponseEntity.ok(orderService.getOrderById(id));
     }
 
     @GetMapping
-    public ResponseEntity<OrderResponse> getOrder(@RequestParam UUID id) {
-        return null;
+    public ResponseEntity<List<OrderResponse>> getOrders(
+            @RequestParam(value = "userId", required = false) UUID userId,
+            Authentication authentication
+    ) {
+        if (userId != null) {
+            return ResponseEntity.ok(orderService.getOrdersByUserId(userId));
+        }
+        if (authentication != null) {
+            return ResponseEntity.ok(orderService.getOrdersByAuthentication(authentication));
+        }
+        return ResponseEntity.ok(orderService.getAllOrders());
     }
 
-    @PutMapping
+    @PutMapping("/{id}/status")
     @PreAuthorize("hasAnyAuthority('ROLE_SERVICE')")
-    public ResponseEntity<Void> updateOrderStatus(@RequestBody Order order) {
-        return null;
+    public ResponseEntity<Void> updateOrderStatus(@PathVariable UUID id, @RequestBody Order order) {
+        orderService.updateOrderStatus(id, order.getOrderStatus());
+        return ResponseEntity.ok().build();
     }
 }

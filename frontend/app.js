@@ -54,6 +54,99 @@ const demoMonkeyPresets = {
         slowAdEnabled: false,
         adLoadFailureEnabled: false
     },
+    "packet-loss": {
+        label: "Packet loss",
+        enabled: true,
+        preset: "packet-loss",
+        startupDelayMs: 0,
+        throttleKbps: 0,
+        disconnectAfterKb: 0,
+        packetLossPercent: 20,
+        playbackFailureEnabled: false,
+        traceMapFailureEnabled: false,
+        dependencyTimeoutEnabled: false,
+        dependencyTimeoutService: "",
+        dependencyFailureEnabled: false,
+        dependencyFailureService: "",
+        frontendExceptionEnabled: false,
+        slowAdEnabled: false,
+        adLoadFailureEnabled: false
+    },
+    "playback-outage": {
+        label: "Playback outage",
+        enabled: true,
+        preset: "playback-outage",
+        startupDelayMs: 0,
+        throttleKbps: 0,
+        disconnectAfterKb: 0,
+        playbackFailureEnabled: true,
+        traceMapFailureEnabled: false,
+        frontendExceptionEnabled: false,
+        slowAdEnabled: false,
+        adLoadFailureEnabled: false
+    },
+    "trace-map-outage": {
+        label: "Trace pivot outage",
+        enabled: true,
+        preset: "trace-map-outage",
+        startupDelayMs: 0,
+        throttleKbps: 0,
+        disconnectAfterKb: 0,
+        playbackFailureEnabled: false,
+        traceMapFailureEnabled: true,
+        frontendExceptionEnabled: false,
+        slowAdEnabled: false,
+        adLoadFailureEnabled: false
+    },
+    "dependency-timeout": {
+        label: "Dependency timeout",
+        enabled: true,
+        preset: "dependency-timeout",
+        startupDelayMs: 0,
+        throttleKbps: 0,
+        disconnectAfterKb: 0,
+        packetLossPercent: 0,
+        playbackFailureEnabled: false,
+        traceMapFailureEnabled: false,
+        dependencyTimeoutEnabled: true,
+        dependencyTimeoutService: "ad-service-demo",
+        dependencyFailureEnabled: false,
+        dependencyFailureService: "",
+        frontendExceptionEnabled: false,
+        slowAdEnabled: false,
+        adLoadFailureEnabled: false
+    },
+    "service-specific-failure": {
+        label: "Service failure",
+        enabled: true,
+        preset: "service-specific-failure",
+        startupDelayMs: 0,
+        throttleKbps: 0,
+        disconnectAfterKb: 0,
+        packetLossPercent: 0,
+        playbackFailureEnabled: false,
+        traceMapFailureEnabled: false,
+        dependencyTimeoutEnabled: false,
+        dependencyTimeoutService: "",
+        dependencyFailureEnabled: true,
+        dependencyFailureService: "billing-service",
+        frontendExceptionEnabled: false,
+        slowAdEnabled: false,
+        adLoadFailureEnabled: false
+    },
+    "frontend-crash": {
+        label: "Frontend crash",
+        enabled: true,
+        preset: "frontend-crash",
+        startupDelayMs: 0,
+        throttleKbps: 0,
+        disconnectAfterKb: 0,
+        playbackFailureEnabled: false,
+        traceMapFailureEnabled: false,
+        frontendExceptionEnabled: true,
+        slowAdEnabled: false,
+        adLoadFailureEnabled: false
+    },
     "ad-break-delay": {
         label: "Ad break delay",
         enabled: true,
@@ -66,6 +159,20 @@ const demoMonkeyPresets = {
         frontendExceptionEnabled: false,
         slowAdEnabled: true,
         adLoadFailureEnabled: false
+    },
+    "one-break-sponsor-miss": {
+        label: "One-break sponsor miss",
+        enabled: true,
+        preset: "one-break-sponsor-miss",
+        startupDelayMs: 0,
+        throttleKbps: 0,
+        disconnectAfterKb: 0,
+        playbackFailureEnabled: false,
+        traceMapFailureEnabled: false,
+        frontendExceptionEnabled: false,
+        slowAdEnabled: true,
+        adLoadFailureEnabled: true,
+        nextBreakOnlyEnabled: true
     },
     "sponsor-pod-miss": {
         label: "Sponsor pod miss",
@@ -121,6 +228,61 @@ const demoMonkeyPresets = {
     }
 };
 
+const demoMonkeyDependencyOptions = [
+    { value: "user-service-demo", label: "User service" },
+    { value: "content-service-demo", label: "Content service" },
+    { value: "billing-service", label: "Billing service" },
+    { value: "ad-service-demo", label: "Ad service" }
+];
+
+const defaultDemoMonkeyDependencyService = "ad-service-demo";
+const fallbackAdBreakProgramInterval = 1;
+
+function hasFallbackAdBreakAfterProgram(index) {
+    return fallbackAdBreakProgramInterval > 0 && (index + 1) % fallbackAdBreakProgramInterval === 0;
+}
+
+const fallbackAdBreakDurationSeconds = 15;
+const fallbackHouseLoopPrograms = [
+    {
+        title: "Big Buck Bunny",
+        durationSeconds: 597,
+        playbackUrl: "/api/v1/demo/media/library/big-buck-bunny.mp4",
+        detail: "Forest slapstick opens the house lineup before sponsor pod A."
+    },
+    {
+        title: "Elephants Dream",
+        durationSeconds: 654,
+        playbackUrl: "/api/v1/demo/media/library/elephants-dream.mp4",
+        detail: "The machine-world feature follows sponsor pod A and leads into the next stitched break."
+    },
+    {
+        title: "Sintel",
+        durationSeconds: 888,
+        playbackUrl: "/api/v1/demo/media/library/sintel.mp4",
+        detail: "The longer fantasy feature carries the mid-show window before sponsor pod C."
+    },
+    {
+        title: "Tears of Steel",
+        durationSeconds: 734,
+        playbackUrl: "/api/v1/demo/media/library/tears-of-steel.mp4",
+        detail: "The closing hybrid feature resets the channel before the lineup rolls into the next sponsor pod."
+    }
+];
+const fallbackAdBreakCount = fallbackHouseLoopPrograms.reduce(
+    (count, _program, index) => count + (hasFallbackAdBreakAfterProgram(index) ? 1 : 0),
+    0
+);
+const fallbackAdProgramCycleSeconds = fallbackHouseLoopPrograms.reduce((total, program) => total + program.durationSeconds, 0)
+    + (fallbackAdBreakDurationSeconds * fallbackAdBreakCount);
+const fallbackAdCycleOriginMs = Date.parse("2026-01-01T00:00:00Z");
+const fallbackAdCampaigns = [
+    { sponsor: "North Coast Sports Network", label: "Regional sports launch pod" },
+    { sponsor: "Metro Weather Desk", label: "Storm desk weather sponsorship" },
+    { sponsor: "City Arts Channel", label: "Festival takeover pod" },
+    { sponsor: "Pop-Up Event East", label: "Opening-week sponsor activation" }
+];
+
 const boothPersonas = {
     viewer: {
         label: "Viewer",
@@ -147,8 +309,18 @@ const boothScenarioShortcuts = {
         personaKey: "operator",
         targetPage: "operations"
     },
+    "playback-outage": {
+        label: "Playback outage",
+        personaKey: "operator",
+        targetPage: "operations"
+    },
     "ad-break-delay": {
         label: "Ad stall",
+        personaKey: "operator",
+        targetPage: "operations"
+    },
+    "frontend-crash": {
+        label: "Frontend crash",
         personaKey: "operator",
         targetPage: "operations"
     },
@@ -171,8 +343,13 @@ function defaultDemoMonkeyState() {
         startupDelayMs: 0,
         throttleKbps: 0,
         disconnectAfterKb: 0,
+        packetLossPercent: 0,
         playbackFailureEnabled: false,
         traceMapFailureEnabled: false,
+        dependencyTimeoutEnabled: false,
+        dependencyTimeoutService: "",
+        dependencyFailureEnabled: false,
+        dependencyFailureService: "",
         frontendExceptionEnabled: false,
         slowAdEnabled: false,
         adLoadFailureEnabled: false,
@@ -199,14 +376,20 @@ function defaultDemoMonkeyState() {
 }
 
 function defaultAdStatus() {
+    const { activeWindow, scheduledWindow } = fallbackActiveOrNextAdWindow();
+    const campaign = fallbackCampaignForSequence(scheduledWindow?.sequence ?? 0);
+    const slotIndex = Number.isFinite(scheduledWindow?.slotIndex) ? scheduledWindow.slotIndex : 0;
+
     return {
-        state: "ARMED",
-        podLabel: "Sponsor pod A",
-        sponsorLabel: "North Coast Sports Network",
+        state: activeWindow ? "IN_BREAK" : "ARMED",
+        podLabel: `Sponsor pod ${String.fromCharCode(65 + slotIndex)}`,
+        sponsorLabel: campaign.sponsor,
         decisioningMode: "Server-side stitched pod",
-        breakStartAt: "",
-        breakEndAt: "",
-        detail: "The next sponsor pod is staged for the primary channel."
+        breakStartAt: scheduledWindow?.start?.toISOString?.() ?? "",
+        breakEndAt: scheduledWindow?.end?.toISOString?.() ?? "",
+        detail: activeWindow
+            ? `${campaign.label} is active and the short sponsor clip is stitched into the house lineup right now.`
+            : `${campaign.label} is armed for the next sponsor pod inside the house lineup.`
     };
 }
 
@@ -217,7 +400,7 @@ function defaultAdIssueState() {
         responseDelayMs: 0,
         adLoadFailureEnabled: false,
         updatedAt: "",
-        summary: "Ad service is healthy. Sponsor clips are inserted between queued titles without additional delay.",
+        summary: "Ad service is healthy. Sponsor clips are inserted between every house-lineup title without additional delay.",
         affectedPaths: [
             "/api/v1/demo/ads/current",
             "/api/v1/demo/ads/program-queue",
@@ -236,7 +419,134 @@ function defaultBroadcastTitle() {
 }
 
 function defaultBroadcastDetail() {
-    return runtimeConfig.defaultBroadcastDetail ?? "The house lineup is filling the external channel until a contribution feed is taken live.";
+    return runtimeConfig.defaultBroadcastDetail
+        ?? "Big Buck Bunny, Elephants Dream, Sintel, and Tears of Steel rotate on the external channel with sponsor pods roughly every three minutes until a contribution feed is taken live.";
+}
+
+function addSeconds(date, seconds) {
+    return new Date(date.getTime() + seconds * 1000);
+}
+
+function fallbackCampaignForSequence(sequence) {
+    const normalized = Math.abs(Number.parseInt(sequence, 10) || 0);
+    return fallbackAdCampaigns[normalized % fallbackAdCampaigns.length];
+}
+
+function fallbackAdCycle(reference = new Date()) {
+    const elapsedSeconds = Math.max(0, Math.floor((reference.getTime() - fallbackAdCycleOriginMs) / 1000));
+    const cycleSequence = Math.floor(elapsedSeconds / fallbackAdProgramCycleSeconds);
+    const cycleStart = new Date(fallbackAdCycleOriginMs + cycleSequence * fallbackAdProgramCycleSeconds * 1000);
+    return { cycleSequence, cycleStart };
+}
+
+function fallbackAdWindows(reference = new Date()) {
+    const { cycleSequence, cycleStart } = fallbackAdCycle(reference);
+    const windows = [];
+    let cursor = cycleStart;
+    let breakIndex = 0;
+
+    for (let programIndex = 0; programIndex < fallbackHouseLoopPrograms.length; programIndex += 1) {
+        cursor = addSeconds(cursor, fallbackHouseLoopPrograms[programIndex].durationSeconds);
+        if (!hasFallbackAdBreakAfterProgram(programIndex)) {
+            continue;
+        }
+
+        const start = cursor;
+        const end = addSeconds(start, fallbackAdBreakDurationSeconds);
+
+        windows.push({
+            sequence: cycleSequence * fallbackAdBreakCount + breakIndex,
+            slotIndex: breakIndex,
+            start,
+            end
+        });
+        breakIndex += 1;
+        cursor = end;
+    }
+
+    return { cycleSequence, cycleStart, windows };
+}
+
+function fallbackActiveOrNextAdWindow(reference = new Date()) {
+    const current = fallbackAdWindows(reference);
+    const activeWindow = current.windows.find((window) => reference >= window.start && reference < window.end) ?? null;
+    const nextWindow = current.windows.find((window) => reference < window.start)
+        ?? fallbackAdWindows(addSeconds(current.cycleStart, fallbackAdProgramCycleSeconds)).windows[0];
+
+    return {
+        cycleSequence: current.cycleSequence,
+        cycleStart: current.cycleStart,
+        activeWindow,
+        scheduledWindow: activeWindow ?? nextWindow
+    };
+}
+
+function formatFallbackDurationLabel(seconds) {
+    if (seconds % 60 === 0) {
+        return `${seconds / 60}m`;
+    }
+
+    if (seconds > 60) {
+        const minutes = Math.floor(seconds / 60);
+        const remainder = seconds % 60;
+        return `${minutes}m ${remainder}s`;
+    }
+
+    return `${seconds}s`;
+}
+
+function buildFallbackAdProgramQueue(reference = new Date()) {
+    const { cycleSequence, cycleStart } = fallbackAdCycle(reference);
+    const entries = [];
+    let cursor = cycleStart;
+    let breakIndex = 0;
+
+    for (let index = 0; index < fallbackHouseLoopPrograms.length; index += 1) {
+        const program = fallbackHouseLoopPrograms[index];
+        const contentDurationSeconds = program.durationSeconds;
+        const contentEnd = addSeconds(cursor, contentDurationSeconds);
+        const contentActive = reference >= cursor && reference < contentEnd;
+
+        entries.push({
+            entryId: `fallback-content-${cycleSequence}-${index}`,
+            contentId: "",
+            kind: "CONTENT",
+            title: program.title,
+            channelLabel: state.broadcast?.channelLabel ?? defaultBroadcastChannelLabel(),
+            slotLabel: `${formatClock(cursor)} - ${formatClock(contentEnd)}`,
+            status: contentActive ? "NOW" : "QUEUED",
+            detail: program.detail,
+            playbackUrl: program.playbackUrl,
+            durationLabel: formatFallbackDurationLabel(contentDurationSeconds)
+        });
+        cursor = contentEnd;
+
+        if (!hasFallbackAdBreakAfterProgram(index)) {
+            continue;
+        }
+
+        const breakSequence = cycleSequence * fallbackAdBreakCount + breakIndex;
+        const campaign = fallbackCampaignForSequence(breakSequence);
+        const adEnd = addSeconds(cursor, fallbackAdBreakDurationSeconds);
+        const adActive = reference >= cursor && reference < adEnd;
+
+        entries.push({
+            entryId: `fallback-ad-${breakSequence}`,
+            contentId: "",
+            kind: "AD",
+            title: campaign.sponsor,
+            channelLabel: state.broadcast?.channelLabel ?? defaultBroadcastChannelLabel(),
+            slotLabel: `${formatClock(cursor)} - ${formatClock(adEnd)}`,
+            status: adActive ? "NOW" : "READY",
+            detail: `${campaign.label} inserts the short sponsor clip between house-lineup titles.`,
+            playbackUrl: "/api/v1/demo/media/library/sponsor-break.mp4",
+            durationLabel: formatFallbackDurationLabel(fallbackAdBreakDurationSeconds)
+        });
+        breakIndex += 1;
+        cursor = adEnd;
+    }
+
+    return entries;
 }
 
 const seedContent = [
@@ -345,6 +655,313 @@ const seedBillingAccounts = [
     }
 ];
 
+function demoUuid(value) {
+    const digits = String(value ?? "").replace(/\D/g, "").slice(-12).padStart(12, "0");
+    return `00000000-0000-0000-0000-${digits}`;
+}
+
+const seedCustomerProfiles = [
+    {
+        id: seedBillingAccounts[0].id,
+        theme: "stadium",
+        email: "finance@northcoastsports.example",
+        birthDate: "1988-03-14",
+        country: "United States",
+        username: "northcoastsports",
+        profilePicture: "",
+        preferredLanguage: "en-US",
+        isEmailVerified: true,
+        receiveNewsletter: true,
+        enableNotifications: true,
+        createdAt: "2025-11-14T15:30:00Z",
+        updatedAt: "2026-03-26T10:20:00Z"
+    },
+    {
+        id: seedBillingAccounts[1].id,
+        theme: "forecast",
+        email: "ap@metroweather.example",
+        birthDate: "1990-08-02",
+        country: "Canada",
+        username: "metroweatherdesk",
+        profilePicture: "",
+        preferredLanguage: "en-CA",
+        isEmailVerified: true,
+        receiveNewsletter: false,
+        enableNotifications: true,
+        createdAt: "2025-10-06T12:10:00Z",
+        updatedAt: "2026-03-24T18:45:00Z"
+    },
+    {
+        id: seedBillingAccounts[2].id,
+        theme: "festival",
+        email: "billing@cityarts.example",
+        birthDate: "1992-01-19",
+        country: "United Kingdom",
+        username: "cityartschannel",
+        profilePicture: "",
+        preferredLanguage: "en-GB",
+        isEmailVerified: true,
+        receiveNewsletter: true,
+        enableNotifications: false,
+        createdAt: "2025-09-18T08:50:00Z",
+        updatedAt: "2026-03-21T11:05:00Z"
+    },
+    {
+        id: seedBillingAccounts[3].id,
+        theme: "events",
+        email: "controller@popupeast.example",
+        birthDate: "1986-05-24",
+        country: "United States",
+        username: "popupeastlive",
+        profilePicture: "",
+        preferredLanguage: "en-US",
+        isEmailVerified: false,
+        receiveNewsletter: false,
+        enableNotifications: true,
+        createdAt: "2026-01-03T09:00:00Z",
+        updatedAt: "2026-03-28T12:00:00Z"
+    }
+];
+
+const seedPaymentProfiles = [
+    {
+        id: seedBillingAccounts[0].id,
+        stripeCustomerId: "cus_demo_northcoast",
+        address: {
+            id: demoUuid(4101),
+            line1: "255 Harbor Exchange",
+            line2: "Suite 410",
+            city: "Cleveland",
+            postalCode: "44114",
+            state: "OH",
+            country: "United States"
+        },
+        cardHolderName: "North Coast Sports Network",
+        phoneNumber: "+1 216 555 0144",
+        email: "finance@northcoastsports.example"
+    },
+    {
+        id: seedBillingAccounts[1].id,
+        stripeCustomerId: "cus_demo_metroweather",
+        address: {
+            id: demoUuid(4102),
+            line1: "84 Front Street",
+            line2: "Floor 9",
+            city: "Toronto",
+            postalCode: "M5J 2X2",
+            state: "ON",
+            country: "Canada"
+        },
+        cardHolderName: "Metro Weather Desk",
+        phoneNumber: "+1 416 555 0133",
+        email: "ap@metroweather.example"
+    },
+    {
+        id: seedBillingAccounts[2].id,
+        stripeCustomerId: "cus_demo_cityarts",
+        address: {
+            id: demoUuid(4103),
+            line1: "17 Southbank Quay",
+            line2: "Studio 2",
+            city: "London",
+            postalCode: "SE1 8XX",
+            state: "London",
+            country: "United Kingdom"
+        },
+        cardHolderName: "City Arts Channel",
+        phoneNumber: "+44 20 5550 1190",
+        email: "billing@cityarts.example"
+    },
+    {
+        id: seedBillingAccounts[3].id,
+        stripeCustomerId: "cus_demo_popupeast",
+        address: {
+            id: demoUuid(4104),
+            line1: "601 Convention Way",
+            line2: "Trailer East",
+            city: "Orlando",
+            postalCode: "32819",
+            state: "FL",
+            country: "United States"
+        },
+        cardHolderName: "Pop-Up Event East",
+        phoneNumber: "+1 407 555 0167",
+        email: "controller@popupeast.example"
+    }
+];
+
+const seedPaymentTransactions = [
+    {
+        id: demoUuid(5101),
+        orderId: demoUuid(6101),
+        userId: seedBillingAccounts[0].id,
+        currency: "USD",
+        amount: 129,
+        failureMessage: "",
+        paymentStatus: "SUCCESS",
+        createdAt: "2026-03-27T14:18:00Z"
+    },
+    {
+        id: demoUuid(5102),
+        orderId: demoUuid(6102),
+        userId: seedBillingAccounts[0].id,
+        currency: "USD",
+        amount: 129,
+        failureMessage: "",
+        paymentStatus: "SUCCESS",
+        createdAt: "2026-02-27T14:18:00Z"
+    },
+    {
+        id: demoUuid(5103),
+        orderId: demoUuid(6103),
+        userId: seedBillingAccounts[1].id,
+        currency: "USD",
+        amount: 289,
+        failureMessage: "",
+        paymentStatus: "PENDING",
+        createdAt: "2026-03-28T15:42:00Z"
+    },
+    {
+        id: demoUuid(5104),
+        orderId: demoUuid(6104),
+        userId: seedBillingAccounts[1].id,
+        currency: "USD",
+        amount: 289,
+        failureMessage: "Issuer declined the authorization attempt.",
+        paymentStatus: "FAILED",
+        createdAt: "2026-03-18T09:07:00Z"
+    },
+    {
+        id: demoUuid(5105),
+        orderId: demoUuid(6105),
+        userId: seedBillingAccounts[2].id,
+        currency: "USD",
+        amount: 699,
+        failureMessage: "",
+        paymentStatus: "REFUNDED",
+        createdAt: "2026-03-09T20:22:00Z"
+    },
+    {
+        id: demoUuid(5106),
+        orderId: demoUuid(6106),
+        userId: seedBillingAccounts[3].id,
+        currency: "USD",
+        amount: 1499,
+        failureMessage: "",
+        paymentStatus: "SUCCESS",
+        createdAt: "2026-03-25T16:05:00Z"
+    }
+];
+
+const seedSubscriptionCatalog = [
+    {
+        id: demoUuid(7101),
+        name: "Regional Sports",
+        description: "Primary live sports carriage with replay windows and expanded active sessions.",
+        allowedActiveSessions: 6,
+        durationInDays: 30,
+        resolutions: [{ name: "1080p" }, { name: "4K" }],
+        price: 129,
+        isTemporary: false,
+        nextSubscriptionId: null,
+        updatedAt: "2026-03-12T13:00:00Z",
+        recordStatus: "ACTIVE",
+        createdAt: "2025-10-01T08:00:00Z"
+    },
+    {
+        id: demoUuid(7102),
+        name: "Forecast Desk",
+        description: "Always-on weather desk service with secondary regional takeout.",
+        allowedActiveSessions: 4,
+        durationInDays: 30,
+        resolutions: [{ name: "1080p" }],
+        price: 289,
+        isTemporary: false,
+        nextSubscriptionId: null,
+        updatedAt: "2026-03-08T10:15:00Z",
+        recordStatus: "ACTIVE",
+        createdAt: "2025-10-10T09:30:00Z"
+    },
+    {
+        id: demoUuid(7103),
+        name: "Festival Event Pass",
+        description: "Temporary event window for short-run cultural or one-off broadcast activations.",
+        allowedActiveSessions: 2,
+        durationInDays: 14,
+        resolutions: [{ name: "1080p" }, { name: "HDR" }],
+        price: 699,
+        isTemporary: true,
+        nextSubscriptionId: demoUuid(7101),
+        updatedAt: "2026-03-04T09:40:00Z",
+        recordStatus: "ACTIVE",
+        createdAt: "2025-11-02T11:20:00Z"
+    }
+];
+
+const seedPreviewActiveSubscriptions = [
+    {
+        id: demoUuid(8101),
+        userId: seedBillingAccounts[0].id,
+        orderId: demoUuid(6101),
+        subscription: seedSubscriptionCatalog[0],
+        startDate: "2026-03-01",
+        endDate: "2026-03-31",
+        status: "ACTIVE"
+    },
+    {
+        id: demoUuid(8102),
+        userId: seedBillingAccounts[2].id,
+        orderId: demoUuid(6105),
+        subscription: seedSubscriptionCatalog[2],
+        startDate: "2026-03-09",
+        endDate: "2026-03-23",
+        status: "ACTIVE"
+    }
+];
+
+const seedPreviewOrders = [
+    {
+        id: demoUuid(6101),
+        customerId: seedBillingAccounts[0].id,
+        amount: 129,
+        subscriptionId: seedSubscriptionCatalog[0].id,
+        orderDate: "2026-03-01T14:18:00Z",
+        orderStatus: "PAID"
+    },
+    {
+        id: demoUuid(6102),
+        customerId: seedBillingAccounts[0].id,
+        amount: 129,
+        subscriptionId: seedSubscriptionCatalog[0].id,
+        orderDate: "2026-02-01T14:18:00Z",
+        orderStatus: "COMPLETED"
+    },
+    {
+        id: demoUuid(6103),
+        customerId: seedBillingAccounts[1].id,
+        amount: 289,
+        subscriptionId: seedSubscriptionCatalog[1].id,
+        orderDate: "2026-03-28T15:40:00Z",
+        orderStatus: "CREATED"
+    },
+    {
+        id: demoUuid(6105),
+        customerId: seedBillingAccounts[2].id,
+        amount: 699,
+        subscriptionId: seedSubscriptionCatalog[2].id,
+        orderDate: "2026-03-09T20:22:00Z",
+        orderStatus: "COMPLETED"
+    },
+    {
+        id: demoUuid(6106),
+        customerId: seedBillingAccounts[3].id,
+        amount: 1499,
+        subscriptionId: seedSubscriptionCatalog[1].id,
+        orderDate: "2026-03-25T16:05:00Z",
+        orderStatus: "PAID"
+    }
+];
+
 const elements = {
     authOverlay: document.querySelector("#auth-overlay"),
     authForm: document.querySelector("#auth-form"),
@@ -363,6 +980,9 @@ const elements = {
     launchPersonaGrid: document.querySelector("#launch-persona-grid"),
     launchScenarioGrid: document.querySelector("#launch-scenario-grid"),
     scopedNodes: [...document.querySelectorAll("[data-role-scope]")],
+    navToggle: document.querySelector("#nav-toggle"),
+    navBackdrop: document.querySelector("#nav-backdrop"),
+    topbarNavShell: document.querySelector("#topbar-nav-shell"),
     navLinks: [...document.querySelectorAll("[data-page-link]")],
     pageNodes: [...document.querySelectorAll("[data-page]")],
     catalogStatus: document.querySelector("#catalog-status"),
@@ -434,8 +1054,14 @@ const elements = {
     demoMonkeyThrottleValue: document.querySelector("#demo-monkey-throttle-value"),
     demoMonkeyDisconnectEnabled: document.querySelector("#demo-monkey-disconnect-enabled"),
     demoMonkeyDisconnectValue: document.querySelector("#demo-monkey-disconnect-value"),
+    demoMonkeyPacketLossEnabled: document.querySelector("#demo-monkey-packet-loss-enabled"),
+    demoMonkeyPacketLossValue: document.querySelector("#demo-monkey-packet-loss-value"),
     demoMonkeyPlaybackFailureEnabled: document.querySelector("#demo-monkey-playback-failure-enabled"),
     demoMonkeyTraceMapFailureEnabled: document.querySelector("#demo-monkey-trace-map-failure-enabled"),
+    demoMonkeyDependencyTimeoutEnabled: document.querySelector("#demo-monkey-dependency-timeout-enabled"),
+    demoMonkeyDependencyTimeoutService: document.querySelector("#demo-monkey-dependency-timeout-service"),
+    demoMonkeyDependencyFailureEnabled: document.querySelector("#demo-monkey-dependency-failure-enabled"),
+    demoMonkeyDependencyFailureService: document.querySelector("#demo-monkey-dependency-failure-service"),
     demoMonkeyFrontendExceptionEnabled: document.querySelector("#demo-monkey-frontend-exception-enabled"),
     demoMonkeySlowAdEnabled: document.querySelector("#demo-monkey-slow-ad-enabled"),
     demoMonkeyAdLoadFailureEnabled: document.querySelector("#demo-monkey-ad-load-failure-enabled"),
@@ -468,6 +1094,50 @@ const elements = {
     billingNotes: document.querySelector("#billing-notes"),
     billingCreateSubmit: document.querySelector("#billing-create-submit"),
     billingFormMessage: document.querySelector("#billing-form-message"),
+    accountsPortfolioCopy: document.querySelector("#accounts-portfolio-copy"),
+    accountsTotalCount: document.querySelector("#accounts-total-count"),
+    accountsVerifiedCount: document.querySelector("#accounts-verified-count"),
+    accountsNewsletterCount: document.querySelector("#accounts-newsletter-count"),
+    accountsSelectedCountry: document.querySelector("#accounts-selected-country"),
+    accountsSearch: document.querySelector("#accounts-search"),
+    accountsRefresh: document.querySelector("#accounts-refresh"),
+    accountsList: document.querySelector("#accounts-list"),
+    accountsSourceCopy: document.querySelector("#accounts-source-copy"),
+    accountsSourceLabel: document.querySelector("#accounts-source-label"),
+    accountsSelectedLabel: document.querySelector("#accounts-selected-label"),
+    accountsContactLabel: document.querySelector("#accounts-contact-label"),
+    accountsLastSync: document.querySelector("#accounts-last-sync"),
+    accountsDetail: document.querySelector("#accounts-detail"),
+    paymentsPortfolioCopy: document.querySelector("#payments-portfolio-copy"),
+    paymentsTotalProcessed: document.querySelector("#payments-total-processed"),
+    paymentsSuccessCount: document.querySelector("#payments-success-count"),
+    paymentsPendingCount: document.querySelector("#payments-pending-count"),
+    paymentsLastActivity: document.querySelector("#payments-last-activity"),
+    paymentsStatusFilter: document.querySelector("#payments-status-filter"),
+    paymentsRefresh: document.querySelector("#payments-refresh"),
+    paymentsTransactionList: document.querySelector("#payments-transaction-list"),
+    paymentsSourceCopy: document.querySelector("#payments-source-copy"),
+    paymentsSourceLabel: document.querySelector("#payments-source-label"),
+    paymentsSelectedLabel: document.querySelector("#payments-selected-label"),
+    paymentsProfileLabel: document.querySelector("#payments-profile-label"),
+    paymentsLastSync: document.querySelector("#payments-last-sync"),
+    paymentsCardHolderDetail: document.querySelector("#payments-card-holder-detail"),
+    commercePortfolioCopy: document.querySelector("#commerce-portfolio-copy"),
+    commerceActivePlan: document.querySelector("#commerce-active-plan"),
+    commerceOrderCount: document.querySelector("#commerce-order-count"),
+    commerceOpenOrderCount: document.querySelector("#commerce-open-order-count"),
+    commerceTotalAmount: document.querySelector("#commerce-total-amount"),
+    commerceSelectedHeading: document.querySelector("#commerce-selected-heading"),
+    commerceRefresh: document.querySelector("#commerce-refresh"),
+    commercePlanList: document.querySelector("#commerce-plan-list"),
+    commerceOrderList: document.querySelector("#commerce-order-list"),
+    commerceSourceCopy: document.querySelector("#commerce-source-copy"),
+    commerceSourceLabel: document.querySelector("#commerce-source-label"),
+    commerceSelectedLabel: document.querySelector("#commerce-selected-label"),
+    commerceActiveLabel: document.querySelector("#commerce-active-label"),
+    commerceLastSync: document.querySelector("#commerce-last-sync"),
+    commerceDetail: document.querySelector("#commerce-detail"),
+    commerceMessage: document.querySelector("#commerce-message"),
     featuredMeta: document.querySelector("#featured-meta"),
     featuredTitle: document.querySelector("#featured-title"),
     featuredDescription: document.querySelector("#featured-description"),
@@ -513,6 +1183,8 @@ const state = {
     activeGenre: "All",
     searchTerm: "",
     currentPage: "home",
+    selectedCustomerId: seedBillingAccounts[0]?.id ?? "",
+    selectedCustomerRevision: 0,
     myList: new Set(),
     watchState: {},
     playerUrl: "",
@@ -550,6 +1222,28 @@ const state = {
         selectedInvoiceId: "",
         statusFilter: "ALL",
         overdueOnly: false,
+        lastSyncLabel: "Awaiting sync"
+    },
+    accounts: {
+        source: "locked",
+        customers: [],
+        searchTerm: "",
+        lastSyncLabel: "Awaiting sync"
+    },
+    payments: {
+        source: "locked",
+        cardHolder: null,
+        transactions: [],
+        statusFilter: "ALL",
+        lastSyncLabel: "Awaiting sync"
+    },
+    commerce: {
+        source: "locked",
+        subscriptions: [],
+        activeSubscription: null,
+        orders: [],
+        selectedPlanId: "",
+        selectedOrderId: "",
         lastSyncLabel: "Awaiting sync"
     },
     demoMonkey: defaultDemoMonkeyState()
@@ -704,6 +1398,7 @@ function normalizeItem(item, index) {
         featureLine: item.featureLine ?? fallback.featureLine ?? "Ready to stream",
         channelLabel: item.channelLabel ?? fallback.channelLabel ?? "Prime East",
         programmingTrack: item.programmingTrack ?? fallback.programmingTrack ?? "Programming Desk",
+        lifecycleState: item.lifecycleState ?? fallback.lifecycleState ?? "PUBLISHED",
         readinessLabel: item.readinessLabel ?? fallback.readinessLabel ?? "Ready for review",
         signalProfile: item.signalProfile ?? fallback.signalProfile ?? "1080p house feed",
         genreList: normalizeGenres(item.genreList, fallback.genreList ?? []),
@@ -835,11 +1530,20 @@ function demoMonkeySummaryFromConfig(config) {
     if (config.disconnectAfterKb > 0) {
         effects.push(`connection reset after ${config.disconnectAfterKb} KiB`);
     }
+    if (config.packetLossPercent > 0) {
+        effects.push(`${config.packetLossPercent}% of playback transfers drop before completion`);
+    }
     if (config.playbackFailureEnabled) {
         effects.push("playback responses return HTTP 503");
     }
     if (config.traceMapFailureEnabled) {
         effects.push("trace pivot returns HTTP 503");
+    }
+    if (config.dependencyTimeoutEnabled && config.dependencyTimeoutService) {
+        effects.push(`${formatDemoMonkeyDependencyLabel(config.dependencyTimeoutService)} times out in the trace pivot`);
+    }
+    if (config.dependencyFailureEnabled && config.dependencyFailureService) {
+        effects.push(`${formatDemoMonkeyDependencyLabel(config.dependencyFailureService)} returns HTTP 503 in the trace pivot`);
     }
     if (config.frontendExceptionEnabled) {
         effects.push("browser exception fires on page load");
@@ -867,6 +1571,7 @@ function normalizeDemoMonkeyStatus(payload) {
     const startupDelayMs = Number.parseInt(payload?.startupDelayMs, 10) || 0;
     const throttleKbps = Number.parseInt(payload?.throttleKbps, 10) || 0;
     const disconnectAfterKb = Number.parseInt(payload?.disconnectAfterKb, 10) || 0;
+    const packetLossPercent = Number.parseInt(payload?.packetLossPercent, 10) || 0;
 
     const normalized = {
         enabled,
@@ -874,8 +1579,13 @@ function normalizeDemoMonkeyStatus(payload) {
         startupDelayMs,
         throttleKbps,
         disconnectAfterKb,
+        packetLossPercent,
         playbackFailureEnabled: Boolean(payload?.playbackFailureEnabled),
         traceMapFailureEnabled: Boolean(payload?.traceMapFailureEnabled),
+        dependencyTimeoutEnabled: Boolean(payload?.dependencyTimeoutEnabled),
+        dependencyTimeoutService: String(payload?.dependencyTimeoutService ?? ""),
+        dependencyFailureEnabled: Boolean(payload?.dependencyFailureEnabled),
+        dependencyFailureService: String(payload?.dependencyFailureService ?? ""),
         frontendExceptionEnabled: Boolean(payload?.frontendExceptionEnabled),
         slowAdEnabled: Boolean(payload?.slowAdEnabled),
         adLoadFailureEnabled: Boolean(payload?.adLoadFailureEnabled),
@@ -1027,12 +1737,23 @@ function formatDemoMonkeyPreset(preset) {
         : "Custom";
 }
 
+function formatDemoMonkeyDependencyLabel(serviceName) {
+    const normalized = String(serviceName ?? "").trim().toLowerCase();
+    const match = demoMonkeyDependencyOptions.find((option) => option.value === normalized);
+    return match?.label ?? (normalized ? formatDemoMonkeyPreset(normalized) : "Selected dependency");
+}
+
 function demoMonkeyTone(config = state.demoMonkey) {
     if (!config?.enabled) {
         return "standby";
     }
 
-    if (config.playbackFailureEnabled || config.traceMapFailureEnabled || config.frontendExceptionEnabled) {
+    if (
+        config.playbackFailureEnabled
+        || config.traceMapFailureEnabled
+        || config.dependencyFailureEnabled
+        || config.frontendExceptionEnabled
+    ) {
         return "blocked";
     }
 
@@ -1044,7 +1765,13 @@ function demoMonkeyTone(config = state.demoMonkey) {
         return "blocked";
     }
 
-    if (config.throttleKbps > 0 || config.startupDelayMs > 0 || config.slowAdEnabled) {
+    if (
+        config.throttleKbps > 0
+        || config.startupDelayMs > 0
+        || config.packetLossPercent > 0
+        || config.dependencyTimeoutEnabled
+        || config.slowAdEnabled
+    ) {
         return "risk";
     }
 
@@ -1118,9 +1845,14 @@ function currentRole() {
     return state.session?.role ?? "staff_operator";
 }
 
+function hasRoleCapability(role, capability) {
+    const normalizedRole = String(role ?? "").trim().toLowerCase();
+    const permissions = roleCapabilities[normalizedRole] ?? roleCapabilities.staff_operator;
+    return permissions.includes(capability);
+}
+
 function hasCapability(capability) {
-    const permissions = roleCapabilities[currentRole()] ?? roleCapabilities.staff_operator;
-    return Boolean(state.session) && permissions.includes(capability);
+    return Boolean(state.session) && hasRoleCapability(currentRole(), capability);
 }
 
 function derivePageFromHash(hash = window.location.hash) {
@@ -1129,7 +1861,7 @@ function derivePageFromHash(hash = window.location.hash) {
         .trim()
         .toLowerCase();
 
-    return ["home", "player", "library", "operations", "billing"].includes(page) ? page : "home";
+    return ["home", "player", "library", "operations", "billing", "accounts", "payments", "commerce"].includes(page) ? page : "home";
 }
 
 function pageAvailable(page) {
@@ -1137,11 +1869,44 @@ function pageAvailable(page) {
         return hasCapability("operations");
     }
 
-    if (page === "billing") {
+    if (page === "billing" || page === "accounts" || page === "payments" || page === "commerce") {
         return hasCapability("billing");
     }
 
     return true;
+}
+
+function compactNavigationActive() {
+    return window.matchMedia("(max-width: 1120px)").matches;
+}
+
+function setPrimaryNavigationOpen(open) {
+    const enabled = compactNavigationActive();
+    const nextState = enabled && open;
+
+    document.body.classList.toggle("has-nav-open", nextState);
+    elements.navToggle?.setAttribute("aria-expanded", String(nextState));
+    if (elements.navBackdrop) {
+        elements.navBackdrop.hidden = !nextState;
+    }
+}
+
+function closePrimaryNavigation() {
+    setPrimaryNavigationOpen(false);
+}
+
+function togglePrimaryNavigation() {
+    const isOpen = document.body.classList.contains("has-nav-open");
+    setPrimaryNavigationOpen(!isOpen);
+}
+
+function syncPrimaryNavigation() {
+    if (!compactNavigationActive()) {
+        closePrimaryNavigation();
+        return;
+    }
+
+    elements.navToggle?.setAttribute("aria-expanded", String(document.body.classList.contains("has-nav-open")));
 }
 
 function ensurePageAccess() {
@@ -1155,6 +1920,7 @@ function ensurePageAccess() {
 
 function renderPageNavigation() {
     document.body.dataset.page = state.currentPage;
+    closePrimaryNavigation();
 
     for (const link of elements.navLinks) {
         link.classList.toggle("is-active", link.dataset.pageLink === state.currentPage);
@@ -1198,6 +1964,7 @@ function clearSessionState(removeStorage = true) {
     }
 
     state.session = null;
+    state.selectedCustomerRevision += 1;
     state.myList = new Set();
     state.watchState = {};
     state.playerMeta = null;
@@ -1217,8 +1984,52 @@ function clearSessionState(removeStorage = true) {
         overdueOnly: false,
         lastSyncLabel: "Awaiting sync"
     };
+    state.selectedCustomerId = seedBillingAccounts[0]?.id ?? "";
+    state.accounts = {
+        source: "locked",
+        customers: [],
+        searchTerm: "",
+        lastSyncLabel: "Awaiting sync"
+    };
+    state.payments = {
+        source: "locked",
+        cardHolder: null,
+        transactions: [],
+        statusFilter: "ALL",
+        lastSyncLabel: "Awaiting sync"
+    };
+    state.commerce = {
+        source: "locked",
+        subscriptions: [],
+        activeSubscription: null,
+        orders: [],
+        selectedPlanId: "",
+        selectedOrderId: "",
+        lastSyncLabel: "Awaiting sync"
+    };
     stopRtspPolling();
     setLaunchMessage("", false);
+    setCommerceMessage("", false);
+}
+
+function expireCurrentSession(message = "Your session expired. Sign in again to continue.") {
+    clearSessionState(true);
+    state.catalogSource = "locked";
+    state.library = buildLibrary([]);
+    showAuthMessage(message, true);
+    syncSelection();
+    hydratePlayerForCurrentSelection();
+    renderLayout();
+}
+
+function restrictBillingAccess(message = "Live billing access is not available for this session.") {
+    state.billing.source = "access_denied";
+    state.billing.invoices = [];
+    state.billing.selectedAccountId = "all";
+    state.billing.selectedInvoiceId = "";
+    state.billing.lastSyncLabel = `Access denied ${formatClock(new Date())}`;
+    setBillingFormMessage(message, true);
+    renderLayout();
 }
 
 function setRtspFormMessage(message, isError = false) {
@@ -1239,6 +2050,21 @@ function setDemoMonkeyMessage(message, isError = false) {
 function setBillingFormMessage(message, isError = false) {
     elements.billingFormMessage.textContent = message;
     elements.billingFormMessage.dataset.state = isError ? "error" : "success";
+}
+
+function setCommerceMessage(message, isError = false) {
+    elements.commerceMessage.textContent = message;
+    elements.commerceMessage.dataset.state = isError ? "error" : "success";
+}
+
+function setFormControlsDisabled(formElement, disabled) {
+    if (!formElement) {
+        return;
+    }
+
+    for (const control of formElement.querySelectorAll("input, select, button[type='submit'], button[type='button']")) {
+        control.disabled = disabled;
+    }
 }
 
 function stopRtspPolling() {
@@ -1583,6 +2409,394 @@ function billingAccountDirectory() {
     return [...accounts.values()];
 }
 
+function normalizeCustomer(customer, index = 0) {
+    const id = String(customer?.id ?? seedBillingAccounts[index % seedBillingAccounts.length]?.id ?? createClientId(`customer-${index}`));
+    const account = billingAccountInfo(id);
+
+    return {
+        id,
+        theme: customer?.theme ?? "studio",
+        email: String(customer?.email ?? account.contact ?? ""),
+        birthDate: customer?.birthDate ?? null,
+        country: customer?.country ?? "United States",
+        username: customer?.username ?? account.label.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+        profilePicture: customer?.profilePicture ?? "",
+        preferredLanguage: customer?.preferredLanguage ?? "en-US",
+        isEmailVerified: Boolean(customer?.isEmailVerified),
+        receiveNewsletter: Boolean(customer?.receiveNewsletter),
+        enableNotifications: Boolean(customer?.enableNotifications),
+        createdAt: customer?.createdAt ?? isoStampFromOffset(-48 * (index + 1)),
+        updatedAt: customer?.updatedAt ?? customer?.createdAt ?? isoStampFromOffset(-6 * (index + 1)),
+        label: account.label,
+        desk: account.desk,
+        contact: String(customer?.email ?? account.contact ?? "")
+    };
+}
+
+function normalizeCardHolder(cardHolder, fallbackUserId = state.selectedCustomerId) {
+    if (!cardHolder) {
+        return null;
+    }
+
+    const id = String(cardHolder.id ?? fallbackUserId ?? "");
+    const account = billingAccountInfo(id);
+    const address = cardHolder.address ?? {};
+
+    return {
+        id,
+        stripeCustomerId: cardHolder.stripeCustomerId ?? "",
+        cardHolderName: cardHolder.cardHolderName ?? account.label,
+        phoneNumber: cardHolder.phoneNumber ?? "No phone on file",
+        email: cardHolder.email ?? account.contact,
+        address: {
+            line1: address.line1 ?? "No address on file",
+            line2: address.line2 ?? "",
+            city: address.city ?? "Unknown city",
+            postalCode: address.postalCode ?? "Unknown",
+            state: address.state ?? "Unknown",
+            country: address.country ?? "Unknown"
+        }
+    };
+}
+
+function normalizePaymentTransaction(transaction, index = 0) {
+    return {
+        id: String(transaction?.id ?? createClientId(`payment-${index}`)),
+        orderId: String(transaction?.orderId ?? ""),
+        userId: String(transaction?.userId ?? state.selectedCustomerId ?? ""),
+        currency: String(transaction?.currency ?? "USD").toUpperCase(),
+        amount: Number(transaction?.amount ?? 0),
+        failureMessage: transaction?.failureMessage ?? "",
+        paymentStatus: String(transaction?.paymentStatus ?? "PENDING").toUpperCase(),
+        createdAt: transaction?.createdAt ?? isoStampFromOffset(-12 * (index + 1))
+    };
+}
+
+function normalizeSubscriptionPlan(subscription, index = 0) {
+    return {
+        id: String(subscription?.id ?? createClientId(`plan-${index}`)),
+        name: subscription?.name ?? `Plan ${index + 1}`,
+        description: subscription?.description ?? "No plan description is available.",
+        allowedActiveSessions: Number.parseInt(subscription?.allowedActiveSessions, 10) || 1,
+        durationInDays: Number.parseInt(subscription?.durationInDays, 10) || 30,
+        resolutions: Array.isArray(subscription?.resolutions)
+            ? subscription.resolutions.map((resolution) => resolution?.name ?? resolution?.label ?? String(resolution ?? "")).filter(Boolean)
+            : [],
+        price: Number(subscription?.price ?? 0),
+        isTemporary: Boolean(subscription?.isTemporary),
+        nextSubscriptionId: subscription?.nextSubscriptionId ?? null,
+        updatedAt: subscription?.updatedAt ?? isoStampFromOffset(-24 * (index + 1)),
+        recordStatus: String(subscription?.recordStatus ?? "ACTIVE").toUpperCase(),
+        createdAt: subscription?.createdAt ?? isoStampFromOffset(-96 * (index + 1))
+    };
+}
+
+function normalizeUserSubscription(subscription) {
+    if (!subscription) {
+        return null;
+    }
+
+    return {
+        id: String(subscription.id ?? createClientId("user-subscription")),
+        userId: String(subscription.userId ?? state.selectedCustomerId ?? ""),
+        orderId: String(subscription.orderId ?? ""),
+        subscription: normalizeSubscriptionPlan(subscription.subscription ?? {}, 0),
+        startDate: subscription.startDate ?? isoDateFromOffset(0),
+        endDate: subscription.endDate ?? isoDateFromOffset(30),
+        status: String(subscription.status ?? "ACTIVE").toUpperCase()
+    };
+}
+
+function normalizeCommerceOrder(order, index = 0) {
+    return {
+        id: String(order?.id ?? createClientId(`order-${index}`)),
+        customerId: String(order?.customerId ?? order?.userId ?? state.selectedCustomerId ?? ""),
+        amount: Number(order?.amount ?? order?.price ?? 0),
+        subscriptionId: String(order?.subscriptionId ?? ""),
+        orderDate: order?.orderDate ?? order?.createdAt ?? isoStampFromOffset(-18 * (index + 1)),
+        orderStatus: String(order?.orderStatus ?? "CREATED").toUpperCase()
+    };
+}
+
+function readSeedPreviewOrders() {
+    const stored = readJson(scopedKey("commerceSeedOrders"), null);
+    if (Array.isArray(stored) && stored.length) {
+        return stored.map((order, index) => normalizeCommerceOrder(order, index));
+    }
+
+    const seeded = seedPreviewOrders.map((order, index) => normalizeCommerceOrder(order, index));
+    if (state.session) {
+        writeJson(scopedKey("commerceSeedOrders"), seeded);
+    }
+    return seeded;
+}
+
+function persistSeedPreviewOrders() {
+    if (state.session) {
+        writeJson(scopedKey("commerceSeedOrders"), state.commerce.orders);
+    }
+}
+
+function readSeedPreviewActiveSubscriptions() {
+    const stored = readJson(scopedKey("commerceSeedActiveSubscriptions"), null);
+    if (Array.isArray(stored) && stored.length) {
+        return stored.map((subscription) => normalizeUserSubscription(subscription));
+    }
+
+    const seeded = seedPreviewActiveSubscriptions.map((subscription) => normalizeUserSubscription(subscription));
+    if (state.session) {
+        writeJson(scopedKey("commerceSeedActiveSubscriptions"), seeded);
+    }
+    return seeded;
+}
+
+function persistSeedPreviewActiveSubscriptions(activeSubscriptions) {
+    if (state.session) {
+        writeJson(scopedKey("commerceSeedActiveSubscriptions"), activeSubscriptions);
+    }
+}
+
+function availableCustomerIds() {
+    const ids = new Set(seedBillingAccounts.map((account) => account.id));
+    for (const customer of state.accounts.customers) {
+        ids.add(customer.id);
+    }
+    for (const invoice of state.billing.invoices) {
+        ids.add(invoice.userId);
+    }
+    for (const transaction of state.payments.transactions) {
+        ids.add(transaction.userId);
+    }
+    for (const order of state.commerce.orders) {
+        ids.add(order.customerId);
+    }
+    if (state.payments.cardHolder?.id) {
+        ids.add(state.payments.cardHolder.id);
+    }
+    return [...ids].filter(Boolean);
+}
+
+function setSelectedCustomerId(customerId) {
+    const normalizedId = String(customerId ?? "").trim();
+    const nextId = normalizedId || "";
+    if (state.selectedCustomerId !== nextId) {
+        state.selectedCustomerRevision += 1;
+    }
+    state.selectedCustomerId = nextId;
+}
+
+function ensureSelectedCustomer() {
+    const availableIds = availableCustomerIds();
+    if (!availableIds.length) {
+        setSelectedCustomerId("");
+        return;
+    }
+
+    if (!availableIds.includes(state.selectedCustomerId)) {
+        setSelectedCustomerId(availableIds[0]);
+    }
+}
+
+function applySelectedCustomer(customerId, { syncBillingFilter = false } = {}) {
+    const normalizedId = String(customerId ?? "").trim();
+    if (!normalizedId) {
+        return;
+    }
+
+    setSelectedCustomerId(normalizedId);
+    if (syncBillingFilter) {
+        state.billing.selectedAccountId = normalizedId;
+    }
+}
+
+function customerWorkspaceRequestStale(customerId, selectionRevision, sessionEmail) {
+    return !state.session
+        || (state.session?.email ?? "") !== sessionEmail
+        || state.selectedCustomerRevision !== selectionRevision
+        || state.selectedCustomerId !== customerId;
+}
+
+function customerProfileInfo(userId) {
+    const normalizedId = String(userId ?? "").trim();
+    const liveCustomer = state.accounts.customers.find((customer) => customer.id === normalizedId);
+    if (liveCustomer) {
+        return liveCustomer;
+    }
+
+    const seededCustomer = seedCustomerProfiles.find((customer) => customer.id === normalizedId);
+    if (seededCustomer) {
+        return normalizeCustomer(seededCustomer);
+    }
+
+    return normalizeCustomer({
+        id: normalizedId,
+        email: billingAccountInfo(normalizedId).contact,
+        username: billingAccountInfo(normalizedId).label.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+        country: "Unknown"
+    });
+}
+
+function selectedCustomerProfile() {
+    ensureSelectedCustomer();
+    return customerProfileInfo(state.selectedCustomerId || seedBillingAccounts[0]?.id);
+}
+
+function accountsDirectory() {
+    const customers = state.accounts.customers.length
+        ? state.accounts.customers
+        : seedCustomerProfiles.map((customer, index) => normalizeCustomer(customer, index));
+    const directory = new Map(customers.map((customer) => [customer.id, customer]));
+
+    for (const account of billingAccountDirectory()) {
+        if (!directory.has(account.id)) {
+            directory.set(account.id, normalizeCustomer({
+                id: account.id,
+                email: account.contact,
+                username: account.label.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+                country: "Unknown"
+            }));
+        }
+    }
+
+    return [...directory.values()];
+}
+
+function filteredAccountsDirectory() {
+    const search = state.accounts.searchTerm.trim().toLowerCase();
+    const customers = accountsDirectory();
+    if (!search) {
+        return customers;
+    }
+
+    return customers.filter((customer) =>
+        [customer.label, customer.username, customer.email, customer.country]
+            .filter(Boolean)
+            .some((value) => String(value).toLowerCase().includes(search))
+    );
+}
+
+function paymentStatusTone(status) {
+    switch (String(status ?? "").toUpperCase()) {
+        case "SUCCESS":
+            return "ready";
+        case "PENDING":
+            return "standby";
+        case "REFUNDED":
+            return "risk";
+        default:
+            return "blocked";
+    }
+}
+
+function orderStatusTone(status) {
+    switch (String(status ?? "").toUpperCase()) {
+        case "PAID":
+        case "COMPLETED":
+            return "ready";
+        case "SCHEDULED":
+            return "standby";
+        case "CREATED":
+            return "risk";
+        case "PAYMENT_FAILED":
+        case "CANCELLED":
+            return "blocked";
+        default:
+            return "standby";
+    }
+}
+
+function formatEnumLabel(value, fallback = "Unknown") {
+    const normalized = String(value ?? "").trim();
+    if (!normalized) {
+        return fallback;
+    }
+
+    return normalized.replaceAll("_", " ");
+}
+
+function filteredPaymentTransactions() {
+    return state.payments.transactions
+        .filter((transaction) => {
+            if (transaction.userId !== state.selectedCustomerId) {
+                return false;
+            }
+            if (state.payments.statusFilter !== "ALL" && transaction.paymentStatus !== state.payments.statusFilter) {
+                return false;
+            }
+            return true;
+        })
+        .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
+}
+
+function ensureCommerceSelection() {
+    const selectedPlanExists = state.commerce.subscriptions.some((plan) => plan.id === state.commerce.selectedPlanId);
+    if (!selectedPlanExists) {
+        state.commerce.selectedPlanId = state.commerce.subscriptions[0]?.id ?? "";
+    }
+
+    const selectedOrderExists = state.commerce.orders.some((order) => order.id === state.commerce.selectedOrderId);
+    if (!selectedOrderExists) {
+        state.commerce.selectedOrderId = state.commerce.orders[0]?.id ?? "";
+    }
+}
+
+function selectedCommercePlan() {
+    return state.commerce.subscriptions.find((plan) => plan.id === state.commerce.selectedPlanId) ?? null;
+}
+
+function selectedCommerceOrder() {
+    return state.commerce.orders.find((order) => order.id === state.commerce.selectedOrderId) ?? null;
+}
+
+function sortCommerceOrders(orders) {
+    return [...orders].sort((left, right) => String(right.orderDate).localeCompare(String(left.orderDate)));
+}
+
+function commercePlanLabel(subscription) {
+    return subscription?.subscription?.name
+        ?? selectedCommercePlan()?.name
+        ?? "No active plan";
+}
+
+function accountsSourceLabel() {
+    switch (state.accounts.source) {
+        case "live":
+            return "Live customer directory";
+        case "seed":
+            return "Seeded account preview";
+        case "restricted":
+            return "Role restricted";
+        default:
+            return "Awaiting account access";
+    }
+}
+
+function paymentsSourceLabel() {
+    switch (state.payments.source) {
+        case "live":
+            return "Live payment history";
+        case "seed":
+            return "Seeded payment preview";
+        case "restricted":
+            return "Role restricted";
+        default:
+            return "Awaiting payment access";
+    }
+}
+
+function commerceSourceLabel() {
+    switch (state.commerce.source) {
+        case "live":
+            return "Live commerce state";
+        case "seed":
+            return "Seeded commerce preview";
+        case "restricted":
+            return "Role restricted";
+        default:
+            return "Awaiting commerce access";
+    }
+}
+
 function deriveBillingStatus(invoice) {
     const currentStatus = String(invoice?.status ?? "OPEN").toUpperCase();
     if (currentStatus === "PAID" || currentStatus === "VOID" || currentStatus === "DRAFT") {
@@ -1860,6 +3074,8 @@ function billingSourceLabel() {
             return "Live billing ledger";
         case "seed":
             return "Seeded billing preview";
+        case "access_denied":
+            return "Access denied";
         case "restricted":
             return "Role restricted";
         default:
@@ -1966,6 +3182,7 @@ function serviceWallEntries() {
     const authHealth = state.serviceHealth.auth;
     const adHealth = state.serviceHealth.ads;
     const billingHealth = state.serviceHealth.billing;
+    const billingDenied = state.billing.source === "access_denied";
     const billingSummary = deriveBillingSummary(state.billing.invoices);
     const demoMonkeyHealth = demoMonkeyTone();
     const adStatus = state.broadcast.adStatus ?? defaultAdStatus();
@@ -2050,20 +3267,26 @@ function serviceWallEntries() {
             label: "Billing ledger",
             status: billingHealth === "ready"
                 ? hasCapability("billing")
-                    ? state.billing.source === "live" ? "ready" : "risk"
+                    ? billingDenied
+                        ? "locked"
+                        : state.billing.source === "live" ? "ready" : "risk"
                     : "locked"
                 : billingHealth,
             headline: hasCapability("billing")
-                ? state.billing.source === "live"
-                    ? `${pluralize(billingSummary.openCount + billingSummary.pastDueCount, "invoice")} active`
-                    : "Seeded finance preview"
+                ? billingDenied
+                    ? "Live access denied"
+                    : state.billing.source === "live"
+                        ? `${pluralize(billingSummary.openCount + billingSummary.pastDueCount, "invoice")} active`
+                        : "Seeded finance preview"
                 : billingHealth === "ready"
                     ? "Restricted desk"
                     : "Unavailable",
             detail: hasCapability("billing")
-                ? state.billing.source === "live"
-                    ? `${formatMoney(billingSummary.totalOutstanding, billingSummary.currency)} remains outstanding across the live ledger.`
-                    : "The finance UI is available, but it is currently showing seeded data until the live billing service is reachable."
+                ? billingDenied
+                    ? "The current session can no longer read the live billing ledger. Sign in again with a finance-capable role."
+                    : state.billing.source === "live"
+                        ? `${formatMoney(billingSummary.totalOutstanding, billingSummary.currency)} remains outstanding across the live ledger.`
+                        : "The finance UI is available, but it is currently showing seeded data until the live billing service is reachable."
                 : billingHealth === "ready"
                     ? "Billing health is visible, but invoice tooling is limited to finance and executive roles."
                     : "The billing health endpoint did not pass a probe."
@@ -2199,7 +3422,7 @@ function renderFeatured() {
         ...continueWatchingItems().map((candidate) => candidate.id)
     ]).size;
     const resumeProgress = progressPercent(item.id);
-    const spotlightTags = [item.channelLabel, item.programmingTrack, item.readinessLabel];
+    const spotlightTags = [item.channelLabel, item.programmingTrack, item.lifecycleState ?? item.readinessLabel];
     spotlightTags.push(resumeProgress > 4 && resumeProgress < 98 ? `Resume ${formatPercent(resumeProgress)}` : item.signalProfile);
 
     elements.featuredMeta.innerHTML = renderTags([item.channelLabel, item.programmingTrack, item.type, item.year, item.runtimeLabel]);
@@ -2217,7 +3440,12 @@ function renderFeatured() {
     elements.myListCount.textContent = state.myList.size ? `${state.myList.size} staged` : "Queue clear";
     elements.selectedTitleLabel.textContent = item.title;
     elements.savedCountLabel.textContent = `${state.myList.size} staged`;
-    elements.saveFeatured.textContent = state.myList.has(item.id) ? "Staged" : "Stage for desk";
+    elements.playFeatured.textContent = state.session ? "Route to screening" : "Sign in to screen";
+    elements.playFeatured.disabled = false;
+    elements.saveFeatured.textContent = !state.session
+        ? "Sign in to stage"
+        : state.myList.has(item.id) ? "Staged" : "Stage for desk";
+    elements.saveFeatured.disabled = !state.session;
     elements.heroReadyCount.textContent = `${lineup.length}`;
     elements.heroActiveCount.textContent = `${liveFeeds}`;
     elements.heroQueueCount.textContent = `${stagedReviewCount}`;
@@ -2228,6 +3456,7 @@ function renderPlayerMeta() {
     const record = watchRecord(activeItem?.id);
     const badgeList = activeItem?.badges
         ?? (activeItem ? [activeItem.channelLabel, activeItem.signalProfile, activeItem.ageRating, activeItem.runtimeLabel] : runtimeConfig.demoMovieBadges ?? ["House asset"]);
+    const manualLoadSubmit = elements.playerForm.querySelector("button[type='submit']");
 
     elements.movieTitle.textContent = activeItem?.title ?? runtimeConfig.demoMovieTitle ?? "Operator Screening";
     elements.movieDescription.textContent = activeItem?.description ?? runtimeConfig.demoMovieDescription ?? "Select an asset to begin screening playback.";
@@ -2242,6 +3471,11 @@ function renderPlayerMeta() {
     }
 
     elements.playerUrl.value = state.playerUrl;
+    elements.playerUrl.disabled = !state.session;
+    elements.loadDemo.disabled = !state.session;
+    if (manualLoadSubmit) {
+        manualLoadSubmit.disabled = !state.session;
+    }
 }
 
 function renderMyListPreview() {
@@ -2288,10 +3522,12 @@ function renderGenreChips() {
 
 function cardMarkup(item) {
     const progress = progressPercent(item.id);
-    const primaryLabel = progress > 4 && progress < 98 ? "Resume" : "Route";
+    const primaryLabel = state.session
+        ? progress > 4 && progress < 98 ? "Resume" : "Route"
+        : "Sign in";
     const isSaved = state.myList.has(item.id);
     const isSelected = item.id === state.selectedId;
-    const badges = [item.channelLabel, item.readinessLabel, item.ageRating];
+    const badges = [item.channelLabel, item.lifecycleState ?? item.readinessLabel, item.ageRating];
 
     return `
         <article class="media-card ${isSelected ? "is-selected" : ""}" data-id="${escapeAttribute(item.id)}">
@@ -2299,7 +3535,7 @@ function cardMarkup(item) {
                 <div class="media-topline">${escapeHtml(isSelected ? "Desk focus" : item.programmingTrack ?? item.headline)}</div>
                 <div class="media-actions">
                     <button class="media-button is-primary" type="button" data-action="play" data-id="${escapeAttribute(item.id)}">${primaryLabel}</button>
-                    <button class="media-button" type="button" data-action="toggle-list" data-id="${escapeAttribute(item.id)}">${isSaved ? "Queued" : "Queue"}</button>
+                    <button class="media-button" type="button" data-action="toggle-list" data-id="${escapeAttribute(item.id)}" ${state.session ? "" : "disabled"}>${isSaved ? "Queued" : "Queue"}</button>
                 </div>
             </div>
 
@@ -2423,20 +3659,26 @@ function renderOperationsBoard() {
 
 function renderAdIssueConsole() {
     const current = state.adIssue ?? defaultAdIssueState();
+    const writable = hasCapability("governance");
     elements.adIssueSummary.textContent = current.summary;
     elements.adIssuePreset.value = current.preset || "clear";
     elements.adIssueDelay.value = String(current.responseDelayMs || 0);
     elements.adIssueEnabled.checked = current.enabled;
     elements.adIssueFailLoad.checked = current.adLoadFailureEnabled;
-    elements.adIssueApply.disabled = !state.session;
-    elements.adIssueClear.disabled = !state.session || !current.enabled;
+    setFormControlsDisabled(elements.adIssueForm, !writable);
+    elements.adIssueApply.disabled = !writable;
+    elements.adIssueClear.disabled = !writable || !current.enabled;
 }
 
 function renderDemoMonkeyConsole() {
     const presetLabel = formatDemoMonkeyPreset(state.demoMonkey.preset);
+    const writable = hasCapability("governance");
     const startupDelayValue = state.demoMonkey.startupDelayMs || Number.parseInt(elements.demoMonkeyLatencyValue.value, 10) || 2500;
     const throttleValue = state.demoMonkey.throttleKbps || Number.parseInt(elements.demoMonkeyThrottleValue.value, 10) || 768;
     const disconnectValue = state.demoMonkey.disconnectAfterKb || Number.parseInt(elements.demoMonkeyDisconnectValue.value, 10) || 384;
+    const packetLossValue = state.demoMonkey.packetLossPercent || Number.parseInt(elements.demoMonkeyPacketLossValue.value, 10) || 20;
+    const dependencyTimeoutService = state.demoMonkey.dependencyTimeoutService || elements.demoMonkeyDependencyTimeoutService.value || defaultDemoMonkeyDependencyService;
+    const dependencyFailureService = state.demoMonkey.dependencyFailureService || elements.demoMonkeyDependencyFailureService.value || defaultDemoMonkeyDependencyService;
 
     elements.demoMonkeyStatus.textContent = state.demoMonkey.enabled ? `${presetLabel} active` : "Bypassed";
     elements.demoMonkeySummary.textContent = state.demoMonkey.summary;
@@ -2453,14 +3695,21 @@ function renderDemoMonkeyConsole() {
     elements.demoMonkeyThrottleValue.value = String(throttleValue);
     elements.demoMonkeyDisconnectEnabled.checked = state.demoMonkey.disconnectAfterKb > 0;
     elements.demoMonkeyDisconnectValue.value = String(disconnectValue);
+    elements.demoMonkeyPacketLossEnabled.checked = state.demoMonkey.packetLossPercent > 0;
+    elements.demoMonkeyPacketLossValue.value = String(packetLossValue);
     elements.demoMonkeyPlaybackFailureEnabled.checked = state.demoMonkey.playbackFailureEnabled;
     elements.demoMonkeyTraceMapFailureEnabled.checked = state.demoMonkey.traceMapFailureEnabled;
+    elements.demoMonkeyDependencyTimeoutEnabled.checked = state.demoMonkey.dependencyTimeoutEnabled;
+    elements.demoMonkeyDependencyTimeoutService.value = dependencyTimeoutService;
+    elements.demoMonkeyDependencyFailureEnabled.checked = state.demoMonkey.dependencyFailureEnabled;
+    elements.demoMonkeyDependencyFailureService.value = dependencyFailureService;
     elements.demoMonkeyFrontendExceptionEnabled.checked = state.demoMonkey.frontendExceptionEnabled;
     elements.demoMonkeySlowAdEnabled.checked = state.demoMonkey.slowAdEnabled;
     elements.demoMonkeyAdLoadFailureEnabled.checked = state.demoMonkey.adLoadFailureEnabled;
 
-    elements.demoMonkeyApply.disabled = !state.session;
-    elements.demoMonkeyDisable.disabled = !state.session || !state.demoMonkey.enabled;
+    setFormControlsDisabled(elements.demoMonkeyForm, !writable);
+    elements.demoMonkeyApply.disabled = !writable;
+    elements.demoMonkeyDisable.disabled = !writable || !state.demoMonkey.enabled;
 
     for (const button of elements.demoMonkeyPresets.querySelectorAll("[data-preset]")) {
         button.classList.toggle("is-active", button.dataset.preset === state.demoMonkey.preset);
@@ -2560,7 +3809,7 @@ function renderBroadcastDeck() {
                 </div>
                 <p class="channel-note">${escapeHtml(channel.note)}</p>
                 <div class="media-actions">
-                    <button class="media-button is-primary" type="button" data-action="play" data-id="${escapeAttribute(channel.now?.id ?? "")}">Open screening</button>
+                    <button class="media-button is-primary" type="button" data-action="play" data-id="${escapeAttribute(channel.now?.id ?? "")}">${state.session ? "Open screening" : "Sign in"}</button>
                     <button class="media-button" type="button" data-action="select" data-id="${escapeAttribute(channel.now?.id ?? "")}">Inspect asset</button>
                 </div>
             </article>
@@ -2586,7 +3835,7 @@ function renderBroadcastDeck() {
                     data-description="${escapeAttribute(slot.metaDescription ?? slot.detail ?? "Queued playback source.")}"
                     data-kind="${escapeAttribute(slot.metaKind ?? "queue")}"
                     data-status="${escapeAttribute(slot.status ?? "queued")}"
-                    ${slot.routeable === false ? "disabled" : ""}>${escapeHtml(slot.routeLabel ?? "Route")}</button>
+                    ${slot.routeable === false ? "disabled" : ""}>${escapeHtml(!state.session && slot.routeable !== false ? "Sign in" : slot.routeLabel ?? "Route")}</button>
             </article>
         `).join("")
         : `<div class="compact-empty">Load the catalog to populate the desk rundown.</div>`;
@@ -2690,8 +3939,10 @@ function renderBillingSelectOptions(selectElement, accounts, { includeAll = fals
 }
 
 function renderBillingConsole() {
-    const accessible = hasCapability("billing");
-    const writeAccess = hasCapability("billing_write");
+    const hasBillingCapability = hasCapability("billing");
+    const billingDenied = state.billing.source === "access_denied";
+    const accessible = hasBillingCapability && !billingDenied;
+    const writeAccess = accessible && hasCapability("billing_write");
     const accounts = billingAccountDirectory();
     const filteredInvoices = filteredBillingInvoices();
     const scopedInvoices = state.billing.selectedAccountId === "all"
@@ -2703,27 +3954,31 @@ function renderBillingConsole() {
 
     elements.billingPortfolioCopy.textContent = !state.session
         ? "Sign in with a finance-capable role to open the invoice desk."
-        : !accessible
+        : !hasBillingCapability
             ? "This role can work in master control, but revenue operations are restricted."
+            : billingDenied
+                ? "This session can no longer access the live billing ledger. Sign in again with a finance-capable role."
             : state.billing.source === "live"
                 ? `${pluralize(summary.invoiceCount, "invoice")} are in the current billing slice, with ${formatMoney(summary.totalOutstanding, summary.currency)} still outstanding.`
                 : "The finance console is active in preview mode and will switch to the live billing ledger when the backend is reachable.";
     elements.billingTotalOutstanding.textContent = accessible
         ? formatMoney(summary.totalOutstanding, summary.currency)
-        : "Restricted";
-    elements.billingOpenCount.textContent = accessible ? `${summary.openCount}` : "Restricted";
-    elements.billingPastDueCount.textContent = accessible ? `${summary.pastDueCount}` : "Restricted";
+        : billingDenied ? "Access lost" : "Restricted";
+    elements.billingOpenCount.textContent = accessible ? `${summary.openCount}` : billingDenied ? "Access lost" : "Restricted";
+    elements.billingPastDueCount.textContent = accessible ? `${summary.pastDueCount}` : billingDenied ? "Access lost" : "Restricted";
     elements.billingNextDueDate.textContent = accessible
         ? formatDateLabel(summary.nextDueDate)
-        : "Restricted";
+        : billingDenied ? "Access lost" : "Restricted";
     elements.billingSourceCopy.textContent = accessible
         ? state.billing.source === "live"
             ? "Live invoice data is connected through the billing microservice."
             : "Seeded invoice data is standing in until the live billing service is available."
-        : "Finance-specific detail is hidden for roles outside billing and executive access.";
+        : billingDenied
+            ? "The billing backend rejected this session, so invoice data and write actions are locked until you sign in again."
+            : "Finance-specific detail is hidden for roles outside billing and executive access.";
     elements.billingSourceLabel.textContent = billingSourceLabel();
     elements.billingHealthLabel.textContent = billingHealth === "ready"
-        ? state.billing.source === "live" ? "Connected" : "Preview only"
+        ? state.billing.source === "live" ? "Connected" : billingDenied ? "Access denied" : "Preview only"
         : surfaceToneLabel(billingHealth);
     elements.billingSelectedLabel.textContent = selectedInvoice ? selectedInvoice.invoiceNumber : "No invoice selected";
     elements.billingLastSync.textContent = state.billing.lastSyncLabel;
@@ -2754,8 +4009,8 @@ function renderBillingConsole() {
     elements.billingCreateSubmit.disabled = !writeAccess;
 
     if (!accessible) {
-        elements.billingInvoiceList.innerHTML = `<div class="compact-empty">Revenue Ops is available to finance, executive, and platform roles.</div>`;
-        elements.billingDetail.innerHTML = `<div class="compact-empty">Ask for finance access if you need invoice status, account exposure, or payment follow-up.</div>`;
+        elements.billingInvoiceList.innerHTML = `<div class="compact-empty">${billingDenied ? "Live billing access is not available for this session. Sign in again with a finance-capable role." : "Revenue Ops is available to finance, executive, and platform roles."}</div>`;
+        elements.billingDetail.innerHTML = `<div class="compact-empty">${billingDenied ? "The live ledger denied this session, so invoice detail and write actions are locked until you reauthenticate." : "Ask for finance access if you need invoice status, account exposure, or payment follow-up."}</div>`;
         return;
     }
 
@@ -2868,6 +4123,380 @@ function renderBillingConsole() {
     `;
 }
 
+function renderAccountsConsole() {
+    const accessible = Boolean(state.session) && hasCapability("billing");
+    const selectedCustomer = selectedCustomerProfile();
+    const directory = filteredAccountsDirectory();
+    const allCustomers = accountsDirectory();
+
+    elements.accountsPortfolioCopy.textContent = !state.session
+        ? "Sign in with a finance-capable role to open the customer directory."
+        : !hasCapability("billing")
+            ? "This role can see the suite, but customer account context is reserved for revenue and executive views."
+            : state.accounts.source === "live"
+                ? `${pluralize(allCustomers.length, "customer")} are available in the live directory for account follow-up and billing context.`
+                : "The account workspace is running on seeded preview data until the live customer directory is reachable.";
+    elements.accountsTotalCount.textContent = accessible ? `${allCustomers.length}` : "Restricted";
+    elements.accountsVerifiedCount.textContent = accessible
+        ? `${allCustomers.filter((customer) => customer.isEmailVerified).length}`
+        : "Restricted";
+    elements.accountsNewsletterCount.textContent = accessible
+        ? `${allCustomers.filter((customer) => customer.receiveNewsletter).length}`
+        : "Restricted";
+    elements.accountsSelectedCountry.textContent = accessible ? (selectedCustomer.country || "Unknown") : "Restricted";
+    elements.accountsSearch.value = state.accounts.searchTerm;
+    elements.accountsRefresh.disabled = !accessible;
+    elements.accountsSourceCopy.textContent = accessible
+        ? state.accounts.source === "live"
+            ? "Customer data is coming from customer-service and remains aligned with the selected finance account."
+            : "Seeded customer profiles are active so the account workflow still reads like a live demo."
+        : "Account detail is hidden until a finance-capable role opens the customer workspace.";
+    elements.accountsSourceLabel.textContent = accountsSourceLabel();
+    elements.accountsSelectedLabel.textContent = accessible ? selectedCustomer.label : "Restricted";
+    elements.accountsContactLabel.textContent = accessible ? (selectedCustomer.contact || "No contact on file") : "Restricted";
+    elements.accountsLastSync.textContent = state.accounts.lastSyncLabel;
+
+    if (!accessible) {
+        elements.accountsList.innerHTML = `<div class="compact-empty">Account Directory is available to finance, executive, and platform roles.</div>`;
+        elements.accountsDetail.innerHTML = `<div class="compact-empty">Sign in with a billing-capable role to inspect customer profile detail.</div>`;
+        return;
+    }
+
+    if (!directory.length) {
+        elements.accountsList.innerHTML = `<div class="compact-empty">No customers match the current search.</div>`;
+    } else {
+        elements.accountsList.innerHTML = directory.map((customer) => `
+            <article class="invoice-card ${customer.id === state.selectedCustomerId ? "is-selected" : ""}" data-customer-id="${escapeAttribute(customer.id)}">
+                <div class="invoice-topline">
+                    <div>
+                        <strong>${escapeHtml(customer.label)}</strong>
+                        <span>${escapeHtml(customer.username)} · ${escapeHtml(customer.country || "Unknown region")}</span>
+                    </div>
+                    <span class="status-pill ${surfaceToneClass(customer.isEmailVerified ? "ready" : "risk")}">${escapeHtml(customer.isEmailVerified ? "Verified" : "Pending")}</span>
+                </div>
+                <div class="invoice-meta">
+                    <span>${escapeHtml(customer.theme || "default theme")}</span>
+                    <span>${escapeHtml(customer.preferredLanguage || "en-US")}</span>
+                    <span>${escapeHtml(customer.enableNotifications ? "Notifications on" : "Notifications muted")}</span>
+                </div>
+                <p>${escapeHtml(customer.email || "No email on file")}</p>
+            </article>
+        `).join("");
+    }
+
+    elements.accountsDetail.innerHTML = `
+        <article class="billing-detail-card">
+            <div class="invoice-topline">
+                <div>
+                    <strong>${escapeHtml(selectedCustomer.label)}</strong>
+                    <span>${escapeHtml(selectedCustomer.username)} · ${escapeHtml(selectedCustomer.country || "Unknown region")}</span>
+                </div>
+                <span class="status-pill ${surfaceToneClass(selectedCustomer.isEmailVerified ? "ready" : "risk")}">${escapeHtml(selectedCustomer.isEmailVerified ? "Verified" : "Needs verification")}</span>
+            </div>
+
+            <div class="invoice-summary-grid">
+                <div>
+                    <span>Email</span>
+                    <strong>${escapeHtml(selectedCustomer.email || "No email on file")}</strong>
+                </div>
+                <div>
+                    <span>Desk</span>
+                    <strong>${escapeHtml(selectedCustomer.desk || "External account")}</strong>
+                </div>
+                <div>
+                    <span>Language</span>
+                    <strong>${escapeHtml(selectedCustomer.preferredLanguage || "en-US")}</strong>
+                </div>
+                <div>
+                    <span>Theme</span>
+                    <strong>${escapeHtml(selectedCustomer.theme || "default")}</strong>
+                </div>
+                <div>
+                    <span>Created</span>
+                    <strong>${escapeHtml(formatDateTimeLabel(selectedCustomer.createdAt))}</strong>
+                </div>
+                <div>
+                    <span>Updated</span>
+                    <strong>${escapeHtml(formatDateTimeLabel(selectedCustomer.updatedAt))}</strong>
+                </div>
+            </div>
+
+            <p class="billing-detail-note">
+                ${escapeHtml(
+                    `${selectedCustomer.receiveNewsletter ? "Newsletter opted in" : "Newsletter opted out"} · ${selectedCustomer.enableNotifications ? "Notifications enabled" : "Notifications disabled"}`
+                )}
+            </p>
+        </article>
+    `;
+}
+
+function renderPaymentsConsole() {
+    const accessible = Boolean(state.session) && hasCapability("billing");
+    const selectedCustomer = selectedCustomerProfile();
+    const transactions = state.payments.transactions
+        .filter((transaction) => transaction.userId === selectedCustomer.id)
+        .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
+    const filteredTransactions = filteredPaymentTransactions();
+    const totalProcessed = transactions.reduce((total, transaction) => total + Number(transaction.amount || 0), 0);
+    const successCount = transactions.filter((transaction) => transaction.paymentStatus === "SUCCESS").length;
+    const pendingCount = transactions.filter((transaction) => transaction.paymentStatus !== "SUCCESS").length;
+    const lastActivity = transactions[0]?.createdAt ?? null;
+    const cardHolder = state.payments.cardHolder;
+
+    elements.paymentsPortfolioCopy.textContent = !state.session
+        ? "Sign in with a finance-capable role to open the payment history workspace."
+        : !hasCapability("billing")
+            ? "This role can watch the suite, but payment profile and transaction history are reserved for finance and executive views."
+            : state.payments.source === "live"
+                ? `${selectedCustomer.label} is using the live payment profile and transaction history from payment-service.`
+                : "The payment desk is in preview mode and will switch to live transactions when payment-service is reachable.";
+    elements.paymentsTotalProcessed.textContent = accessible ? formatMoney(totalProcessed, transactions[0]?.currency ?? "USD") : "Restricted";
+    elements.paymentsSuccessCount.textContent = accessible ? `${successCount}` : "Restricted";
+    elements.paymentsPendingCount.textContent = accessible ? `${pendingCount}` : "Restricted";
+    elements.paymentsLastActivity.textContent = accessible ? formatDateTimeLabel(lastActivity) : "Restricted";
+    elements.paymentsStatusFilter.value = state.payments.statusFilter;
+    elements.paymentsRefresh.disabled = !accessible;
+    elements.paymentsSourceCopy.textContent = accessible
+        ? state.payments.source === "live"
+            ? "Card-holder profile and transaction history are reading directly from payment-service."
+            : "Seeded card-holder and transaction data are keeping the payment story intact for the demo."
+        : "Payment profile detail is hidden until a finance-capable role opens the workspace.";
+    elements.paymentsSourceLabel.textContent = paymentsSourceLabel();
+    elements.paymentsSelectedLabel.textContent = accessible ? selectedCustomer.label : "Restricted";
+    elements.paymentsProfileLabel.textContent = accessible
+        ? cardHolder ? "Card holder on file" : "Profile unavailable"
+        : "Restricted";
+    elements.paymentsLastSync.textContent = state.payments.lastSyncLabel;
+
+    if (!accessible) {
+        elements.paymentsTransactionList.innerHTML = `<div class="compact-empty">Payments are available to finance, executive, and platform roles.</div>`;
+        elements.paymentsCardHolderDetail.innerHTML = `<div class="compact-empty">Open this page with a billing-capable role to review card-holder data and payment history.</div>`;
+        return;
+    }
+
+    if (!filteredTransactions.length) {
+        elements.paymentsTransactionList.innerHTML = `<div class="compact-empty">${
+            transactions.length ? "No transactions match the current payment filter." : "No transaction history is available for the selected customer."
+        }</div>`;
+    } else {
+        elements.paymentsTransactionList.innerHTML = filteredTransactions.map((transaction) => `
+            <article class="invoice-card">
+                <div class="invoice-topline">
+                    <div>
+                        <strong>${escapeHtml(`TX-${transaction.id.slice(-6).toUpperCase()}`)}</strong>
+                        <span>${escapeHtml(`Order ${transaction.orderId ? transaction.orderId.slice(-6).toUpperCase() : "N/A"}`)}</span>
+                    </div>
+                    <span class="status-pill ${surfaceToneClass(paymentStatusTone(transaction.paymentStatus))}">${escapeHtml(formatEnumLabel(transaction.paymentStatus))}</span>
+                </div>
+                <div class="invoice-figures">
+                    <div>
+                        <span>Amount</span>
+                        <strong>${escapeHtml(formatMoney(transaction.amount, transaction.currency))}</strong>
+                    </div>
+                    <div>
+                        <span>Recorded</span>
+                        <strong>${escapeHtml(formatDateTimeLabel(transaction.createdAt))}</strong>
+                    </div>
+                </div>
+                <p>${escapeHtml(transaction.failureMessage || "Payment cleared without a processor error message.")}</p>
+            </article>
+        `).join("");
+    }
+
+    if (!cardHolder) {
+        elements.paymentsCardHolderDetail.innerHTML = `<div class="compact-empty">No card-holder profile is available for the selected customer.</div>`;
+        return;
+    }
+
+    elements.paymentsCardHolderDetail.innerHTML = `
+        <article class="billing-detail-card">
+            <div class="invoice-topline">
+                <div>
+                    <strong>${escapeHtml(cardHolder.cardHolderName)}</strong>
+                    <span>${escapeHtml(cardHolder.email)}</span>
+                </div>
+                <span class="status-pill ${surfaceToneClass("ready")}">${escapeHtml(cardHolder.stripeCustomerId ? "Billing ready" : "Profile only")}</span>
+            </div>
+
+            <div class="invoice-summary-grid">
+                <div>
+                    <span>Phone</span>
+                    <strong>${escapeHtml(cardHolder.phoneNumber || "No phone on file")}</strong>
+                </div>
+                <div>
+                    <span>Customer ref</span>
+                    <strong>${escapeHtml(cardHolder.stripeCustomerId || "Preview profile")}</strong>
+                </div>
+                <div>
+                    <span>Address</span>
+                    <strong>${escapeHtml(cardHolder.address.line1)}</strong>
+                </div>
+                <div>
+                    <span>Region</span>
+                    <strong>${escapeHtml(`${cardHolder.address.city}, ${cardHolder.address.state}`)}</strong>
+                </div>
+                <div>
+                    <span>Postal</span>
+                    <strong>${escapeHtml(cardHolder.address.postalCode)}</strong>
+                </div>
+                <div>
+                    <span>Country</span>
+                    <strong>${escapeHtml(cardHolder.address.country)}</strong>
+                </div>
+            </div>
+
+            <p class="billing-detail-note">${escapeHtml(cardHolder.address.line2 || "Primary billing address is on file with no secondary line.")}</p>
+        </article>
+    `;
+}
+
+function renderCommerceConsole() {
+    const accessible = Boolean(state.session) && hasCapability("billing");
+    const writeAccess = accessible && hasCapability("billing_write");
+    const selectedCustomer = selectedCustomerProfile();
+    ensureCommerceSelection();
+    const activeSubscription = state.commerce.activeSubscription;
+    const selectedPlan = selectedCommercePlan();
+    const selectedOrder = selectedCommerceOrder();
+    const totalBooked = state.commerce.orders.reduce((total, order) => total + Number(order.amount || 0), 0);
+    const openOrders = state.commerce.orders.filter((order) => !["PAID", "COMPLETED", "CANCELLED"].includes(order.orderStatus)).length;
+
+    elements.commercePortfolioCopy.textContent = !state.session
+        ? "Sign in with a finance-capable role to open the commerce workspace."
+        : !hasCapability("billing")
+            ? "This role can use the suite, but subscription and order tooling are reserved for finance and executive views."
+            : state.commerce.source === "live"
+                ? `${selectedCustomer.label} is tied to live plans, live orders, and the current active subscription record.`
+                : "The commerce console is using seeded preview state until subscription-service and order-service are reachable.";
+    elements.commerceActivePlan.textContent = accessible ? commercePlanLabel(activeSubscription) : "Restricted";
+    elements.commerceOrderCount.textContent = accessible ? `${state.commerce.orders.length}` : "Restricted";
+    elements.commerceOpenOrderCount.textContent = accessible ? `${openOrders}` : "Restricted";
+    elements.commerceTotalAmount.textContent = accessible ? formatMoney(totalBooked, "USD") : "Restricted";
+    elements.commerceSelectedHeading.textContent = accessible ? selectedCustomer.label : "Customer not selected";
+    elements.commerceRefresh.disabled = !accessible;
+    elements.commerceSourceCopy.textContent = accessible
+        ? state.commerce.source === "live"
+            ? "Plan catalog, active subscription, and orders are coming from the live commerce services."
+            : "Seeded subscription and order state are keeping the purchase flow intact for the booth demo."
+        : "Commerce detail is hidden until a finance-capable role opens the workspace.";
+    elements.commerceSourceLabel.textContent = commerceSourceLabel();
+    elements.commerceSelectedLabel.textContent = accessible ? selectedCustomer.label : "Restricted";
+    elements.commerceActiveLabel.textContent = accessible ? commercePlanLabel(activeSubscription) : "Restricted";
+    elements.commerceLastSync.textContent = state.commerce.lastSyncLabel;
+
+    if (!accessible) {
+        elements.commercePlanList.innerHTML = `<div class="compact-empty">Commerce is available to finance, executive, and platform roles.</div>`;
+        elements.commerceOrderList.innerHTML = `<div class="compact-empty">Order history is hidden until a billing-capable role opens the workspace.</div>`;
+        elements.commerceDetail.innerHTML = `<div class="compact-empty">Open this page with a billing-capable role to create demo orders and review active subscriptions.</div>`;
+        return;
+    }
+
+    if (!state.commerce.subscriptions.length) {
+        elements.commercePlanList.innerHTML = `<div class="compact-empty">No subscription plans are available.</div>`;
+    } else {
+        elements.commercePlanList.innerHTML = state.commerce.subscriptions.map((plan) => `
+            <article class="invoice-card ${plan.id === state.commerce.selectedPlanId ? "is-selected" : ""}" data-plan-id="${escapeAttribute(plan.id)}">
+                <div class="invoice-topline">
+                    <div>
+                        <strong>${escapeHtml(plan.name)}</strong>
+                        <span>${escapeHtml(`${plan.durationInDays} day window · ${plan.allowedActiveSessions} active sessions`)}</span>
+                    </div>
+                    <span class="status-pill ${surfaceToneClass(plan.recordStatus === "ACTIVE" ? "ready" : "standby")}">${escapeHtml(formatEnumLabel(plan.recordStatus))}</span>
+                </div>
+                <div class="invoice-figures">
+                    <div>
+                        <span>Price</span>
+                        <strong>${escapeHtml(formatMoney(plan.price, "USD"))}</strong>
+                    </div>
+                    <div>
+                        <span>Formats</span>
+                        <strong>${escapeHtml(plan.resolutions.join(", ") || "Standard")}</strong>
+                    </div>
+                </div>
+                <p>${escapeHtml(plan.description)}</p>
+            </article>
+        `).join("");
+    }
+
+    if (!state.commerce.orders.length) {
+        elements.commerceOrderList.innerHTML = `<div class="compact-empty">No orders are recorded for the selected customer yet.</div>`;
+    } else {
+        elements.commerceOrderList.innerHTML = state.commerce.orders.map((order) => {
+            const plan = state.commerce.subscriptions.find((candidate) => candidate.id === order.subscriptionId) ?? selectedPlan;
+            return `
+                <article class="invoice-card ${order.id === state.commerce.selectedOrderId ? "is-selected" : ""}" data-order-id="${escapeAttribute(order.id)}">
+                    <div class="invoice-topline">
+                        <div>
+                            <strong>${escapeHtml(`ORD-${order.id.slice(-6).toUpperCase()}`)}</strong>
+                            <span>${escapeHtml(plan?.name ?? "Unknown plan")}</span>
+                        </div>
+                        <span class="status-pill ${surfaceToneClass(orderStatusTone(order.orderStatus))}">${escapeHtml(formatEnumLabel(order.orderStatus))}</span>
+                    </div>
+                    <div class="invoice-figures">
+                        <div>
+                            <span>Booked</span>
+                            <strong>${escapeHtml(formatMoney(order.amount, "USD"))}</strong>
+                        </div>
+                        <div>
+                            <span>Created</span>
+                            <strong>${escapeHtml(formatDateTimeLabel(order.orderDate))}</strong>
+                        </div>
+                    </div>
+                    <p>${escapeHtml(`${selectedCustomer.label} · ${plan?.durationInDays ?? 0} day term`)}</p>
+                </article>
+            `;
+        }).join("");
+    }
+
+    const createOrderButton = writeAccess && selectedPlan
+        ? `<button class="button button-solid" type="button" data-action="commerce-create-order" data-plan-id="${escapeAttribute(selectedPlan.id)}">Create order from ${escapeHtml(selectedPlan.name)}</button>`
+        : "";
+    const statusButtons = writeAccess && selectedOrder
+        ? `
+            <div class="detail-actions">
+                ${["CREATED", "PAYMENT_FAILED", "SCHEDULED"].includes(selectedOrder.orderStatus) ? `<button class="button button-solid" type="button" data-action="commerce-order-status" data-status="PAID" data-order-id="${escapeAttribute(selectedOrder.id)}">Mark paid</button>` : ""}
+                ${selectedOrder.orderStatus === "PAID" ? `<button class="button button-ghost" type="button" data-action="commerce-order-status" data-status="COMPLETED" data-order-id="${escapeAttribute(selectedOrder.id)}">Complete</button>` : ""}
+                ${!["COMPLETED", "CANCELLED"].includes(selectedOrder.orderStatus) ? `<button class="button button-ghost" type="button" data-action="commerce-order-status" data-status="CANCELLED" data-order-id="${escapeAttribute(selectedOrder.id)}">Cancel</button>` : ""}
+            </div>
+        `
+        : `<p class="billing-detail-note">${writeAccess ? "Select an order to change its status." : "This role can review plans and orders but cannot create or update them."}</p>`;
+
+    elements.commerceDetail.innerHTML = `
+        <article class="billing-detail-card">
+            <div class="invoice-topline">
+                <div>
+                    <strong>${escapeHtml(activeSubscription?.subscription?.name ?? selectedPlan?.name ?? "No active plan")}</strong>
+                    <span>${escapeHtml(selectedCustomer.label)} · ${escapeHtml(activeSubscription ? formatEnumLabel(activeSubscription.status) : "No active subscription")}</span>
+                </div>
+                <span class="status-pill ${surfaceToneClass(activeSubscription ? "ready" : "standby")}">${escapeHtml(activeSubscription ? formatEnumLabel(activeSubscription.status) : "Standby")}</span>
+            </div>
+
+            <div class="invoice-summary-grid">
+                <div>
+                    <span>Active window</span>
+                    <strong>${escapeHtml(activeSubscription ? `${formatDateLabel(activeSubscription.startDate)} to ${formatDateLabel(activeSubscription.endDate)}` : "No active window")}</strong>
+                </div>
+                <div>
+                    <span>Selected plan price</span>
+                    <strong>${escapeHtml(formatMoney(selectedPlan?.price ?? 0, "USD"))}</strong>
+                </div>
+                <div>
+                    <span>Selected plan duration</span>
+                    <strong>${escapeHtml(selectedPlan ? `${selectedPlan.durationInDays} days` : "No plan selected")}</strong>
+                </div>
+                <div>
+                    <span>Selected order</span>
+                    <strong>${escapeHtml(selectedOrder ? `ORD-${selectedOrder.id.slice(-6).toUpperCase()}` : "No order selected")}</strong>
+                </div>
+            </div>
+
+            <p class="billing-detail-note">${escapeHtml(selectedPlan?.description ?? "Select a plan to stage a new order for the selected customer.")}</p>
+            <div class="detail-actions">${createOrderButton}</div>
+            ${statusButtons}
+        </article>
+    `;
+}
+
 function renderLayout() {
     elements.clusterContext.textContent = runtimeConfig.clusterLabel ?? "cluster not set";
     elements.deploymentNamespace.textContent = runtimeConfig.namespace ?? "namespace not set";
@@ -2884,6 +4513,9 @@ function renderLayout() {
     renderDemoMonkeyConsole();
     renderRtspJobs();
     renderBillingConsole();
+    renderAccountsConsole();
+    renderPaymentsConsole();
+    renderCommerceConsole();
     renderMyListPreview();
     renderLibrary();
     renderPlayerMeta();
@@ -3040,6 +4672,30 @@ function loadPlayerSource(url, metadata) {
     setPlayerStatus("ready", metadata?.id ? "Playback source loaded. Press play to start or resume." : "Manual source loaded.");
 }
 
+function shouldHydratePlayerAfterCatalogLoad(previousPlayerMeta, previousPlayerUrl) {
+    if (!state.session) {
+        return true;
+    }
+
+    if (!previousPlayerMeta || !previousPlayerUrl) {
+        return true;
+    }
+
+    if (previousPlayerMeta.kind === "locked") {
+        return true;
+    }
+
+    if (previousPlayerMeta.kind !== "catalog") {
+        return false;
+    }
+
+    if (!previousPlayerMeta.id) {
+        return true;
+    }
+
+    return !state.library.some((item) => item.id === previousPlayerMeta.id);
+}
+
 function hydratePlayerForCurrentSelection() {
     if (!state.session) {
         clearPlayerForSignedOutState();
@@ -3073,6 +4729,10 @@ function selectTitle(id) {
 }
 
 function playItem(id) {
+    if (!requireAuthenticatedPlayback()) {
+        return;
+    }
+
     const item = state.library.find((candidate) => candidate.id === id);
     if (!item) {
         return;
@@ -3104,6 +4764,16 @@ function updateAuthView() {
     const authenticated = Boolean(state.session);
     document.body.classList.toggle("has-auth-session", authenticated);
     elements.authOverlay.hidden = authenticated;
+}
+
+function requireAuthenticatedPlayback() {
+    if (state.session) {
+        return true;
+    }
+
+    showAuthMessage("Sign in to open protected screening playback.", true);
+    setLaunchMessage("Open the public broadcast as the viewer, or use an operator persona to unlock the protected player.", true);
+    return false;
 }
 
 function showAuthMessage(message, isError = true) {
@@ -3330,6 +5000,9 @@ function handleCardInteraction(event) {
         const id = actionButton.dataset.id;
         const action = actionButton.dataset.action;
         if (action === "play") {
+            if (!requireAuthenticatedPlayback()) {
+                return;
+            }
             const directUrl = actionButton.dataset.url?.trim() ?? "";
             if (directUrl) {
                 const libraryItem = id ? state.library.find((item) => item.id === id) ?? null : null;
@@ -3462,7 +5135,7 @@ async function loadBroadcastStatus({ silent = false } = {}) {
 
 async function loadAdProgramQueue({ silent = false } = {}) {
     if (!state.session) {
-        state.adQueue = [];
+        state.adQueue = buildFallbackAdProgramQueue();
         renderBroadcastDeck();
         return;
     }
@@ -3477,6 +5150,7 @@ async function loadAdProgramQueue({ silent = false } = {}) {
             clearSessionState(true);
             state.catalogSource = "locked";
             state.library = buildLibrary([]);
+            state.adQueue = buildFallbackAdProgramQueue();
             showAuthMessage("Your session expired. Sign in again to continue.", true);
             hydratePlayerForCurrentSelection();
             renderLayout();
@@ -3488,13 +5162,15 @@ async function loadAdProgramQueue({ silent = false } = {}) {
         }
 
         const payload = await response.json();
-        state.adQueue = normalizeAdProgramQueue(payload);
+        const normalizedQueue = normalizeAdProgramQueue(payload);
+        state.adQueue = normalizedQueue.length ? normalizedQueue : buildFallbackAdProgramQueue();
         renderBroadcastDeck();
     } catch (error) {
         console.warn("Unable to load the ad-service program queue.", error);
-        state.adQueue = [];
+        state.adQueue = buildFallbackAdProgramQueue();
+        renderBroadcastDeck();
         if (!silent) {
-            setAdIssueMessage("Unable to load the ad-service queue right now.", true);
+            setAdIssueMessage("Live ad-service queue unavailable. Showing the seeded sponsor schedule.", true);
         }
     }
 }
@@ -3554,6 +5230,11 @@ function buildAdIssueRequest() {
 }
 
 async function updateAdIssueStatus(request, successMessage) {
+    if (!state.session || !hasCapability("governance")) {
+        setAdIssueMessage("Sign in with a governance-capable role to change sponsor overrides.", true);
+        return;
+    }
+
     try {
         const response = await fetch(runtimeConfig.adIssueUrl ?? "", {
             method: "PUT",
@@ -3666,8 +5347,19 @@ function buildDemoMonkeyRequest({ preset = "custom" } = {}) {
         disconnectAfterKb: enabled && elements.demoMonkeyDisconnectEnabled.checked
             ? Number.parseInt(elements.demoMonkeyDisconnectValue.value, 10) || 0
             : 0,
+        packetLossPercent: enabled && elements.demoMonkeyPacketLossEnabled.checked
+            ? Number.parseInt(elements.demoMonkeyPacketLossValue.value, 10) || 0
+            : 0,
         playbackFailureEnabled: enabled && elements.demoMonkeyPlaybackFailureEnabled.checked,
         traceMapFailureEnabled: enabled && elements.demoMonkeyTraceMapFailureEnabled.checked,
+        dependencyTimeoutEnabled: enabled && elements.demoMonkeyDependencyTimeoutEnabled.checked,
+        dependencyTimeoutService: enabled && elements.demoMonkeyDependencyTimeoutEnabled.checked
+            ? elements.demoMonkeyDependencyTimeoutService.value || defaultDemoMonkeyDependencyService
+            : "",
+        dependencyFailureEnabled: enabled && elements.demoMonkeyDependencyFailureEnabled.checked,
+        dependencyFailureService: enabled && elements.demoMonkeyDependencyFailureEnabled.checked
+            ? elements.demoMonkeyDependencyFailureService.value || defaultDemoMonkeyDependencyService
+            : "",
         frontendExceptionEnabled: enabled && elements.demoMonkeyFrontendExceptionEnabled.checked,
         slowAdEnabled: enabled && elements.demoMonkeySlowAdEnabled.checked,
         adLoadFailureEnabled: enabled && elements.demoMonkeyAdLoadFailureEnabled.checked,
@@ -3714,8 +5406,8 @@ async function loadDemoMonkeyStatus({ silent = false } = {}) {
 }
 
 async function updateDemoMonkeyConfig(request, successMessage) {
-    if (!state.session) {
-        setDemoMonkeyMessage("Sign in to change incident simulation settings.", true);
+    if (!state.session || !hasCapability("governance")) {
+        setDemoMonkeyMessage("Sign in with a governance-capable role to change incident simulation settings.", true);
         return;
     }
 
@@ -3762,6 +5454,264 @@ async function updateDemoMonkeyConfig(request, successMessage) {
     }
 }
 
+async function tryLoadAccountsWorkspace() {
+    if (!state.session) {
+        state.accounts.source = "locked";
+        state.accounts.customers = [];
+        state.accounts.lastSyncLabel = "Awaiting account access";
+        renderAccountsConsole();
+        return;
+    }
+
+    if (!hasCapability("billing")) {
+        state.accounts.source = "restricted";
+        state.accounts.customers = [];
+        state.accounts.lastSyncLabel = `Role check ${formatClock(new Date())}`;
+        renderAccountsConsole();
+        return;
+    }
+
+    try {
+        const response = await fetch(`${runtimeConfig.accountsCustomersUrl ?? ""}?page=1&pageSize=24`, {
+            cache: "no-store",
+            credentials: "same-origin"
+        });
+
+        if (response.status === 401) {
+            expireCurrentSession();
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const payload = await response.json().catch(() => ({}));
+        const customers = Array.isArray(payload?.data) ? payload.data : [];
+        if (!customers.length) {
+            throw new Error("empty customer directory");
+        }
+
+        state.accounts.source = "live";
+        state.accounts.customers = customers.map((customer, index) => normalizeCustomer(customer, index));
+        state.accounts.lastSyncLabel = `Live sync ${formatClock(new Date())}`;
+    } catch (error) {
+        console.warn("Falling back to seeded customer directory.", error);
+        state.accounts.source = "seed";
+        state.accounts.customers = seedCustomerProfiles.map((customer, index) => normalizeCustomer(customer, index));
+        state.accounts.lastSyncLabel = `Preview sync ${formatClock(new Date())}`;
+    }
+
+    ensureSelectedCustomer();
+    renderAccountsConsole();
+}
+
+async function tryLoadPaymentsWorkspace() {
+    if (!state.session) {
+        state.payments.source = "locked";
+        state.payments.cardHolder = null;
+        state.payments.transactions = [];
+        state.payments.lastSyncLabel = "Awaiting payment access";
+        renderPaymentsConsole();
+        return;
+    }
+
+    if (!hasCapability("billing")) {
+        state.payments.source = "restricted";
+        state.payments.cardHolder = null;
+        state.payments.transactions = [];
+        state.payments.lastSyncLabel = `Role check ${formatClock(new Date())}`;
+        renderPaymentsConsole();
+        return;
+    }
+
+    ensureSelectedCustomer();
+    const userId = state.selectedCustomerId;
+    const selectionRevision = state.selectedCustomerRevision;
+    const sessionEmail = state.session?.email ?? "";
+
+    try {
+        const [cardHolderResponse, transactionsResponse] = await Promise.all([
+            fetch(`${runtimeConfig.paymentsCardHolderUrl ?? ""}?userId=${encodeURIComponent(userId)}`, {
+                cache: "no-store",
+                credentials: "same-origin"
+            }),
+            fetch(`${runtimeConfig.paymentsTransactionsUrl ?? ""}?userId=${encodeURIComponent(userId)}&page=0&size=20`, {
+                cache: "no-store",
+                credentials: "same-origin"
+            })
+        ]);
+
+        if (cardHolderResponse.status === 401 || transactionsResponse.status === 401) {
+            expireCurrentSession();
+            return;
+        }
+
+        if (!transactionsResponse.ok) {
+            throw new Error(`HTTP ${transactionsResponse.status}`);
+        }
+
+        let cardHolder = null;
+        if (cardHolderResponse.ok) {
+            cardHolder = normalizeCardHolder(await cardHolderResponse.json().catch(() => null), userId);
+        } else if (cardHolderResponse.status !== 404) {
+            throw new Error(`HTTP ${cardHolderResponse.status}`);
+        }
+
+        const transactions = await transactionsResponse.json().catch(() => []);
+        const normalizedTransactions = Array.isArray(transactions)
+            ? transactions.map((transaction, index) => normalizePaymentTransaction(transaction, index))
+            : [];
+
+        if (!cardHolder && normalizedTransactions.length === 0) {
+            throw new Error("empty payment history");
+        }
+
+        if (customerWorkspaceRequestStale(userId, selectionRevision, sessionEmail)) {
+            return;
+        }
+
+        state.payments.source = "live";
+        state.payments.cardHolder = cardHolder;
+        state.payments.transactions = normalizedTransactions;
+        state.payments.lastSyncLabel = `Live sync ${formatClock(new Date())}`;
+    } catch (error) {
+        console.warn("Falling back to seeded payment history.", error);
+        if (customerWorkspaceRequestStale(userId, selectionRevision, sessionEmail)) {
+            return;
+        }
+        state.payments.source = "seed";
+        state.payments.cardHolder = normalizeCardHolder(
+            seedPaymentProfiles.find((profile) => profile.id === userId) ?? null,
+            userId
+        );
+        state.payments.transactions = seedPaymentTransactions
+            .filter((transaction) => transaction.userId === userId)
+            .map((transaction, index) => normalizePaymentTransaction(transaction, index));
+        state.payments.lastSyncLabel = `Preview sync ${formatClock(new Date())}`;
+    }
+
+    renderPaymentsConsole();
+}
+
+async function tryLoadCommerceWorkspace() {
+    if (!state.session) {
+        state.commerce.source = "locked";
+        state.commerce.subscriptions = [];
+        state.commerce.activeSubscription = null;
+        state.commerce.orders = [];
+        state.commerce.selectedPlanId = "";
+        state.commerce.selectedOrderId = "";
+        state.commerce.lastSyncLabel = "Awaiting commerce access";
+        renderCommerceConsole();
+        return;
+    }
+
+    if (!hasCapability("billing")) {
+        state.commerce.source = "restricted";
+        state.commerce.subscriptions = [];
+        state.commerce.activeSubscription = null;
+        state.commerce.orders = [];
+        state.commerce.selectedPlanId = "";
+        state.commerce.selectedOrderId = "";
+        state.commerce.lastSyncLabel = `Role check ${formatClock(new Date())}`;
+        renderCommerceConsole();
+        return;
+    }
+
+    ensureSelectedCustomer();
+    const userId = state.selectedCustomerId;
+    const selectionRevision = state.selectedCustomerRevision;
+    const sessionEmail = state.session?.email ?? "";
+
+    try {
+        const [plansResponse, activeResponse, ordersResponse] = await Promise.all([
+            fetch(runtimeConfig.subscriptionCatalogUrl ?? "", {
+                cache: "no-store",
+                credentials: "same-origin"
+            }),
+            fetch(`${runtimeConfig.subscriptionActiveUrl ?? ""}?id=${encodeURIComponent(userId)}`, {
+                cache: "no-store",
+                credentials: "same-origin"
+            }),
+            fetch(`${runtimeConfig.ordersUrl ?? ""}?userId=${encodeURIComponent(userId)}`, {
+                cache: "no-store",
+                credentials: "same-origin"
+            })
+        ]);
+
+        if (plansResponse.status === 401 || activeResponse.status === 401 || ordersResponse.status === 401) {
+            expireCurrentSession();
+            return;
+        }
+
+        if (!plansResponse.ok || !ordersResponse.ok) {
+            throw new Error(`HTTP ${!plansResponse.ok ? plansResponse.status : ordersResponse.status}`);
+        }
+
+        const plans = await plansResponse.json().catch(() => []);
+        const orders = await ordersResponse.json().catch(() => []);
+        let activeSubscription = null;
+
+        if (activeResponse.ok) {
+            activeSubscription = normalizeUserSubscription(await activeResponse.json().catch(() => null));
+        } else if (activeResponse.status !== 404) {
+            throw new Error(`HTTP ${activeResponse.status}`);
+        }
+
+        const normalizedPlans = Array.isArray(plans)
+            ? plans.map((plan, index) => normalizeSubscriptionPlan(plan, index))
+                .filter((plan) => plan.recordStatus === "ACTIVE")
+            : [];
+        const normalizedOrders = sortCommerceOrders(
+            Array.isArray(orders) ? orders.map((order, index) => normalizeCommerceOrder(order, index)) : []
+        );
+
+        if (!normalizedPlans.length && !activeSubscription && normalizedOrders.length === 0) {
+            throw new Error("empty commerce state");
+        }
+
+        if (customerWorkspaceRequestStale(userId, selectionRevision, sessionEmail)) {
+            return;
+        }
+
+        state.commerce.source = "live";
+        state.commerce.subscriptions = normalizedPlans;
+        state.commerce.activeSubscription = activeSubscription;
+        state.commerce.orders = normalizedOrders;
+        if (activeSubscription?.subscription?.id) {
+            state.commerce.selectedPlanId = activeSubscription.subscription.id;
+        }
+        state.commerce.lastSyncLabel = `Live sync ${formatClock(new Date())}`;
+    } catch (error) {
+        console.warn("Falling back to seeded commerce state.", error);
+        const previewOrders = readSeedPreviewOrders();
+        const previewActiveSubscriptions = readSeedPreviewActiveSubscriptions();
+        if (customerWorkspaceRequestStale(userId, selectionRevision, sessionEmail)) {
+            return;
+        }
+        state.commerce.source = "seed";
+        state.commerce.subscriptions = seedSubscriptionCatalog.map((plan, index) => normalizeSubscriptionPlan(plan, index));
+        state.commerce.activeSubscription = previewActiveSubscriptions.find((subscription) => subscription.userId === userId) ?? null;
+        state.commerce.orders = sortCommerceOrders(previewOrders.filter((order) => order.customerId === userId));
+        if (state.commerce.activeSubscription?.subscription?.id) {
+            state.commerce.selectedPlanId = state.commerce.activeSubscription.subscription.id;
+        }
+        state.commerce.lastSyncLabel = `Preview sync ${formatClock(new Date())}`;
+    }
+
+    ensureCommerceSelection();
+    renderCommerceConsole();
+}
+
+async function refreshCustomerScopedWorkspaces() {
+    await Promise.all([
+        tryLoadPaymentsWorkspace(),
+        tryLoadCommerceWorkspace()
+    ]);
+    renderLayout();
+}
+
 async function tryLoadBillingWorkspace() {
     if (!state.session) {
         state.billing.source = "locked";
@@ -3788,6 +5738,16 @@ async function tryLoadBillingWorkspace() {
             cache: "no-store",
             credentials: "same-origin"
         });
+
+        if (response.status === 401) {
+            expireCurrentSession();
+            return;
+        }
+
+        if (response.status === 403) {
+            restrictBillingAccess();
+            return;
+        }
 
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
@@ -3816,6 +5776,10 @@ async function tryLoadBillingWorkspace() {
 
 function handleBillingAccountFilterChange(event) {
     state.billing.selectedAccountId = event.target.value ?? "all";
+    if (state.billing.selectedAccountId !== "all") {
+        applySelectedCustomer(state.billing.selectedAccountId);
+        refreshCustomerScopedWorkspaces();
+    }
     ensureBillingSelection();
     renderBillingConsole();
 }
@@ -3839,12 +5803,22 @@ function handleBillingInvoiceSelection(event) {
     }
 
     state.billing.selectedInvoiceId = invoiceCard.dataset.id;
-    renderBillingConsole();
+    const selectedInvoice = selectedBillingInvoice();
+    if (selectedInvoice?.userId) {
+        applySelectedCustomer(selectedInvoice.userId, { syncBillingFilter: true });
+        refreshCustomerScopedWorkspaces();
+    }
+    renderLayout();
 }
 
 async function updateBillingInvoiceStatus(invoiceId, status) {
     if (!state.session || !hasCapability("billing_write")) {
         setBillingFormMessage("Your role cannot update invoice status.", true);
+        return;
+    }
+
+    if (state.billing.source === "access_denied") {
+        setBillingFormMessage("Live billing access is not available for this session.", true);
         return;
     }
 
@@ -3858,21 +5832,60 @@ async function updateBillingInvoiceStatus(invoiceId, status) {
 
     if (state.billing.source === "live") {
         try {
-            const response = await fetch(`${runtimeConfig.billingInvoicesUrl ?? ""}/${invoiceId}/status`, {
-                method: "PUT",
-                cache: "no-store",
-                credentials: "same-origin",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    status,
-                    externalPaymentReference: status === "PAID" ? invoice.externalPaymentReference ?? `ACME-DEMO-${Date.now()}` : invoice.externalPaymentReference,
-                    notes: invoice.notes || null
+            const response = status === "PAID"
+                ? await fetch(runtimeConfig.billingEventsUrl ?? "", {
+                    method: "POST",
+                    cache: "no-store",
+                    credentials: "same-origin",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        eventId: crypto.randomUUID(),
+                        eventType: "PAYMENT_CAPTURED",
+                        userId: invoice.userId,
+                        invoiceId,
+                        orderId: invoice.orderId,
+                        subscriptionId: invoice.subscriptionId,
+                        billingCycle: invoice.billingCycle,
+                        currency: invoice.currency,
+                        title: `Payment captured for ${invoice.invoiceNumber}`,
+                        description: invoice.notes || null,
+                        quantity: 1,
+                        unitAmount: invoice.totalAmount,
+                        taxAmount: 0,
+                        discountAmount: 0,
+                        issuedDate: invoice.issuedDate,
+                        dueDate: invoice.dueDate,
+                        servicePeriodStart: invoice.servicePeriodStart,
+                        servicePeriodEnd: invoice.servicePeriodEnd,
+                        externalReference: invoice.externalPaymentReference ?? `ACME-DEMO-${Date.now()}`,
+                        notes: invoice.notes || null
+                    })
                 })
-            });
+                : await fetch(`${runtimeConfig.billingInvoicesUrl ?? ""}/${invoiceId}/status`, {
+                    method: "PUT",
+                    cache: "no-store",
+                    credentials: "same-origin",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        status,
+                        externalPaymentReference: invoice.externalPaymentReference,
+                        notes: invoice.notes || null
+                    })
+                });
 
             const payload = await response.json().catch(() => ({}));
+            if (response.status === 401) {
+                expireCurrentSession();
+                return;
+            }
+            if (response.status === 403) {
+                restrictBillingAccess("Your session can no longer update the live billing ledger.");
+                return;
+            }
             if (!response.ok) {
                 throw new Error(payload.message ?? `HTTP ${response.status}`);
             }
@@ -3937,6 +5950,11 @@ async function submitBillingInvoice(event) {
         return;
     }
 
+    if (state.billing.source === "access_denied") {
+        setBillingFormMessage("Live billing access is not available for this session.", true);
+        return;
+    }
+
     const request = buildBillingInvoiceRequest();
     if (!request.userId) {
         setBillingFormMessage("Choose an account before creating an invoice.", true);
@@ -3955,45 +5973,51 @@ async function submitBillingInvoice(event) {
         return;
     }
 
-    const payload = {
+    const billingEventPayload = {
+        eventId: crypto.randomUUID(),
+        eventType: request.billingCycle === "MONTHLY" ? "SUBSCRIPTION_RENEWED" : "ORDER_BOOKED",
         userId: request.userId,
-        orderId: null,
-        subscriptionId: null,
+        invoiceId: null,
+        orderId: request.billingCycle === "ONE_TIME" ? crypto.randomUUID() : null,
+        subscriptionId: request.billingCycle === "MONTHLY" ? crypto.randomUUID() : null,
         billingCycle: request.billingCycle,
         currency: "USD",
+        title: request.title,
+        description: request.notes || null,
+        quantity: request.quantity,
+        unitAmount: request.unitAmount,
+        taxAmount: 0,
+        discountAmount: 0,
         issuedDate: isoDateFromOffset(0),
         dueDate: request.dueDate,
         servicePeriodStart: isoDateFromOffset(-30),
         servicePeriodEnd: isoDateFromOffset(0),
-        taxAmount: 0,
-        discountAmount: 0,
-        notes: request.notes || null,
-        lineItems: [
-            {
-                title: request.title,
-                description: request.notes || null,
-                quantity: request.quantity,
-                unitAmount: request.unitAmount,
-                servicePeriodStart: isoDateFromOffset(-30),
-                servicePeriodEnd: isoDateFromOffset(0)
-            }
-        ]
+        externalReference: null,
+        notes: request.notes || null
     };
 
     if (state.billing.source === "live") {
-        setBillingFormMessage("Creating invoice in live billing ledger...", false);
+        setBillingFormMessage("Recording commercial event in the live billing ledger...", false);
         try {
-            const response = await fetch(runtimeConfig.billingInvoicesUrl ?? "", {
+            const response = await fetch(runtimeConfig.billingEventsUrl ?? "", {
                 method: "POST",
                 cache: "no-store",
                 credentials: "same-origin",
                 headers: {
                     "Content-Type": "application/json"
                 },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(billingEventPayload)
             });
 
             const invoice = await response.json().catch(() => ({}));
+            if (response.status === 401) {
+                expireCurrentSession();
+                return;
+            }
+            if (response.status === 403) {
+                restrictBillingAccess("Your session can no longer create live billing events.");
+                return;
+            }
             if (!response.ok) {
                 throw new Error(invoice.message ?? `HTTP ${response.status}`);
             }
@@ -4001,12 +6025,12 @@ async function submitBillingInvoice(event) {
             elements.billingCreateForm.reset();
             elements.billingLineQuantity.value = "1";
             elements.billingDueDate.value = isoDateFromOffset(14);
-            setBillingFormMessage(`Invoice ${invoice.invoiceNumber ?? "created"} saved to the live ledger.`, false);
+            setBillingFormMessage(`Commercial event recorded and invoice ${invoice.appliedInvoiceNumber ?? "generated"} entered the live ledger.`, false);
             await tryLoadBillingWorkspace();
             return;
         } catch (error) {
             console.warn("Unable to create live billing invoice.", error);
-            setBillingFormMessage(error.message || "Unable to create invoice in the live billing ledger.", true);
+            setBillingFormMessage(error.message || "Unable to record the commercial event in the live billing ledger.", true);
             return;
         }
     }
@@ -4065,6 +6089,226 @@ function handleBillingDetailInteraction(event) {
     updateBillingInvoiceStatus(trigger.dataset.id, trigger.dataset.status);
 }
 
+function handleAccountsSearch(event) {
+    state.accounts.searchTerm = event.target.value ?? "";
+    renderAccountsConsole();
+}
+
+function handleAccountsSelection(event) {
+    const card = event.target.closest("[data-customer-id]");
+    if (!card?.dataset.customerId) {
+        return;
+    }
+
+    applySelectedCustomer(card.dataset.customerId, { syncBillingFilter: true });
+    ensureBillingSelection();
+    renderLayout();
+    refreshCustomerScopedWorkspaces();
+}
+
+function handlePaymentsStatusFilterChange(event) {
+    state.payments.statusFilter = event.target.value ?? "ALL";
+    renderPaymentsConsole();
+}
+
+function handleCommercePlanSelection(event) {
+    const card = event.target.closest("[data-plan-id]");
+    if (!card?.dataset.planId) {
+        return;
+    }
+
+    state.commerce.selectedPlanId = card.dataset.planId;
+    renderCommerceConsole();
+}
+
+function handleCommerceOrderSelection(event) {
+    const card = event.target.closest("[data-order-id]");
+    if (!card?.dataset.orderId) {
+        return;
+    }
+
+    state.commerce.selectedOrderId = card.dataset.orderId;
+    renderCommerceConsole();
+}
+
+function buildPreviewActiveSubscription(order, plan) {
+    return normalizeUserSubscription({
+        id: demoUuid(Date.now()),
+        userId: state.selectedCustomerId,
+        orderId: order.id,
+        subscription: plan,
+        startDate: isoDateFromOffset(0),
+        endDate: isoDateFromOffset(plan?.durationInDays ?? 30),
+        status: "ACTIVE"
+    });
+}
+
+async function createCommerceOrder(planId) {
+    if (!state.session || !hasCapability("billing_write")) {
+        setCommerceMessage("Your role cannot create orders.", true);
+        return;
+    }
+
+    const plan = state.commerce.subscriptions.find((candidate) => candidate.id === planId);
+    if (!plan) {
+        setCommerceMessage("Select a plan before creating an order.", true);
+        return;
+    }
+
+    if (state.commerce.source === "live") {
+        setCommerceMessage(`Creating ${plan.name} order...`, false);
+        try {
+            const response = await fetch(runtimeConfig.ordersUrl ?? "", {
+                method: "POST",
+                cache: "no-store",
+                credentials: "same-origin",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    userId: state.selectedCustomerId,
+                    subscriptionId: plan.id,
+                    price: plan.price
+                })
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (response.status === 401) {
+                expireCurrentSession();
+                return;
+            }
+            if (!response.ok) {
+                throw new Error(payload.message ?? `HTTP ${response.status}`);
+            }
+
+            state.commerce.selectedOrderId = normalizeCommerceOrder(payload).id;
+            await tryLoadCommerceWorkspace();
+            setCommerceMessage(`Order created for ${plan.name}.`, false);
+            return;
+        } catch (error) {
+            console.warn("Unable to create live order.", error);
+            setCommerceMessage(error.message || "Unable to create the live order.", true);
+            return;
+        }
+    }
+
+    const previewOrders = readSeedPreviewOrders();
+    const order = normalizeCommerceOrder({
+        id: crypto.randomUUID(),
+        customerId: state.selectedCustomerId,
+        amount: plan.price,
+        subscriptionId: plan.id,
+        orderDate: new Date().toISOString(),
+        orderStatus: "CREATED"
+    });
+
+    const nextOrders = sortCommerceOrders([order, ...previewOrders]);
+    writeJson(scopedKey("commerceSeedOrders"), nextOrders);
+    state.commerce.orders = nextOrders.filter((candidate) => candidate.customerId === state.selectedCustomerId);
+    state.commerce.selectedOrderId = order.id;
+    state.commerce.lastSyncLabel = `Preview update ${formatClock(new Date())}`;
+    ensureCommerceSelection();
+    renderCommerceConsole();
+    setCommerceMessage(`Preview order created for ${plan.name}.`, false);
+}
+
+async function updateCommerceOrderStatus(orderId, status) {
+    if (!state.session || !hasCapability("billing_write")) {
+        setCommerceMessage("Your role cannot update orders.", true);
+        return;
+    }
+
+    const order = state.commerce.orders.find((candidate) => candidate.id === orderId);
+    if (!order) {
+        setCommerceMessage("Select an order before changing its status.", true);
+        return;
+    }
+
+    if (state.commerce.source === "live") {
+        setCommerceMessage(`Updating order to ${formatEnumLabel(status)}...`, false);
+        try {
+            const response = await fetch(`${runtimeConfig.ordersUrl ?? ""}/${encodeURIComponent(orderId)}/status`, {
+                method: "PUT",
+                cache: "no-store",
+                credentials: "same-origin",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ orderStatus: status })
+            });
+
+            if (response.status === 401) {
+                expireCurrentSession();
+                return;
+            }
+            if (!response.ok) {
+                const payload = await response.json().catch(() => ({}));
+                throw new Error(payload.message ?? `HTTP ${response.status}`);
+            }
+
+            await tryLoadCommerceWorkspace();
+            setCommerceMessage(`Order moved to ${formatEnumLabel(status)}.`, false);
+            return;
+        } catch (error) {
+            console.warn("Unable to update live order.", error);
+            setCommerceMessage(error.message || "Unable to update the live order.", true);
+            return;
+        }
+    }
+
+    const previewOrders = readSeedPreviewOrders().map((candidate) => candidate.id === orderId
+        ? normalizeCommerceOrder({
+            ...candidate,
+            orderStatus: status,
+            orderDate: candidate.orderDate
+        })
+        : candidate);
+    writeJson(scopedKey("commerceSeedOrders"), previewOrders);
+
+    const entersSettledState = ["PAID", "COMPLETED"].includes(status)
+        && !["PAID", "COMPLETED"].includes(order.orderStatus);
+    let previewActiveSubscriptions = readSeedPreviewActiveSubscriptions();
+    if (entersSettledState) {
+        const plan = state.commerce.subscriptions.find((candidate) => candidate.id === order.subscriptionId);
+        if (plan) {
+            const nextActiveSubscription = buildPreviewActiveSubscription({
+                ...order,
+                orderStatus: status
+            }, plan);
+            previewActiveSubscriptions = [
+                nextActiveSubscription,
+                ...previewActiveSubscriptions.filter((candidate) => candidate.userId !== state.selectedCustomerId)
+            ];
+            persistSeedPreviewActiveSubscriptions(previewActiveSubscriptions);
+            state.commerce.activeSubscription = nextActiveSubscription;
+            state.commerce.selectedPlanId = plan.id;
+        }
+    }
+
+    state.commerce.orders = sortCommerceOrders(previewOrders.filter((candidate) => candidate.customerId === state.selectedCustomerId));
+    state.commerce.selectedOrderId = orderId;
+    state.commerce.lastSyncLabel = `Preview update ${formatClock(new Date())}`;
+    ensureCommerceSelection();
+    renderCommerceConsole();
+    setCommerceMessage(`Preview order moved to ${formatEnumLabel(status)}.`, false);
+}
+
+function handleCommerceDetailInteraction(event) {
+    const trigger = event.target.closest("[data-action]");
+    if (!trigger?.dataset.action) {
+        return;
+    }
+
+    if (trigger.dataset.action === "commerce-create-order" && trigger.dataset.planId) {
+        createCommerceOrder(trigger.dataset.planId);
+        return;
+    }
+
+    if (trigger.dataset.action === "commerce-order-status" && trigger.dataset.orderId && trigger.dataset.status) {
+        updateCommerceOrderStatus(trigger.dataset.orderId, trigger.dataset.status);
+    }
+}
+
 async function tryLoadCatalog() {
     if (!state.session) {
         state.catalogSource = "locked";
@@ -4074,6 +6318,9 @@ async function tryLoadCatalog() {
         renderLayout();
         return;
     }
+
+    const previousPlayerMeta = state.playerMeta;
+    const previousPlayerUrl = state.playerUrl;
 
     try {
         const response = await fetch(runtimeConfig.catalogUrl ?? "", {
@@ -4109,7 +6356,9 @@ async function tryLoadCatalog() {
     }
 
     syncSelection();
-    hydratePlayerForCurrentSelection();
+    if (shouldHydratePlayerAfterCatalogLoad(previousPlayerMeta, previousPlayerUrl)) {
+        hydratePlayerForCurrentSelection();
+    }
     renderLayout();
 }
 
@@ -4275,17 +6524,20 @@ async function submitDemoMonkeyConfig(event) {
         && request.startupDelayMs <= 0
         && request.throttleKbps <= 0
         && request.disconnectAfterKb <= 0
+        && request.packetLossPercent <= 0
         && !request.playbackFailureEnabled
         && !request.traceMapFailureEnabled
+        && !request.dependencyTimeoutEnabled
+        && !request.dependencyFailureEnabled
         && !request.frontendExceptionEnabled
         && !request.slowAdEnabled
         && !request.adLoadFailureEnabled
     ) {
-        setDemoMonkeyMessage("Enable at least one playback, sponsor, trace, or browser fault or disable simulation.", true);
+        setDemoMonkeyMessage("Enable at least one network, playback, dependency, sponsor, trace, or browser fault or disable simulation.", true);
         return;
     }
 
-    setDemoMonkeyMessage(request.enabled ? "Applying playback, sponsor, and browser incident conditions..." : "Disabling incident simulation...", false);
+    setDemoMonkeyMessage(request.enabled ? "Applying network, dependency, playback, sponsor, and browser incident conditions..." : "Disabling incident simulation...", false);
     await updateDemoMonkeyConfig(
         request,
         request.enabled ? "Incident simulation changes applied across the operating surfaces." : "Incident simulation bypassed."
@@ -4335,9 +6587,12 @@ async function handleLaunchScenarioClick(event) {
 
 async function refreshWorkspaceData() {
     await tryLoadCatalog();
+    await tryLoadAccountsWorkspace();
     const followUpLoads = [
         loadRtspJobs({ silent: true }),
         tryLoadBillingWorkspace(),
+        tryLoadPaymentsWorkspace(),
+        tryLoadCommerceWorkspace(),
         refreshServiceHealth(),
         loadBroadcastStatus({ silent: true }),
         loadDemoMonkeyStatus({ silent: true })
@@ -4354,6 +6609,13 @@ async function refreshWorkspaceData() {
 elements.authForm.addEventListener("submit", signIn);
 elements.authOverlay.addEventListener("click", handleLaunchPersonaClick);
 elements.authOverlay.addEventListener("click", handleLaunchScenarioClick);
+elements.navToggle?.addEventListener("click", togglePrimaryNavigation);
+elements.navBackdrop?.addEventListener("click", closePrimaryNavigation);
+elements.topbarNavShell?.addEventListener("click", (event) => {
+    if (event.target.closest("[data-page-link]")) {
+        closePrimaryNavigation();
+    }
+});
 elements.signOut.addEventListener("click", signOut);
 elements.surpriseMe.addEventListener("click", playRandomTitle);
 elements.presentationToggle.addEventListener("click", () => {
@@ -4400,6 +6662,21 @@ elements.billingRefresh.addEventListener("click", () => {
 elements.billingInvoiceList.addEventListener("click", handleBillingInvoiceSelection);
 elements.billingDetail.addEventListener("click", handleBillingDetailInteraction);
 elements.billingCreateForm.addEventListener("submit", submitBillingInvoice);
+elements.accountsSearch.addEventListener("input", handleAccountsSearch);
+elements.accountsRefresh.addEventListener("click", () => {
+    tryLoadAccountsWorkspace();
+});
+elements.accountsList.addEventListener("click", handleAccountsSelection);
+elements.paymentsStatusFilter.addEventListener("change", handlePaymentsStatusFilterChange);
+elements.paymentsRefresh.addEventListener("click", () => {
+    tryLoadPaymentsWorkspace();
+});
+elements.commerceRefresh.addEventListener("click", () => {
+    tryLoadCommerceWorkspace();
+});
+elements.commercePlanList.addEventListener("click", handleCommercePlanSelection);
+elements.commerceOrderList.addEventListener("click", handleCommerceOrderSelection);
+elements.commerceDetail.addEventListener("click", handleCommerceDetailInteraction);
 elements.genreChips.addEventListener("click", handleGenreSelection);
 elements.librarySearch.addEventListener("input", handleLibrarySearch);
 elements.channelGrid.addEventListener("click", handleCardInteraction);
@@ -4410,6 +6687,7 @@ elements.libraryGrid.addEventListener("click", handleCardInteraction);
 window.addEventListener("hashchange", () => {
     renderLayout();
 });
+window.addEventListener("resize", syncPrimaryNavigation);
 document.addEventListener("fullscreenchange", () => {
     if (!document.fullscreenElement) {
         presentationFallbackEnabled = false;
@@ -4466,6 +6744,7 @@ async function bootstrap() {
     state.session = null;
     state.catalogSource = "locked";
     state.library = buildLibrary([]);
+    syncPrimaryNavigation();
     syncSelection();
     hydratePlayerForCurrentSelection();
     renderLayout();

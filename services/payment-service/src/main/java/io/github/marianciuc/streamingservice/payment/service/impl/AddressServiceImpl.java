@@ -12,8 +12,8 @@ import io.github.marianciuc.streamingservice.payment.dto.common.AddressDto;
 import io.github.marianciuc.streamingservice.payment.entity.Address;
 import io.github.marianciuc.streamingservice.payment.entity.CardHolder;
 import io.github.marianciuc.streamingservice.payment.repository.AddressRepository;
+import io.github.marianciuc.streamingservice.payment.repository.CardHolderRepository;
 import io.github.marianciuc.streamingservice.payment.service.AddressService;
-import io.github.marianciuc.streamingservice.payment.service.CardHolderService;
 import io.github.marianciuc.streamingservice.payment.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,7 +27,7 @@ public class AddressServiceImpl implements AddressService {
 
     private final AddressRepository repository;
     private final UserService userService;
-    private final CardHolderService cardHolderService;
+    private final CardHolderRepository cardHolderRepository;
 
     @Override
     public Address addAddress(AddressDto addressDto) {
@@ -44,9 +44,12 @@ public class AddressServiceImpl implements AddressService {
 
     @Override
     public void updateAddress(AddressDto req) {
-        CardHolder cardHolder = this.cardHolderService.findCardHolderEntity(this.userService.extractUserIdFromAuth());
-        Address address = this.repository.findByCardHolder(cardHolder).orElseThrow(() -> new RuntimeException("Address " +
-                "not found"));
+        CardHolder cardHolder = this.cardHolderRepository.findById(this.userService.extractUserIdFromAuth())
+                .orElseThrow(() -> new IllegalArgumentException("Card holder not found"));
+        Address address = cardHolder.getAddress();
+        if (address == null) {
+            throw new RuntimeException("Address not found");
+        }
         if (!req.city().isEmpty()) address.setCity(req.city());
         if (!req.state().isEmpty()) address.setState(req.state());
         if (!req.line1().isEmpty()) address.setLine1(req.line1());

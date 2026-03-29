@@ -8,24 +8,19 @@
 
 package io.github.marianciuc.streamingservice.order.service.impl;
 
-import io.github.marianciuc.jwtsecurity.entity.JwtUser;
-import io.github.marianciuc.jwtsecurity.service.UserService;
 import io.github.marianciuc.streamingservice.order.client.SubscriptionClient;
 import io.github.marianciuc.streamingservice.order.dto.*;
 import io.github.marianciuc.streamingservice.order.entity.Order;
 import io.github.marianciuc.streamingservice.order.entity.OrderStatus;
-import io.github.marianciuc.streamingservice.order.kafka.KafkaProducer;
 import io.github.marianciuc.streamingservice.order.repository.OrderRepository;
 import io.github.marianciuc.streamingservice.order.service.OrderService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDate;
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -38,8 +33,6 @@ public class OrderServiceImpl implements OrderService {
 
     private final OrderRepository repository;
     private final SubscriptionClient subscriptionClient;
-    private final KafkaProducer kafkaProducer;
-    private final UserService userService;
 
     /**
      * Creates a new order based on the provided order request and authentication details.
@@ -77,11 +70,36 @@ public class OrderServiceImpl implements OrderService {
      * @return the resolved user ID.
      */
     private UUID resolveUserId(Authentication authentication, OrderRequest orderRequest) {
-        if (userService.getUser().isService()) {
-            return orderRequest.userId();
-        } else {
-            return ((JwtUser) authentication.getPrincipal()).getId();
+        if (authentication != null) {
+            UUID authenticatedUserId = extractUserId(authentication.getPrincipal());
+            if (authenticatedUserId != null) {
+                return authenticatedUserId;
+            }
         }
+        if (orderRequest != null && orderRequest.userId() != null) {
+            return orderRequest.userId();
+        }
+        throw new IllegalArgumentException("User ID is required");
+    }
+
+    private UUID extractUserId(Object principal) {
+        if (principal == null) {
+            return null;
+        }
+
+        for (String accessorName : List.of("getUserId", "getId")) {
+            try {
+                Method accessor = principal.getClass().getMethod(accessorName);
+                Object value = accessor.invoke(principal);
+                if (value instanceof UUID userId) {
+                    return userId;
+                }
+            } catch (ReflectiveOperationException ignored) {
+                // Try the next common accessor used by the security principal.
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -105,51 +123,124 @@ public class OrderServiceImpl implements OrderService {
      * @param scheduledTime   the scheduled time for the order.
      * @return the created OrderResponse.
      */
-    private OrderResponse createNewOrder(SubscriptionDto subscriptionDto, UUID userId, UUID subscriptionId, OrderStatus orderStatus, LocalDate scheduledTime) {
-//        Order.OrderBuilder orderBuilder = Order.builder()
-//                .orderCreateDate(LocalDateTime.now())
-//                .subscriptionId(subscriptionId)
-//                .userId(userId)
-//                .amount(Objects.requireNonNull(subscriptionDto).price())
-//                .orderStatus(orderStatus);
-//
-//        if (scheduledTime != null) {
-//            orderBuilder.scheduledTime(scheduledTime);
-//        }
-//
-//        Order order = orderBuilder.build();
-//        kafkaProducer.produceOrderMessage(orderResponse);
-//        return orderResponse;
-        return null;
+    private OrderResponse toResponse(Order order) {
+        return new OrderResponse(
+                order.getId(),
+                order.getUserId(),
+                order.getAmount(),
+                order.getSubscriptionId(),
+                order.getOrderCreateDate(),
+                order.getOrderStatus()
+        );
+    }
+
+    private Order getOrder(UUID orderId) {
+        return repository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found"));
+    }
+
+    private void validateOrderRequest(OrderRequest orderRequest) {
+        if (orderRequest == null) {
+            throw new IllegalArgumentException("Order request is required");
+        }
+        if (orderRequest.price() == null || orderRequest.price().signum() <= 0) {
+            throw new IllegalArgumentException("Order price must be greater than zero");
+        }
     }
 
     @Override
     public OrderResponse createOrder(OrderRequest orderRequest, Authentication authentication) {
-        return null;
+        validateOrderRequest(orderRequest);
+        UUID userId = resolveUserId(authentication, orderRequest);
+
+        Order order = Order.builder()
+                .userId(userId)
+                .subscriptionId(orderRequest.subscriptionId())
+                .amount(orderRequest.price())
+                .orderCreateDate(LocalDateTime.now())
+                .orderStatus(OrderStatus.CREATED)
+                .build();
+
+        return toResponse(repository.save(order));
+    }
+
+    @Override
+    public OrderResponse updateOrder(UUID orderId, OrderRequest orderRequest, Authentication authentication) {
+        validateOrderRequest(orderRequest);
+        Order order = getOrder(orderId);
+
+        order.setUserId(resolveUserId(authentication, orderRequest));
+        order.setSubscriptionId(orderRequest.subscriptionId());
+        order.setAmount(orderRequest.price());
+        if (order.getOrderCreateDate() == null) {
+            order.setOrderCreateDate(LocalDateTime.now());
+        }
+        if (order.getOrderStatus() == null) {
+            order.setOrderStatus(OrderStatus.CREATED);
+        }
+
+        return toResponse(repository.save(order));
     }
 
     @Override
     public OrderResponse getOrderById(UUID orderId) {
-        return null;
+        return toResponse(getOrder(orderId));
     }
 
     @Override
     public List<OrderResponse> getOrdersByUserId(UUID customerId) {
-        return List.of();
+        return repository.findAll().stream()
+                .filter(order -> customerId.equals(order.getUserId()))
+                .map(this::toResponse)
+                .toList();
     }
 
     @Override
     public List<OrderResponse> getAllOrders() {
-        return List.of();
+        return repository.findAll().stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     @Override
     public List<OrderResponse> getOrdersByAuthentication(Authentication authentication) {
-        return List.of();
+        UUID userId = extractUserId(authentication == null ? null : authentication.getPrincipal());
+        if (userId == null) {
+            return getAllOrders();
+        }
+        return getOrdersByUserId(userId);
     }
 
     @Override
     public void updateOrderStatus(UUID orderId, OrderStatus orderStatus) {
+        Order order = getOrder(orderId);
+        OrderStatus previousStatus = order.getOrderStatus();
+        boolean activatesSubscription = entersSettledState(previousStatus, orderStatus);
 
+        if (activatesSubscription) {
+            try {
+                subscriptionClient.activateOrder(new OrderActivationRequest(
+                        order.getId(),
+                        order.getUserId(),
+                        order.getSubscriptionId()
+                ));
+            } catch (RuntimeException exception) {
+                throw new IllegalStateException("Unable to activate the subscription for this order", exception);
+            }
+        }
+
+        order.setOrderStatus(orderStatus);
+        if (orderStatus == OrderStatus.PAID || orderStatus == OrderStatus.COMPLETED) {
+            if (order.getOrderCompletedDate() == null) {
+                order.setOrderCompletedDate(LocalDateTime.now());
+            }
+        }
+        repository.save(order);
+    }
+
+    private boolean entersSettledState(OrderStatus previousStatus, OrderStatus nextStatus) {
+        boolean nextSettled = nextStatus == OrderStatus.PAID || nextStatus == OrderStatus.COMPLETED;
+        boolean previousSettled = previousStatus == OrderStatus.PAID || previousStatus == OrderStatus.COMPLETED;
+        return nextSettled && !previousSettled;
     }
 }

@@ -3,8 +3,8 @@ create table if not exists subscriptions
     id                      uuid primary key not null,
     name                    varchar(255)     not null unique,
     description             varchar(512)     not null,
-    start_date              date             not null,
-    end_date                date             not null,
+    created_at              timestamp        not null default now(),
+    updated_at              timestamp        not null default now(),
     currency                varchar(20)      not null,
     duration_in_days        integer          not null,
     price                   numeric(19, 4)   not null,
@@ -34,7 +34,7 @@ create table if not exists user_subscriptions
     subscription_id uuid references subscriptions (id),
     user_id         uuid             not null,
     order_id        uuid             not null unique,
-    start_date      timestamp        not null default now(),
-    end_date        timestamp        not null,
+    start_date      date             not null default current_date,
+    end_date        date             not null,
     status          varchar(20)      not null
 );

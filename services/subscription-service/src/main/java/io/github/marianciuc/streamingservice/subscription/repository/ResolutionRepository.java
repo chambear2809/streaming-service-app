@@ -25,7 +25,9 @@ package io.github.marianciuc.streamingservice.subscription.repository;
 import io.github.marianciuc.streamingservice.subscription.entity.Resolution;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Optional;
 import java.util.UUID;
 
 public interface ResolutionRepository extends JpaRepository<Resolution, UUID> {
+    Optional<Resolution> findByNameIgnoreCase(String name);
 }

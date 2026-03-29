@@ -31,6 +31,8 @@ spec:
             - containerPort: 8080
               name: http
           env:
+            - name: UPSTREAM_REQUEST_TIMEOUT_MS
+              value: "20000"
             - name: PORT
               value: "8080"
             - name: K8S_NAMESPACE
@@ -52,18 +54,29 @@ spec:
             limits:
               cpu: 250m
               memory: 256Mi
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /healthz
               port: http
             initialDelaySeconds: 3
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
           livenessProbe:
             httpGet:
               path: /healthz
               port: http
             initialDelaySeconds: 10
             periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
           volumeMounts:
             - name: frontend-assets
               mountPath: /srv/frontend

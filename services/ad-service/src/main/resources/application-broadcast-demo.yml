@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/streaming?currentSchema=demo_ad}
+    username: ${SPRING_DATASOURCE_USERNAME:streaming}
+    password: ${SPRING_DATASOURCE_PASSWORD:streaming}
+  flyway:
+    enabled: true
+    create-schemas: true
+    default-schema: ${SPRING_FLYWAY_DEFAULT_SCHEMA:demo_ad}
+    schemas: ${SPRING_FLYWAY_SCHEMAS:demo_ad}
+    table: ${SPRING_FLYWAY_TABLE:demo_ad_flyway_schema_history}
+    locations: classpath:db/demo-ad
+server:
+  port: ${SERVER_PORT:8080}

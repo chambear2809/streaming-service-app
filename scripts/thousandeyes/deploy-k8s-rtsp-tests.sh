@@ -204,6 +204,8 @@ spec:
               value: "${TE_SOURCE_AGENT_IDS}"
             - name: TE_TARGET_AGENT_ID
               value: "${TE_TARGET_AGENT_ID}"
+            - name: TE_UDP_TARGET_AGENT_ID
+              value: "${TE_UDP_TARGET_AGENT_ID:-}"
             - name: TE_DSCP_ID
               value: "${TE_DSCP_ID:-0}"
             - name: TE_RTSP_SERVER
@@ -223,7 +225,7 @@ spec:
             - name: TE_TRACE_MAP_INTERVAL
               value: "${TE_TRACE_MAP_INTERVAL:-60}"
             - name: TE_TRACE_MAP_NETWORK_MEASUREMENTS
-              value: "${TE_TRACE_MAP_NETWORK_MEASUREMENTS:-false}"
+              value: "${TE_TRACE_MAP_NETWORK_MEASUREMENTS:-true}"
             - name: TE_BROADCAST_TEST_NAME
               value: "${TE_BROADCAST_TEST_NAME:-aleccham-broadcast-playback}"
             - name: TE_BROADCAST_TEST_URL
@@ -231,7 +233,7 @@ spec:
             - name: TE_BROADCAST_INTERVAL
               value: "${TE_BROADCAST_INTERVAL:-60}"
             - name: TE_BROADCAST_NETWORK_MEASUREMENTS
-              value: "${TE_BROADCAST_NETWORK_MEASUREMENTS:-false}"
+              value: "${TE_BROADCAST_NETWORK_MEASUREMENTS:-true}"
             - name: TE_UDP_MEDIA_TEST_NAME
               value: "${TE_UDP_MEDIA_TEST_NAME:-UDP-Media-Path}"
             - name: TE_UDP_MEDIA_INTERVAL

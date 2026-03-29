@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -28,6 +29,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "subscriptions")
 @RequiredArgsConstructor
+@EntityListeners(AuditingEntityListener.class)
 public class Subscription {
 
     /**
@@ -81,6 +83,7 @@ public class Subscription {
      * The currency of the subscription price.
      */
     @Column(name = "currency", nullable = false)
+    @Enumerated(EnumType.STRING)
     private Currency currency;
 
     /**
@@ -93,14 +96,15 @@ public class Subscription {
      * The record status of the subscription (ACTIVE, DELETED, HIDDEN).
      */
     @Column(name = "record_status")
+    @Enumerated(EnumType.STRING)
     private RecordStatus recordStatus;
 
     /**
      * A set of resolutions associated with the subscription.
      */
-    @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+    @ManyToMany
     @JoinTable(
-            name = "user_subscriptions",
+            name = "subscription_resolutions",
             joinColumns = @JoinColumn(name = "subscription_id"),
             inverseJoinColumns = @JoinColumn(name = "resolution_id"))
     private Set<Resolution> resolutions;
@@ -118,8 +122,8 @@ public class Subscription {
     @JoinColumn(name = "next_subscription_id", referencedColumnName = "id")
     private Subscription nextSubscription;
 
-    private void setNextSubscription(Subscription nextSubscription) {
+    public void setNextSubscription(Subscription nextSubscription) {
         this.nextSubscription = nextSubscription;
-        this.isTemporary = true;
+        this.isTemporary = nextSubscription != null;
     }
 }

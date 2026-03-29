@@ -8,6 +8,7 @@ metadata:
     app.kubernetes.io/part-of: streaming-service-app
 spec:
   replicas: 1
+  progressDeadlineSeconds: 1800
   selector:
     matchLabels:
       app.kubernetes.io/name: media-service-demo
@@ -91,14 +92,23 @@ spec:
                 /opt/demo/library/sponsor-stall.mp4
 
               mkdir -p /opt/demo/house-loop-segments
-              ffmpeg -hide_banner -loglevel warning -y \
-                -i /opt/demo/demo.mp4 \
-                -map 0:v:0 -map 0:a:0 \
-                -c:v libx264 -preset veryfast -pix_fmt yuv420p -r 24 -g 48 -keyint_min 48 -sc_threshold 0 \
-                -force_key_frames "expr:gte(t,n_forced*180)" \
-                -c:a aac -ar 44100 -b:a 128k \
-                -f segment -segment_time 180 -reset_timestamps 1 \
-                /opt/demo/house-loop-segments/segment-%03d.mp4
+              segment_asset() {
+                INPUT="$1"
+                PREFIX="$2"
+                ffmpeg -hide_banner -loglevel warning -y \
+                  -i "${INPUT}" \
+                  -map 0:v:0 -map 0:a:0 \
+                  -c:v libx264 -preset veryfast -pix_fmt yuv420p -r 24 -g 48 -keyint_min 48 -sc_threshold 0 \
+                  -force_key_frames "expr:gte(t,n_forced*180)" \
+                  -c:a aac -ar 44100 -b:a 128k \
+                  -f segment -segment_time 180 -reset_timestamps 1 \
+                  "/opt/demo/house-loop-segments/${PREFIX}-%03d.mp4"
+              }
+
+              segment_asset /opt/demo/library/big-buck-bunny.mp4 000-big-buck-bunny
+              segment_asset /opt/demo/library/elephants-dream.mp4 100-elephants-dream
+              segment_asset /opt/demo/library/sintel.mp4 200-sintel
+              segment_asset /opt/demo/library/tears-of-steel.mp4 300-tears-of-steel
           volumeMounts:
             - name: demo-media
               mountPath: /opt/demo
@@ -145,18 +155,49 @@ spec:
               value: /opt/demo/library
             - name: DEMO_MEDIA_BROADCAST_ROOT
               value: /broadcast-state
+            - name: DEMO_MEDIA_REVIEW_ROOT
+              value: /broadcast-state/rtsp-review
+            - name: DEMO_CONTENT_SERVICE_BASE_URL
+              value: http://content-service-demo.streaming-service-app.svc.cluster.local
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://streaming-postgres.streaming-service-app.svc.cluster.local:5432/streaming?currentSchema=demo_media
+            - name: SPRING_DATASOURCE_USERNAME
+              value: streaming
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: streaming
+            - name: SPRING_FLYWAY_DEFAULT_SCHEMA
+              value: demo_media
+            - name: SPRING_FLYWAY_SCHEMAS
+              value: demo_media
+            - name: SPRING_FLYWAY_TABLE
+              value: demo_media_flyway_schema_history
+          startupProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
           readinessProbe:
-            httpGet:
-              path: /api/v1/demo/media/health
+            tcpSocket:
               port: http
             initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
           livenessProbe:
-            httpGet:
-              path: /api/v1/demo/media/health
+            tcpSocket:
               port: http
             initialDelaySeconds: 20
             periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 9
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
           volumeMounts:
             - name: workspace
               mountPath: /workspace
@@ -177,9 +218,11 @@ spec:
               DEMO_SOURCE_FILE="/opt/demo/demo.mp4"
               ROUTE_FILE="/broadcast-state/current-source.txt"
               HOUSE_BREAK_SEGMENT_SECONDS="${HOUSE_BREAK_SEGMENT_SECONDS:-180}"
+              HOUSE_BREAK_SOURCE_INTERVAL="${HOUSE_BREAK_SOURCE_INTERVAL:-1}"
               DEMO_PID=""
               LIVE_PID=""
               LIVE_CONFIG=""
+              LIVE_HLS_FAILURES=0
               ROUTE_WORK_DIR=""
 
               stop_pid() {
@@ -207,6 +250,10 @@ spec:
               start_demo_source() {
                 ffmpeg -hide_banner -loglevel warning -re -stream_loop -1 -i "${DEMO_SOURCE_FILE}" -c copy -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/demo-source &
                 DEMO_PID="$!"
+              }
+
+              broadcast_hls_ready() {
+                wget -q -T 2 -O- http://127.0.0.1:8888/live/index.m3u8 2>/dev/null | grep -q '#EXTM3U'
               }
 
               start_live_stream() {
@@ -263,8 +310,36 @@ spec:
                   done < "${ROUTE_WORK_DIR}/segments.list"
                 }
 
+                build_source_list_playlist() {
+                  if [ ! -f "${ROUTE_SOURCE}" ]; then
+                    return 1
+                  fi
+
+                  grep -v '^[[:space:]]*$' "${ROUTE_SOURCE}" > "${ROUTE_WORK_DIR}/source-list" || true
+                  SOURCE_COUNT="$(wc -l < "${ROUTE_WORK_DIR}/source-list" | tr -d ' ')"
+                  if [ -z "${SOURCE_COUNT}" ] || [ "${SOURCE_COUNT}" -le 0 ]; then
+                    return 1
+                  fi
+
+                  : > "${ROUTE_PLAYLIST}"
+                  SOURCE_INDEX=0
+                  while IFS= read -r SOURCE_PATH; do
+                    [ -n "${SOURCE_PATH}" ] || continue
+                    printf "file '%s'\n" "${SOURCE_PATH}" >> "${ROUTE_PLAYLIST}"
+                    if [ "${ROUTE_INSERT_AD}" = "true" ] && [ "${HOUSE_BREAK_SOURCE_INTERVAL}" -gt 0 ] && [ $(( (SOURCE_INDEX + 1) % HOUSE_BREAK_SOURCE_INTERVAL )) -eq 0 ]; then
+                      append_ad_break_assets
+                    fi
+                    SOURCE_INDEX=$((SOURCE_INDEX + 1))
+                  done < "${ROUTE_WORK_DIR}/source-list"
+                }
+
                 build_route_playlist() {
                   : > "${ROUTE_PLAYLIST}"
+
+                  if [ "${ROUTE_KIND}" = "playlist" ]; then
+                    build_source_list_playlist
+                    return $?
+                  fi
 
                   if [ ! -f "${ROUTE_SOURCE}" ]; then
                     return 1
@@ -285,7 +360,7 @@ spec:
                   append_ad_break_assets
                 }
 
-                if [ "${ROUTE_KIND}" = "file" ]; then
+                if [ "${ROUTE_KIND}" = "file" ] || [ "${ROUTE_KIND}" = "playlist" ]; then
                   build_route_playlist || return 1
 
                   if [ "${ROUTE_LOOP}" = "true" ]; then
@@ -298,6 +373,7 @@ spec:
                 fi
 
                 LIVE_PID="$!"
+                LIVE_HLS_FAILURES=0
               }
 
               read_route() {
@@ -340,10 +416,19 @@ spec:
                     stop_live_stream
                     LIVE_CONFIG="${NEXT_CONFIG}"
                     start_live_stream "${ROUTE_KIND}" "${ROUTE_SOURCE}" "${ROUTE_LOOP}" "${ROUTE_INSERT_AD}" "${ROUTE_SLOW_AD}" "${ROUTE_AD_LOAD_FAILURE}" "${ROUTE_AD_ASSET}" "${ROUTE_STALL_ASSET}"
+                  elif broadcast_hls_ready; then
+                    LIVE_HLS_FAILURES=0
+                  else
+                    LIVE_HLS_FAILURES=$((LIVE_HLS_FAILURES + 1))
+                    if [ "${LIVE_HLS_FAILURES}" -ge 10 ]; then
+                      stop_live_stream
+                      start_live_stream "${ROUTE_KIND}" "${ROUTE_SOURCE}" "${ROUTE_LOOP}" "${ROUTE_INSERT_AD}" "${ROUTE_SLOW_AD}" "${ROUTE_AD_LOAD_FAILURE}" "${ROUTE_AD_ASSET}" "${ROUTE_STALL_ASSET}"
+                    fi
                   fi
                 else
                   stop_live_stream
                   LIVE_CONFIG=""
+                  LIVE_HLS_FAILURES=0
                 fi
 
                 sleep 2
@@ -370,13 +455,15 @@ spec:
           ports:
             - containerPort: 8554
               name: rtsp
+            - containerPort: 8888
+              name: hls
           resources:
             requests:
-              cpu: 50m
-              memory: 64Mi
+              cpu: 100m
+              memory: 128Mi
             limits:
-              cpu: 250m
-              memory: 256Mi
+              cpu: 500m
+              memory: 512Mi
       volumes:
         - name: source
           configMap:

@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.*;
 
-import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 public class ResolutionServiceImplTest {
@@ -63,11 +62,9 @@ public class ResolutionServiceImplTest {
     public void getAllResolutions_EmptyList() {
         when(resolutionRepository.findAll()).thenReturn(Collections.emptyList());
 
-        Assertions.assertDoesNotThrow(() -> {
-            List<Resolution> resolutions = sut.getAllResolutions();
-            assertNotNull(resolutions);
-            assertTrue(resolutions.isEmpty());
-        });
+        List<Resolution> resolutions = Assertions.assertDoesNotThrow(() -> sut.getAllResolutions());
+        Assertions.assertNotNull(resolutions);
+        Assertions.assertTrue(resolutions.isEmpty());
     }
 
     @Test
@@ -75,11 +72,9 @@ public class ResolutionServiceImplTest {
         Resolution resolution = new Resolution();
         when(resolutionRepository.findAll()).thenReturn(List.of(resolution));
 
-        Assertions.assertDoesNotThrow(() -> {
-            List<Resolution> resolutions = sut.getAllResolutions();
-            assertNotNull(resolutions);
-            assertEquals(1, resolutions.size());
-            assertEquals(resolution, resolutions.get(0));
-        });
+        List<Resolution> resolutions = Assertions.assertDoesNotThrow(() -> sut.getAllResolutions());
+        Assertions.assertNotNull(resolutions);
+        Assertions.assertEquals(1, resolutions.size());
+        Assertions.assertEquals(resolution, resolutions.get(0));
     }
 }

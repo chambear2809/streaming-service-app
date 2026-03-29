@@ -22,7 +22,6 @@
 
 package io.github.marianciuc.streamingservice.subscription.service.impl;
 
-import io.github.marianciuc.jwtsecurity.service.JwtUserDetails;
 import io.github.marianciuc.streamingservice.subscription.dto.SubscriptionRequest;
 import io.github.marianciuc.streamingservice.subscription.dto.SubscriptionResponse;
 import io.github.marianciuc.streamingservice.subscription.entity.RecordStatus;
@@ -36,6 +35,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -66,8 +66,16 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     public SubscriptionResponse updateSubscription(UUID id, SubscriptionRequest request) {
         Subscription subscription = getSubscription(id);
-        if (!subscription.getAllowedActiveSessions().equals(request.allowedActiveSessions())) subscription.setAllowedActiveSessions(request.allowedActiveSessions());
-        if (!subscription.getIsTemporary().equals(request.isTemporary())) subscription.setIsTemporary(request.isTemporary());
+        Subscription requestedState = subscriptionMapper.toEntity(request);
+        if (!Objects.equals(subscription.getName(), request.name())) subscription.setName(request.name());
+        if (!Objects.equals(subscription.getDescription(), request.description())) subscription.setDescription(request.description());
+        if (!Objects.equals(subscription.getDurationInDays(), request.durationInDays())) subscription.setDurationInDays(request.durationInDays());
+        if (!Objects.equals(subscription.getAllowedActiveSessions(), request.allowedActiveSessions())) subscription.setAllowedActiveSessions(request.allowedActiveSessions());
+        if (!Objects.equals(subscription.getPrice(), request.price())) subscription.setPrice(request.price());
+        if (!Objects.equals(subscription.getCurrency(), request.currency())) subscription.setCurrency(request.currency());
+        if (!Objects.equals(subscription.getIsTemporary(), requestedState.getIsTemporary())) subscription.setIsTemporary(requestedState.getIsTemporary());
+        if (!Objects.equals(subscription.getNextSubscription(), requestedState.getNextSubscription())) subscription.setNextSubscription(requestedState.getNextSubscription());
+        if (!Objects.equals(subscription.getResolutions(), requestedState.getResolutions())) subscription.setResolutions(requestedState.getResolutions());
         // TODO send message to users about updates
         return subscriptionMapper.toResponse(subscriptionRepository.save(subscription));
     }
@@ -82,6 +90,9 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     }
 
     public List<SubscriptionResponse> getAllSubscriptions(){
-        return subscriptionRepository.findAll().stream().map(subscriptionMapper::toResponse).collect(Collectors.toList());
+        return subscriptionRepository.findAll().stream()
+                .filter(subscription -> subscription.getRecordStatus() == RecordStatus.ACTIVE)
+                .map(subscriptionMapper::toResponse)
+                .collect(Collectors.toList());
     }
 }

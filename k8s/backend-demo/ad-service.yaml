@@ -74,6 +74,18 @@ spec:
               value: service.name=$(OTEL_SERVICE_NAME),service.namespace=streaming-service-app,k8s.namespace.name=streaming-service-app,k8s.deployment.name=ad-service-demo,deployment.environment=streaming-app
             - name: SERVER_PORT
               value: "8080"
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://streaming-postgres.streaming-service-app.svc.cluster.local:5432/streaming?currentSchema=demo_ad
+            - name: SPRING_DATASOURCE_USERNAME
+              value: streaming
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: streaming
+            - name: SPRING_FLYWAY_DEFAULT_SCHEMA
+              value: demo_ad
+            - name: SPRING_FLYWAY_SCHEMAS
+              value: demo_ad
+            - name: SPRING_FLYWAY_TABLE
+              value: demo_ad_flyway_schema_history
           readinessProbe:
             httpGet:
               path: /healthz

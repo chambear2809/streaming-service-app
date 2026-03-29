@@ -21,18 +21,41 @@ import java.util.concurrent.atomic.AtomicReference;
 public class DemoAdController {
 
     private static final int MAX_DELAY_MS = 15_000;
+    private static final int DEMO_AD_BREAK_SEGMENT_SECONDS = 180;
     private static final int DEMO_AD_BREAK_DURATION_SECONDS = 15;
-    private static final int HOUSE_LOOP_BREAK_SEGMENT_SECONDS = 180;
-    private static final int HOUSE_LOOP_BREAK_COUNT = 3;
-    private static final int HOUSE_LOOP_CONTENT_SECONDS = 596;
-    private static final int HOUSE_LOOP_TRAILING_SEGMENT_SECONDS =
-            HOUSE_LOOP_CONTENT_SECONDS - (HOUSE_LOOP_BREAK_SEGMENT_SECONDS * HOUSE_LOOP_BREAK_COUNT);
-    private static final Duration PROGRAM_CONTENT_SLOT = Duration.ofSeconds(HOUSE_LOOP_BREAK_SEGMENT_SECONDS);
-    private static final Duration PROGRAM_TRAILING_CONTENT_SLOT = Duration.ofSeconds(HOUSE_LOOP_TRAILING_SEGMENT_SECONDS);
     private static final Duration PROGRAM_AD_SLOT = Duration.ofSeconds(DEMO_AD_BREAK_DURATION_SECONDS);
-    private static final Duration PROGRAM_CYCLE = PROGRAM_CONTENT_SLOT.multipliedBy(HOUSE_LOOP_BREAK_COUNT)
-            .plus(PROGRAM_TRAILING_CONTENT_SLOT)
-            .plus(PROGRAM_AD_SLOT.multipliedBy(HOUSE_LOOP_BREAK_COUNT));
+    private static final List<HouseLoopProgram> HOUSE_LOOP_PROGRAMS = List.of(
+            new HouseLoopProgram(
+                    "Big Buck Bunny",
+                    Duration.ofSeconds(597),
+                    "/api/v1/demo/media/library/big-buck-bunny.mp4",
+                    "Forest slapstick opens the house lineup before sponsor pod A."
+            ),
+            new HouseLoopProgram(
+                    "Elephants Dream",
+                    Duration.ofSeconds(654),
+                    "/api/v1/demo/media/library/elephants-dream.mp4",
+                    "The machine-world feature follows sponsor pod A and leads into the next stitched break."
+            ),
+            new HouseLoopProgram(
+                    "Sintel",
+                    Duration.ofSeconds(888),
+                    "/api/v1/demo/media/library/sintel.mp4",
+                    "The longer fantasy feature carries the mid-show window before sponsor pod C."
+            ),
+            new HouseLoopProgram(
+                    "Tears of Steel",
+                    Duration.ofSeconds(734),
+                    "/api/v1/demo/media/library/tears-of-steel.mp4",
+                    "The closing hybrid feature resets the channel before the lineup rolls into the next sponsor pod."
+            )
+    );
+    private static final List<HouseLoopSegment> HOUSE_LOOP_SEGMENTS = houseLoopSegments();
+    private static final int PROGRAM_BREAK_COUNT = HOUSE_LOOP_SEGMENTS.size();
+    private static final Duration PROGRAM_CYCLE = HOUSE_LOOP_SEGMENTS.stream()
+            .map(HouseLoopSegment::duration)
+            .reduce(Duration.ZERO, Duration::plus)
+            .plus(PROGRAM_AD_SLOT.multipliedBy(PROGRAM_BREAK_COUNT));
     private static final Instant PROGRAM_CYCLE_ORIGIN = Instant.parse("2026-01-01T00:00:00Z");
     private static final String PROGRAM_CHANNEL = "Acme Network East";
     private static final String AD_KIND = "AD";
@@ -40,16 +63,21 @@ public class DemoAdController {
     private static final String READY_STATUS = "READY";
     private static final String DEGRADED_STATUS = "DEGRADED";
     private static final String FAILED_STATUS = "FAILED_TO_LOAD";
-    private static final String HOUSE_LOOP_TITLE = "Acme House Lineup";
-    private static final String HOUSE_LOOP_PLAYBACK_URL = "/api/v1/demo/media/movie.mp4";
     private static final List<AdCampaign> AD_CAMPAIGNS = List.of(
             new AdCampaign("North Coast Sports Network", "Regional sports launch pod"),
             new AdCampaign("Metro Weather Desk", "Storm desk weather sponsorship"),
-            new AdCampaign("City Arts Channel", "Festival takeover pod")
+            new AdCampaign("City Arts Channel", "Festival takeover pod"),
+            new AdCampaign("Pop-Up Event East", "Opening-week sponsor activation")
     );
-    private static final AtomicReference<AdIssueState> issueState = new AtomicReference<>(AdIssueState.disabled());
-    private static final AtomicReference<ProgramTimelineState> timelineState =
-            new AtomicReference<>(ProgramTimelineState.defaulted());
+    private final AtomicReference<AdIssueState> issueState;
+    private final AtomicReference<ProgramTimelineState> timelineState;
+    private final DemoAdStateRepository stateRepository;
+
+    public DemoAdController(DemoAdStateRepository stateRepository) {
+        this.stateRepository = stateRepository;
+        this.issueState = new AtomicReference<>(AdIssueState.fromRecord(stateRepository.loadIssueState()));
+        this.timelineState = new AtomicReference<>(ProgramTimelineState.fromRecord(stateRepository.loadTimelineState()));
+    }
 
     @GetMapping("/healthz")
     public Map<String, String> probe() {
@@ -83,7 +111,7 @@ public class DemoAdController {
                 ? campaign.label() + " is scheduled, but the injected ad-load failure is forcing a missed sponsor break inside the house loop."
                 : activeWindow != null
                     ? campaign.label() + " is active and the short sponsor clip is stitched into the house loop right now."
-                    : campaign.label() + " is armed for the next sponsor pod inside the house loop.";
+                    : campaign.label() + " is armed for the next sponsor pod inside the tighter house loop.";
 
         return new AdCurrentResponse(
                 serviceState,
@@ -154,6 +182,7 @@ public class DemoAdController {
                 Instant.now()
         );
         issueState.set(updated);
+        stateRepository.saveIssueState(updated.toRecord());
         return toIssueResponse(updated);
     }
 
@@ -172,6 +201,7 @@ public class DemoAdController {
 
         ProgramTimelineState updated = new ProgramTimelineState(cycleOriginAt, Instant.now());
         timelineState.set(updated);
+        stateRepository.saveTimelineState(updated.toRecord());
         return toTimelineResponse(updated);
     }
 
@@ -179,29 +209,25 @@ public class DemoAdController {
         ZonedDateTime cursor = cycle.start();
         List<AdProgramQueueEntry> entries = new java.util.ArrayList<>();
         ZonedDateTime now = ZonedDateTime.now();
-
-        for (int index = 0; index <= HOUSE_LOOP_BREAK_COUNT; index++) {
-            Duration contentDuration = index < HOUSE_LOOP_BREAK_COUNT ? PROGRAM_CONTENT_SLOT : PROGRAM_TRAILING_CONTENT_SLOT;
+        for (int index = 0; index < HOUSE_LOOP_SEGMENTS.size(); index++) {
+            HouseLoopSegment segment = HOUSE_LOOP_SEGMENTS.get(index);
+            Duration contentDuration = segment.duration();
             ZonedDateTime contentEnd = cursor.plus(contentDuration);
             entries.add(new AdProgramQueueEntry(
                     "content-" + cycle.sequence() + "-" + index,
                     null,
                     CONTENT_KIND,
-                    index < HOUSE_LOOP_BREAK_COUNT ? HOUSE_LOOP_TITLE + " · Segment " + (index + 1) : HOUSE_LOOP_TITLE + " · Closing segment",
+                    segment.title(),
                     PROGRAM_CHANNEL,
                     slotLabel(cursor, contentEnd),
                     !now.isBefore(cursor) && now.isBefore(contentEnd) ? "NOW" : "QUEUED",
-                    contentDetail(index),
-                    HOUSE_LOOP_PLAYBACK_URL,
+                    segment.detail(),
+                    segment.playbackUrl(),
                     formatDurationLabel(contentDuration)
             ));
             cursor = contentEnd;
 
-            if (index == HOUSE_LOOP_BREAK_COUNT) {
-                continue;
-            }
-
-            long breakSequence = cycle.sequence() * HOUSE_LOOP_BREAK_COUNT + index;
+            long breakSequence = cycle.sequence() * PROGRAM_BREAK_COUNT + index;
             AdCampaign campaign = campaignForSequence(breakSequence);
             ZonedDateTime adEnd = cursor.plus(PROGRAM_AD_SLOT);
             boolean failed = current.enabled() && current.adLoadFailureEnabled();
@@ -216,7 +242,7 @@ public class DemoAdController {
                     failed ? FAILED_STATUS : activeBreak ? "NOW" : current.enabled() ? DEGRADED_STATUS : READY_STATUS,
                     failed
                             ? campaign.label() + " is queued here, but the injected ad fault will make this sponsor break miss."
-                            : campaign.label() + " inserts the short sponsor clip between house-loop segments.",
+                            : campaign.label() + " inserts the short sponsor clip at the next three-minute break.",
                     failed ? null : "/api/v1/demo/media/library/sponsor-break.mp4",
                     DEMO_AD_BREAK_DURATION_SECONDS + "s"
             ));
@@ -243,17 +269,18 @@ public class DemoAdController {
 
     private List<DemoAdWindow> demoAdWindows(long cycleSequence, ZonedDateTime cycleStart) {
         List<DemoAdWindow> windows = new java.util.ArrayList<>();
+        long cursorSeconds = 0;
+        for (int segmentIndex = 0; segmentIndex < HOUSE_LOOP_SEGMENTS.size(); segmentIndex++) {
+            cursorSeconds += HOUSE_LOOP_SEGMENTS.get(segmentIndex).duration().toSeconds();
 
-        for (int slotIndex = 0; slotIndex < HOUSE_LOOP_BREAK_COUNT; slotIndex++) {
-            long breakOffsetSeconds = (long) HOUSE_LOOP_BREAK_SEGMENT_SECONDS * (slotIndex + 1)
-                    + (long) DEMO_AD_BREAK_DURATION_SECONDS * slotIndex;
-            ZonedDateTime breakStart = cycleStart.plusSeconds(breakOffsetSeconds);
+            ZonedDateTime breakStart = cycleStart.plusSeconds(cursorSeconds);
             windows.add(new DemoAdWindow(
-                    cycleSequence * HOUSE_LOOP_BREAK_COUNT + slotIndex,
-                    slotIndex,
+                    cycleSequence * PROGRAM_BREAK_COUNT + segmentIndex,
+                    segmentIndex,
                     breakStart,
                     breakStart.plusSeconds(DEMO_AD_BREAK_DURATION_SECONDS)
             ));
+            cursorSeconds += DEMO_AD_BREAK_DURATION_SECONDS;
         }
 
         return windows;
@@ -288,7 +315,7 @@ public class DemoAdController {
 
     private String issueSummary(AdIssueState state) {
         if (!state.enabled()) {
-            return "Ad service is healthy. Sponsor clips are inserted between house-loop segments without additional delay.";
+            return "Ad service is healthy. Sponsor clips are inserted roughly every three minutes throughout the house loop without additional delay.";
         }
 
         java.util.List<String> effects = new java.util.ArrayList<>();
@@ -372,11 +399,31 @@ public class DemoAdController {
         return hour + ":" + String.format("%02d", value.getMinute()) + (value.getHour() < 12 ? " AM" : " PM");
     }
 
-    private String contentDetail(int index) {
-        if (index < HOUSE_LOOP_BREAK_COUNT) {
-            return "House-loop segment " + (index + 1) + " carries the channel until the next stitched sponsor pod.";
+    private static List<HouseLoopSegment> houseLoopSegments() {
+        List<HouseLoopSegment> segments = new java.util.ArrayList<>();
+
+        for (HouseLoopProgram program : HOUSE_LOOP_PROGRAMS) {
+            long totalSeconds = program.duration().toSeconds();
+            int segmentCount = Math.max(1, (int) Math.ceil((double) totalSeconds / DEMO_AD_BREAK_SEGMENT_SECONDS));
+            long remainingSeconds = totalSeconds;
+
+            for (int part = 1; remainingSeconds > 0; part++) {
+                long segmentSeconds = Math.min(DEMO_AD_BREAK_SEGMENT_SECONDS, remainingSeconds);
+                String title = segmentCount > 1 ? program.title() + " · Part " + part : program.title();
+                String detail = segmentCount > 1
+                        ? program.detail() + " Part " + part + " of " + segmentCount + " in the tighter sponsor loop."
+                        : program.detail();
+                segments.add(new HouseLoopSegment(
+                        title,
+                        Duration.ofSeconds(segmentSeconds),
+                        program.playbackUrl(),
+                        detail
+                ));
+                remainingSeconds -= segmentSeconds;
+            }
         }
-        return "The closing house-loop segment runs after the final sponsor pod before the cycle resets.";
+
+        return List.copyOf(segments);
     }
 
     private String formatDurationLabel(Duration duration) {
@@ -395,6 +442,22 @@ public class DemoAdController {
     private record AdCampaign(
             String sponsor,
             String label
+    ) {
+    }
+
+    private record HouseLoopProgram(
+            String title,
+            Duration duration,
+            String playbackUrl,
+            String detail
+    ) {
+    }
+
+    private record HouseLoopSegment(
+            String title,
+            Duration duration,
+            String playbackUrl,
+            String detail
     ) {
     }
 
@@ -419,6 +482,15 @@ public class DemoAdController {
     ) {
     }
 
+    static record AdIssueStateRecord(
+            boolean enabled,
+            String preset,
+            int responseDelayMs,
+            boolean adLoadFailureEnabled,
+            Instant updatedAt
+    ) {
+    }
+
     private record AdIssueState(
             boolean enabled,
             String preset,
@@ -429,6 +501,26 @@ public class DemoAdController {
         private static AdIssueState disabled() {
             return new AdIssueState(false, "clear", 0, false, Instant.EPOCH);
         }
+
+        private static AdIssueState fromRecord(AdIssueStateRecord record) {
+            return new AdIssueState(
+                    record.enabled(),
+                    record.preset(),
+                    record.responseDelayMs(),
+                    record.adLoadFailureEnabled(),
+                    record.updatedAt()
+            );
+        }
+
+        private AdIssueStateRecord toRecord() {
+            return new AdIssueStateRecord(enabled, preset, responseDelayMs, adLoadFailureEnabled, updatedAt);
+        }
+    }
+
+    static record ProgramTimelineStateRecord(
+            Instant cycleOriginAt,
+            Instant updatedAt
+    ) {
     }
 
     private record ProgramTimelineState(
@@ -437,6 +529,14 @@ public class DemoAdController {
     ) {
         private static ProgramTimelineState defaulted() {
             return new ProgramTimelineState(PROGRAM_CYCLE_ORIGIN, Instant.EPOCH);
+        }
+
+        private static ProgramTimelineState fromRecord(ProgramTimelineStateRecord record) {
+            return new ProgramTimelineState(record.cycleOriginAt(), record.updatedAt());
+        }
+
+        private ProgramTimelineStateRecord toRecord() {
+            return new ProgramTimelineStateRecord(cycleOriginAt, updatedAt);
         }
     }
 

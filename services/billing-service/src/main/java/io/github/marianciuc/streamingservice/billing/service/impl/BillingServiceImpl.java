@@ -2,15 +2,20 @@ package io.github.marianciuc.streamingservice.billing.service.impl;
 
 import io.github.marianciuc.streamingservice.billing.dto.request.CreateBillingInvoiceRequest;
 import io.github.marianciuc.streamingservice.billing.dto.request.CreateBillingLineItemRequest;
+import io.github.marianciuc.streamingservice.billing.dto.request.CreateBillingBusinessEventRequest;
 import io.github.marianciuc.streamingservice.billing.dto.request.UpdateBillingInvoiceStatusRequest;
 import io.github.marianciuc.streamingservice.billing.dto.response.BillingAccountSummaryResponse;
+import io.github.marianciuc.streamingservice.billing.dto.response.BillingBusinessEventResponse;
 import io.github.marianciuc.streamingservice.billing.dto.response.BillingInvoiceLineItemResponse;
 import io.github.marianciuc.streamingservice.billing.dto.response.BillingInvoiceResponse;
+import io.github.marianciuc.streamingservice.billing.entity.BillingBusinessEvent;
 import io.github.marianciuc.streamingservice.billing.entity.BillingInvoice;
 import io.github.marianciuc.streamingservice.billing.entity.BillingInvoiceLineItem;
+import io.github.marianciuc.streamingservice.billing.enums.BillingBusinessEventType;
 import io.github.marianciuc.streamingservice.billing.enums.InvoiceStatus;
 import io.github.marianciuc.streamingservice.billing.exception.BillingNotFoundException;
 import io.github.marianciuc.streamingservice.billing.exception.InvalidBillingStateException;
+import io.github.marianciuc.streamingservice.billing.repository.BillingBusinessEventRepository;
 import io.github.marianciuc.streamingservice.billing.repository.BillingInvoiceRepository;
 import io.github.marianciuc.streamingservice.billing.service.BillingService;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +38,7 @@ public class BillingServiceImpl implements BillingService {
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
 
     private final BillingInvoiceRepository billingInvoiceRepository;
+    private final BillingBusinessEventRepository billingBusinessEventRepository;
 
     @Override
     @Transactional
@@ -173,6 +179,68 @@ public class BillingServiceImpl implements BillingService {
         );
     }
 
+    @Override
+    @Transactional
+    public BillingBusinessEventResponse recordBusinessEvent(CreateBillingBusinessEventRequest request) {
+        UUID businessEventId = request.eventId() == null ? UUID.randomUUID() : request.eventId();
+        if (billingBusinessEventRepository.existsByBusinessEventId(businessEventId)) {
+            return billingBusinessEventRepository.findByBusinessEventId(businessEventId)
+                    .map(this::toResponse)
+                    .orElseThrow(() -> new InvalidBillingStateException("Business event already exists but could not be loaded."));
+        }
+
+        BillingBusinessEvent event = BillingBusinessEvent.builder()
+                .businessEventId(businessEventId)
+                .eventType(request.eventType())
+                .userId(request.userId())
+                .invoiceId(request.invoiceId())
+                .orderId(request.orderId())
+                .subscriptionId(request.subscriptionId())
+                .currency(request.currency())
+                .title(request.title().trim())
+                .description(normalizeText(request.description()))
+                .quantity(request.quantity())
+                .unitAmount(normalizeAmount(request.unitAmount()))
+                .taxAmount(normalizeAmount(request.taxAmount()))
+                .discountAmount(normalizeAmount(request.discountAmount()))
+                .issuedDate(request.issuedDate())
+                .dueDate(request.dueDate())
+                .servicePeriodStart(request.servicePeriodStart())
+                .servicePeriodEnd(request.servicePeriodEnd())
+                .externalReference(normalizeText(request.externalReference()))
+                .notes(normalizeText(request.notes()))
+                .processingStatus("RECORDED")
+                .build();
+
+        BillingInvoice appliedInvoice = applyBusinessEvent(request);
+        if (appliedInvoice != null) {
+            event.setAppliedInvoiceId(appliedInvoice.getId());
+            event.setAppliedInvoiceNumber(appliedInvoice.getInvoiceNumber());
+            event.setProcessingStatus("APPLIED");
+        }
+
+        billingBusinessEventRepository.save(event);
+        return toResponse(event);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<BillingBusinessEventResponse> listBusinessEvents(UUID userId, BillingBusinessEventType eventType) {
+        List<BillingBusinessEvent> events;
+        if (userId != null) {
+            events = billingBusinessEventRepository.findAllByUserIdOrderByCreatedAtDesc(userId);
+        } else if (eventType != null) {
+            events = billingBusinessEventRepository.findAllByEventTypeOrderByCreatedAtDesc(eventType);
+        } else {
+            events = billingBusinessEventRepository.findAllByOrderByCreatedAtDesc();
+        }
+
+        return events.stream()
+                .filter(event -> eventType == null || event.getEventType() == eventType)
+                .map(this::toResponse)
+                .toList();
+    }
+
     private BillingInvoice getManagedInvoice(UUID invoiceId) {
         return billingInvoiceRepository.findDetailedById(invoiceId)
                 .orElseThrow(() -> new BillingNotFoundException("Billing invoice %s was not found.".formatted(invoiceId)));
@@ -191,6 +259,84 @@ public class BillingServiceImpl implements BillingService {
                 .servicePeriodStart(request.servicePeriodStart())
                 .servicePeriodEnd(request.servicePeriodEnd())
                 .build();
+    }
+
+    private BillingInvoice applyBusinessEvent(CreateBillingBusinessEventRequest request) {
+        return switch (request.eventType()) {
+            case ORDER_BOOKED, SUBSCRIPTION_RENEWED -> createInvoiceFromBusinessEvent(request);
+            case PAYMENT_CAPTURED -> applyPaymentCapture(request);
+            case PAYMENT_FAILED -> appendInvoiceNote(request, "Payment failed");
+            case RETRY_SCHEDULED -> appendInvoiceNote(request, "Retry scheduled");
+            case RECONCILIATION_RECORDED -> appendInvoiceNote(request, "Reconciliation recorded");
+        };
+    }
+
+    private BillingInvoice createInvoiceFromBusinessEvent(CreateBillingBusinessEventRequest request) {
+        BillingInvoiceResponse response = createInvoice(new CreateBillingInvoiceRequest(
+                request.userId(),
+                request.orderId(),
+                request.subscriptionId(),
+                request.billingCycle() == null ? io.github.marianciuc.streamingservice.billing.enums.BillingCycle.ONE_TIME : request.billingCycle(),
+                request.currency(),
+                request.issuedDate(),
+                request.dueDate(),
+                request.servicePeriodStart(),
+                request.servicePeriodEnd(),
+                request.taxAmount(),
+                request.discountAmount(),
+                request.notes(),
+                List.of(new CreateBillingLineItemRequest(
+                        request.title(),
+                        request.description(),
+                        request.quantity(),
+                        request.unitAmount(),
+                        request.servicePeriodStart(),
+                        request.servicePeriodEnd()
+                ))
+        ));
+        return getManagedInvoice(response.id());
+    }
+
+    private BillingInvoice applyPaymentCapture(CreateBillingBusinessEventRequest request) {
+        BillingInvoice invoice = resolveInvoiceForEvent(request);
+        invoice.setStatus(InvoiceStatus.PAID);
+        if (request.externalReference() != null && !request.externalReference().isBlank()) {
+            invoice.setExternalPaymentReference(request.externalReference().trim());
+        }
+        if (request.notes() != null) {
+            invoice.setNotes(appendNote(invoice.getNotes(), request.notes()));
+        }
+        refreshDerivedAmounts(invoice);
+        return invoice;
+    }
+
+    private BillingInvoice appendInvoiceNote(CreateBillingBusinessEventRequest request, String eventLabel) {
+        BillingInvoice invoice = resolveInvoiceForEvent(request);
+        invoice.setNotes(appendNote(invoice.getNotes(), eventLabel + ": " + request.title()));
+        refreshDerivedAmounts(invoice);
+        return invoice;
+    }
+
+    private BillingInvoice resolveInvoiceForEvent(CreateBillingBusinessEventRequest request) {
+        if (request.invoiceId() != null) {
+            return getManagedInvoice(request.invoiceId());
+        }
+
+        if (request.orderId() != null) {
+            return billingInvoiceRepository.findAllDetailedByOrderIdOrderByCreatedAtDesc(request.orderId()).stream()
+                    .findFirst()
+                    .orElseThrow(() -> new BillingNotFoundException("Billing invoice for order %s was not found.".formatted(request.orderId())));
+        }
+
+        if (request.subscriptionId() != null) {
+            return billingInvoiceRepository.findAllDetailedBySubscriptionIdOrderByCreatedAtDesc(request.subscriptionId()).stream()
+                    .findFirst()
+                    .orElseThrow(() -> new BillingNotFoundException("Billing invoice for subscription %s was not found.".formatted(request.subscriptionId())));
+        }
+
+        return billingInvoiceRepository.findAllDetailedByUserIdOrderByCreatedAtDesc(request.userId()).stream()
+                .findFirst()
+                .orElseThrow(() -> new BillingNotFoundException("Billing invoice for account %s was not found.".formatted(request.userId())));
     }
 
     private void refreshDerivedAmounts(BillingInvoice invoice) {
@@ -291,6 +437,15 @@ public class BillingServiceImpl implements BillingService {
         return normalized.isEmpty() ? null : normalized;
     }
 
+    private String appendNote(String existingNotes, String nextNote) {
+        String normalizedNext = normalizeText(nextNote);
+        if (normalizedNext == null) {
+            return normalizeText(existingNotes);
+        }
+        String normalizedExisting = normalizeText(existingNotes);
+        return normalizedExisting == null ? normalizedNext : normalizedExisting + "\n" + normalizedNext;
+    }
+
     private BillingInvoiceResponse toResponse(BillingInvoice invoice) {
         InvoiceStatus effectiveStatus = resolveStatus(invoice);
         return new BillingInvoiceResponse(
@@ -329,6 +484,36 @@ public class BillingServiceImpl implements BillingService {
                 scale(lineItem.getLineTotal()),
                 lineItem.getServicePeriodStart(),
                 lineItem.getServicePeriodEnd()
+        );
+    }
+
+    private BillingBusinessEventResponse toResponse(BillingBusinessEvent event) {
+        return new BillingBusinessEventResponse(
+                event.getId(),
+                event.getBusinessEventId(),
+                event.getEventType(),
+                event.getUserId(),
+                event.getInvoiceId(),
+                event.getOrderId(),
+                event.getSubscriptionId(),
+                event.getCurrency(),
+                event.getTitle(),
+                event.getDescription(),
+                event.getQuantity(),
+                scale(event.getUnitAmount()),
+                scale(event.getTaxAmount()),
+                scale(event.getDiscountAmount()),
+                event.getIssuedDate(),
+                event.getDueDate(),
+                event.getServicePeriodStart(),
+                event.getServicePeriodEnd(),
+                event.getExternalReference(),
+                event.getNotes(),
+                event.getAppliedInvoiceId(),
+                event.getAppliedInvoiceNumber(),
+                event.getProcessingStatus(),
+                event.getCreatedAt(),
+                event.getUpdatedAt()
         );
     }
 }

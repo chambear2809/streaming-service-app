@@ -15,12 +15,14 @@ import com.nimbusds.jose.jwk.RSAKey;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.text.ParseException;
 
 @Slf4j
 @Configuration
+@Profile("!broadcast-demo")
 public class JwtConfig {
 
     @Bean

@@ -22,6 +22,7 @@ import java.util.UUID;
 public interface OrderService {
 
     OrderResponse createOrder(OrderRequest orderRequest, Authentication authentication);
+    OrderResponse updateOrder(UUID orderId, OrderRequest orderRequest, Authentication authentication);
 
     OrderResponse getOrderById(UUID orderId);
 

@@ -9,15 +9,14 @@
 package io.github.marianciuc.streamingservice.media.services;
 
 import io.github.marianciuc.streamingservice.media.exceptions.ChunkUploadNotInitializedException;
-import io.github.marianciuc.streamingservice.media.exceptions.ChunkUploadTimeoutException;
+import io.github.marianciuc.streamingservice.media.exceptions.InvalidChunkUploadRequestException;
 import io.github.marianciuc.streamingservice.media.services.impl.ChunkStateServiceImpl;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
@@ -25,10 +24,11 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-@SpringBootTest
+@ExtendWith(MockitoExtension.class)
 class ChunkStateServiceTest {
 
 
@@ -42,11 +42,7 @@ class ChunkStateServiceTest {
 
     @BeforeEach
     void setUp() {
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-    }
-
-    @AfterEach
-    void tearDown() {
+        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
     }
 
     @Test
@@ -91,11 +87,22 @@ class ChunkStateServiceTest {
         Boolean[] chunkStatus = {false, false, false, false, false};
         when(valueOperations.get(key)).thenReturn(chunkStatus);
 
-        assertThrows(IllegalArgumentException.class,
-                () -> chunkStateService.updateChunkUploadStatus(fileId, -1, chunkStatus.length));
+        assertThrows(InvalidChunkUploadRequestException.class,
+                () -> chunkStateService.updateChunkUploadStatus(fileId, 0, chunkStatus.length));
 
-        assertThrows(ChunkUploadTimeoutException.class,
+        assertThrows(InvalidChunkUploadRequestException.class,
                 () -> chunkStateService.updateChunkUploadStatus(fileId, 7, chunkStatus.length));
+    }
+
+    @Test
+    void updateChunkUploadStatus_ShouldThrowException_ForMismatchedTotalChunks() {
+        UUID fileId = UUID.randomUUID();
+        String key = "chunk_upload::" + fileId;
+        Boolean[] chunkStatus = {false, false, false, false, false};
+        when(valueOperations.get(key)).thenReturn(chunkStatus);
+
+        assertThrows(InvalidChunkUploadRequestException.class,
+                () -> chunkStateService.updateChunkUploadStatus(fileId, 3, 6));
     }
 
     @Test

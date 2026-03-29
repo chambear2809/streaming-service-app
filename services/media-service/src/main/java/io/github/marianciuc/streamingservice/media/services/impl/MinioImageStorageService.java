@@ -42,7 +42,7 @@ public class MinioImageStorageService implements ImageStorageService {
     private final MinioClient minioClient;
 
     @Override
-    public String uploadImage(MultipartFile file) throws ImageUploadException {
+    public String upload(MultipartFile file) throws ImageUploadException {
         String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
         try {
             InputStream is = file.getInputStream();
@@ -63,7 +63,7 @@ public class MinioImageStorageService implements ImageStorageService {
     }
 
     @Override
-    public InputStream getImage(String fileName) throws ImageNotFoundException {
+    public InputStream find(String fileName) throws ImageNotFoundException {
         try {
             return minioClient.getObject(
                     GetObjectArgs.builder()
@@ -79,7 +79,7 @@ public class MinioImageStorageService implements ImageStorageService {
     }
 
     @Override
-    public void deleteImage(String fileName) {
+    public void delete(String fileName) {
         try {
             minioClient.removeObject(
                     RemoveObjectArgs.builder()

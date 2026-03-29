@@ -29,34 +29,33 @@ import lombok.SneakyThrows;
 import org.junit.jupiter.api.Test;
 import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
-import org.springframework.boot.test.mock.mockito.MockBean;
 
 import java.time.LocalDate;
 import java.util.Arrays;
+import java.util.UUID;
 
 import static org.mockito.Mockito.*;
 
 public class FetchActiveSubscriptionsJobTest {
-    @MockBean
-    private JobExecutionContext jobExecutionContext;
-    
-    @MockBean
-    private UserSubscriptionServiceImpl service;
-    
+
     @SneakyThrows
     @Test
     public void testExecute() throws JobExecutionException {
+        JobExecutionContext jobExecutionContext = mock(JobExecutionContext.class);
+        UserSubscriptionServiceImpl service = mock(UserSubscriptionServiceImpl.class);
         FetchActiveSubscriptionsJob aSJob = new FetchActiveSubscriptionsJob(service);
-            
+
         UserSubscriptions sub1 = new UserSubscriptions();
         UserSubscriptions sub2 = new UserSubscriptions();
-        
+        sub1.setId(UUID.randomUUID());
+        sub2.setId(UUID.randomUUID());
+
         when(service.getAllUserSubscriptionsByStatusAndEndDate(any(), any())).thenReturn(Arrays.asList(sub1, sub2));
-        
+
         aSJob.execute(jobExecutionContext);
 
-        verify(service, times(1)).unsubscribeUser(sub1);
-        verify(service, times(1)).unsubscribeUser(sub2);
+        verify(service, times(1)).extendSubscription(sub1);
+        verify(service, times(1)).extendSubscription(sub2);
         verify(service, times(1)).getAllUserSubscriptionsByStatusAndEndDate(SubscriptionStatus.ACTIVE, LocalDate.now());
     }
 }

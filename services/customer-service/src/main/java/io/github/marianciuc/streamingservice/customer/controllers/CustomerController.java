@@ -35,7 +35,7 @@ public class CustomerController {
             @RequestParam(value = "username", required = false) String username,
             @RequestParam(value = "email", required = false) String email,
             @RequestParam(value = "id", required = false) String id,
-            @RequestParam(value = "isEmailVerified", required = false) boolean isEmailVerified ) {
+            @RequestParam(value = "isEmailVerified", required = false) Boolean isEmailVerified ) {
 
         return ResponseEntity.ok(customerServiceImpl.findAllByFilter(page, pageSize, country,
                 email, id, isEmailVerified, username));

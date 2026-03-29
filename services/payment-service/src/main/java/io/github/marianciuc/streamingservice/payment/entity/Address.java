@@ -1,6 +1,11 @@
 package io.github.marianciuc.streamingservice.payment.entity;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -36,8 +41,4 @@ public class Address {
 
     @Column(name = "country")
     private String country;
-
-    @OneToOne
-    @JoinColumn(name = "card_holder_id")
-    private CardHolder cardHolder;
 }

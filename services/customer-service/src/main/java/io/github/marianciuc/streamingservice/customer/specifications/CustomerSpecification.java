@@ -34,6 +34,6 @@ public class CustomerSpecification {
     }
 
     public static Specification<Customer> idStartsWith(String prefix) {
-        return (root, query, criteriaBuilder) -> criteriaBuilder.like(root.get("id"), prefix + "%");
+        return (root, query, criteriaBuilder) -> criteriaBuilder.like(root.get("id").as(String.class), prefix + "%");
     }
 }

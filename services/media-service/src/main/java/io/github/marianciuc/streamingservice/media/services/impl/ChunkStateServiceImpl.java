@@ -6,11 +6,10 @@
 package io.github.marianciuc.streamingservice.media.services.impl;
 
 import io.github.marianciuc.streamingservice.media.exceptions.ChunkUploadNotInitializedException;
-import io.github.marianciuc.streamingservice.media.exceptions.ChunkUploadTimeoutException;
+import io.github.marianciuc.streamingservice.media.exceptions.InvalidChunkUploadRequestException;
 import io.github.marianciuc.streamingservice.media.services.ChunkStateService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
@@ -31,10 +30,17 @@ public class ChunkStateServiceImpl implements ChunkStateService {
         String key = generateRedisKey(fileId);
         Boolean[] chunkStatus = getChunkStatusFromRedis(key);
 
-        if (chunkNumber - 1 >= totalChunks) {
-            throw new ChunkUploadTimeoutException("Chunk number exceeds total chunks for key: " + key);
-        } if (chunkNumber < 0) {
-            throw new IllegalArgumentException("Chunk number must be greater than 0");
+        if (totalChunks < 1) {
+            throw new InvalidChunkUploadRequestException("Total chunks must be greater than 0");
+        }
+        if (chunkStatus.length != totalChunks) {
+            throw new InvalidChunkUploadRequestException("Total chunks do not match the initialized upload state for key: " + key);
+        }
+        if (chunkNumber < 1) {
+            throw new InvalidChunkUploadRequestException("Chunk number must be greater than 0");
+        }
+        if (chunkNumber > chunkStatus.length) {
+            throw new InvalidChunkUploadRequestException("Chunk number exceeds total chunks for key: " + key);
         }
 
         chunkStatus[chunkNumber - 1] = true;

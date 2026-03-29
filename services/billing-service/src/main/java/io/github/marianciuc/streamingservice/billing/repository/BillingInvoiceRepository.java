@@ -37,4 +37,22 @@ public interface BillingInvoiceRepository extends JpaRepository<BillingInvoice, 
             order by invoice.createdAt desc
             """)
     List<BillingInvoice> findAllDetailedByUserIdOrderByCreatedAtDesc(@Param("userId") UUID userId);
+
+    @Query("""
+            select distinct invoice
+            from BillingInvoice invoice
+            left join fetch invoice.lineItems
+            where invoice.orderId = :orderId
+            order by invoice.createdAt desc
+            """)
+    List<BillingInvoice> findAllDetailedByOrderIdOrderByCreatedAtDesc(@Param("orderId") UUID orderId);
+
+    @Query("""
+            select distinct invoice
+            from BillingInvoice invoice
+            left join fetch invoice.lineItems
+            where invoice.subscriptionId = :subscriptionId
+            order by invoice.createdAt desc
+            """)
+    List<BillingInvoice> findAllDetailedBySubscriptionIdOrderByCreatedAtDesc(@Param("subscriptionId") UUID subscriptionId);
 }

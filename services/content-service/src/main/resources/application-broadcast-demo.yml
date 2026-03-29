@@ -1,0 +1,17 @@
+spring:
+  cloud:
+    config:
+      enabled: false
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/streaming?currentSchema=demo_content}
+    username: ${SPRING_DATASOURCE_USERNAME:streaming}
+    password: ${SPRING_DATASOURCE_PASSWORD:streaming}
+  flyway:
+    enabled: true
+    create-schemas: true
+    default-schema: ${SPRING_FLYWAY_DEFAULT_SCHEMA:demo_content}
+    schemas: ${SPRING_FLYWAY_SCHEMAS:demo_content}
+    table: ${SPRING_FLYWAY_TABLE:demo_content_flyway_schema_history}
+    locations: classpath:db/demo-content
+server:
+  port: ${SERVER_PORT:8080}

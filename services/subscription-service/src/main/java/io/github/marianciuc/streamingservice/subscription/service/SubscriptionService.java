@@ -22,7 +22,6 @@
 
 package io.github.marianciuc.streamingservice.subscription.service;
 
-import io.github.marianciuc.jwtsecurity.service.JwtUserDetails;
 import io.github.marianciuc.streamingservice.subscription.dto.SubscriptionRequest;
 import io.github.marianciuc.streamingservice.subscription.dto.SubscriptionResponse;
 import io.github.marianciuc.streamingservice.subscription.entity.Subscription;

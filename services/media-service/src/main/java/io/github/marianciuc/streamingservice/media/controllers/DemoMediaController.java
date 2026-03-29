@@ -1,6 +1,7 @@
 package io.github.marianciuc.streamingservice.media.controllers;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @CrossOrigin(origins = "*")
+@Profile("!broadcast-demo")
 public class DemoMediaController {
 
     @Value("${demo.media.file:/opt/demo/demo.mp4}")

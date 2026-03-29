@@ -22,7 +22,6 @@
 
 package io.github.marianciuc.streamingservice.subscription.service.impl;
 
-import io.github.marianciuc.jwtsecurity.service.JwtUserDetails;
 import io.github.marianciuc.streamingservice.subscription.clients.OrderClient;
 import io.github.marianciuc.streamingservice.subscription.dto.CreateOrderRequest;
 import io.github.marianciuc.streamingservice.subscription.dto.OrderCreationEventKafkaDto;
@@ -47,6 +46,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * UserSubscriptionService is a class that provides methods for managing user subscriptions.
@@ -64,6 +64,7 @@ public class UserSubscriptionServiceImpl implements UserSubscriptionService {
     public void subscribeUser(OrderCreationEventKafkaDto orderCreationEventKafkaDto) {
         Subscription subscription = subscriptionService.getSubscription(orderCreationEventKafkaDto.subscriptionId());
         Optional<UserSubscriptions> userSubscriptionsOptional = repository.findByOrderId(orderCreationEventKafkaDto.orderId());
+        expireOtherActiveSubscriptions(orderCreationEventKafkaDto.userId(), orderCreationEventKafkaDto.orderId());
 
         if (userSubscriptionsOptional.isPresent()) {
             UserSubscriptions userSubscriptions = userSubscriptionsOptional.get();
@@ -72,6 +73,8 @@ public class UserSubscriptionServiceImpl implements UserSubscriptionService {
                 userSubscriptions.setSubscription(subscription);
             }
 
+            userSubscriptions.setStartDate(LocalDate.now());
+            userSubscriptions.setEndDate(LocalDate.now().plusDays(subscription.getDurationInDays()));
             userSubscriptions.setStatus(SubscriptionStatus.ACTIVE);
             repository.save(userSubscriptions);
         } else {
@@ -85,16 +88,10 @@ public class UserSubscriptionServiceImpl implements UserSubscriptionService {
     }
 
     @Override
-    public UserSubscriptionDto getActiveSubscription(JwtUserDetails jwtUserDetails, UUID uuid) {
-        if (uuid != null) {
-            return repository.findByUserIdAndStatus(uuid, SubscriptionStatus.ACTIVE)
-                    .map(mapper::toUserSubscriptionDto)
-                    .orElseThrow(() -> new NotFoundException("User didn't have subscription"));
-        } else {
-            return repository.findByUserIdAndStatus(jwtUserDetails.getId(), SubscriptionStatus.ACTIVE)
-                    .map(mapper::toUserSubscriptionDto)
-                    .orElseThrow(() -> new NotFoundException("User didn't have subscription"));
-        }
+    public UserSubscriptionDto getActiveSubscription(UUID userId) {
+        return repository.findFirstByUserIdAndStatusOrderByEndDateDesc(userId, SubscriptionStatus.ACTIVE)
+                .map(mapper::toUserSubscriptionDto)
+                .orElseThrow(() -> new NotFoundException("User didn't have subscription"));
     }
 
     public void cancelSubscription(UserSubscriptions subscription) throws OperationNotSupportedException {
@@ -109,13 +106,6 @@ public class UserSubscriptionServiceImpl implements UserSubscriptionService {
 
     public void cancelSubscription(UUID subscriptionId) {
         UserSubscriptions userSubscriptions = repository.findById(subscriptionId).orElseThrow(() -> new NotFoundException("Subscription not found"));
-        userSubscriptions.setStatus(SubscriptionStatus.CANCELLED);
-        repository.save(userSubscriptions);
-    }
-
-    @Override
-    public void cancelSubscription(JwtUserDetails jwtUserDetails) {
-        UserSubscriptions userSubscriptions = repository.findByUserIdAndStatus(jwtUserDetails.getId(), SubscriptionStatus.ACTIVE).orElseThrow(() -> new NotFoundException("Subscription not found"));
         userSubscriptions.setStatus(SubscriptionStatus.CANCELLED);
         repository.save(userSubscriptions);
     }
@@ -164,5 +154,23 @@ public class UserSubscriptionServiceImpl implements UserSubscriptionService {
                 .startDate(LocalDate.now())
                 .endDate(LocalDate.now().plusDays(subscription.getDurationInDays()))
                 .build();
+    }
+
+    private void expireOtherActiveSubscriptions(UUID userId, UUID currentOrderId) {
+        List<UserSubscriptions> activeSubscriptions = repository
+                .findAllByUserIdAndStatusOrderByEndDateDesc(userId, SubscriptionStatus.ACTIVE)
+                .stream()
+                .filter(subscription -> !Objects.equals(subscription.getOrderId(), currentOrderId))
+                .peek(subscription -> {
+                    subscription.setStatus(SubscriptionStatus.EXPIRED);
+                    if (subscription.getEndDate() == null || subscription.getEndDate().isAfter(LocalDate.now())) {
+                        subscription.setEndDate(LocalDate.now());
+                    }
+                })
+                .collect(Collectors.toList());
+
+        if (!activeSubscriptions.isEmpty()) {
+            repository.saveAll(activeSubscriptions);
+        }
     }
 }

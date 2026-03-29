@@ -48,7 +48,10 @@ public class PaymentController {
     }
 
     @GetMapping("/card-holder")
-    public ResponseEntity<CardHolderDto> getCardHolder(@RequestParam(value = "cardHolderId", required = false) UUID cardHolderId) {
-       return ResponseEntity.ok(cardHolderService.findCardHolder(cardHolderId));
+    public ResponseEntity<CardHolderDto> getCardHolder(
+            @RequestParam(value = "cardHolderId", required = false) UUID cardHolderId,
+            @RequestParam(value = "userId", required = false) UUID userId
+    ) {
+       return ResponseEntity.ok(cardHolderService.findCardHolder(userId != null ? userId : cardHolderId));
     }
 }

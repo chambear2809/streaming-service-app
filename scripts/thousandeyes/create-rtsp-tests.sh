@@ -80,12 +80,13 @@ Optional shared environment:
   THOUSANDEYES_DRY_RUN=true
   TE_SOURCE_AGENT_IDS=111,222
   TE_TARGET_AGENT_ID=333
+  TE_UDP_TARGET_AGENT_ID=3
   TE_DSCP_ID=0
 
 RTSP TCP test environment:
   TE_RTSP_SERVER=rtsp.example.com
-  TE_RTSP_PORT=554
-  TE_RTSP_TCP_TEST_NAME=RTSP-TCP-554
+  TE_RTSP_PORT=8554
+  TE_RTSP_TCP_TEST_NAME=RTSP-TCP-8554
   TE_RTSP_TCP_INTERVAL=60
 
 UDP media path environment:
@@ -268,7 +269,7 @@ build_rtsp_tcp_payload() {
 
   printf '%s' \
     "{\
-\"testName\":\"$(json_escape "${TE_RTSP_TCP_TEST_NAME:-RTSP-TCP-554}")\",\
+\"testName\":\"$(json_escape "${TE_RTSP_TCP_TEST_NAME:-RTSP-TCP-8554}")\",\
 \"description\":\"$(json_escape "${TE_RTSP_TCP_DESCRIPTION:-RTSP control-plane reachability and path test}")\",\
 \"interval\":${TE_RTSP_TCP_INTERVAL:-${TE_INTERVAL:-60}},\
 \"enabled\":$(json_bool "${TE_RTSP_TCP_ENABLED:-true}"),\
@@ -287,10 +288,16 @@ build_rtsp_tcp_payload() {
 }
 
 build_udp_media_payload() {
-  local agents_json
+  local agents_json udp_target_agent_id
 
-  require_env TE_SOURCE_AGENT_IDS TE_TARGET_AGENT_ID
+  require_env TE_SOURCE_AGENT_IDS
   agents_json="$(build_agents_json "${TE_SOURCE_AGENT_IDS}")"
+  udp_target_agent_id="${TE_UDP_TARGET_AGENT_ID:-${TE_TARGET_AGENT_ID:-}}"
+
+  if [[ -z "${udp_target_agent_id}" ]]; then
+    echo "Missing required environment variable: TE_UDP_TARGET_AGENT_ID or TE_TARGET_AGENT_ID" >&2
+    return 1
+  fi
 
   printf '%s' \
     "{\
@@ -302,7 +309,7 @@ build_udp_media_payload() {
 \"protocol\":\"udp\",\
 \"direction\":\"$(json_escape "${TE_A2A_DIRECTION:-bidirectional}")\",\
 \"port\":${TE_A2A_PORT:-5004},\
-\"targetAgentId\":\"$(json_escape "${TE_TARGET_AGENT_ID}")\",\
+\"targetAgentId\":\"$(json_escape "${udp_target_agent_id}")\",\
 \"throughputMeasurements\":$(json_bool "${TE_A2A_THROUGHPUT_MEASUREMENTS:-true}"),\
 \"throughputDuration\":${TE_A2A_THROUGHPUT_DURATION_MS:-10000},\
 \"throughputRate\":${TE_A2A_THROUGHPUT_RATE_MBPS:-10},\
@@ -357,7 +364,7 @@ build_trace_map_payload() {
 \"httpTimeLimit\":${TE_TRACE_MAP_HTTP_TIME_LIMIT:-15},\
 \"httpTargetTime\":${TE_TRACE_MAP_HTTP_TARGET_TIME_MS:-1000},\
 \"httpVersion\":${TE_TRACE_MAP_HTTP_VERSION:-2},\
-\"networkMeasurements\":$(json_bool "${TE_TRACE_MAP_NETWORK_MEASUREMENTS:-false}"),\
+\"networkMeasurements\":$(json_bool "${TE_TRACE_MAP_NETWORK_MEASUREMENTS:-true}"),\
 \"numPathTraces\":${TE_TRACE_MAP_NUM_PATH_TRACES:-3},\
 \"randomizedStartTime\":$(json_bool "${TE_TRACE_MAP_RANDOMIZED_START_TIME:-false}"),\
 \"protocol\":\"tcp\",\
@@ -386,7 +393,7 @@ build_broadcast_payload() {
 \"httpTimeLimit\":${TE_BROADCAST_HTTP_TIME_LIMIT:-15},\
 \"httpTargetTime\":${TE_BROADCAST_HTTP_TARGET_TIME_MS:-1000},\
 \"httpVersion\":${TE_BROADCAST_HTTP_VERSION:-2},\
-\"networkMeasurements\":$(json_bool "${TE_BROADCAST_NETWORK_MEASUREMENTS:-false}"),\
+\"networkMeasurements\":$(json_bool "${TE_BROADCAST_NETWORK_MEASUREMENTS:-true}"),\
 \"numPathTraces\":${TE_BROADCAST_NUM_PATH_TRACES:-3},\
 \"randomizedStartTime\":$(json_bool "${TE_BROADCAST_RANDOMIZED_START_TIME:-false}"),\
 \"protocol\":\"tcp\",\
@@ -445,6 +452,8 @@ case "${1:-}" in
     create_rtsp_tcp
     create_udp_media
     create_rtp_stream
+    create_demo_monkey_trace_map
+    create_demo_monkey_broadcast
     ;;
   -h|--help|help)
     usage

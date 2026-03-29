@@ -9,7 +9,7 @@
 package io.github.marianciuc.streamingservice.media.services;
 
 import io.github.marianciuc.streamingservice.media.exceptions.ChunkUploadNotInitializedException;
-import io.github.marianciuc.streamingservice.media.exceptions.ChunkUploadTimeoutException;
+import io.github.marianciuc.streamingservice.media.exceptions.InvalidChunkUploadRequestException;
 
 import java.util.UUID;
 
@@ -25,7 +25,7 @@ public interface ChunkStateService {
      * @param chunkNumber present chunk number
      * @param totalChunks total number of chunks
      * @throws ChunkUploadNotInitializedException if the chunk upload status is not initialized
-     * @throws ChunkUploadTimeoutException if the chunk number exceeds total chunks
+     * @throws InvalidChunkUploadRequestException if the provided chunk metadata is invalid
      */
     void updateChunkUploadStatus(UUID fileId, int chunkNumber, int totalChunks);
 

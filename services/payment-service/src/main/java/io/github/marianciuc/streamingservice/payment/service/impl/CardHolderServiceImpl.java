@@ -77,6 +77,9 @@ public class CardHolderServiceImpl implements CardHolderService {
 
     @Override
     public CardHolderDto findCardHolder(UUID cardHolderId) {
+        if (cardHolderId != null) {
+            return CardHolderDto.toDto(this.findCardHolderEntity(cardHolderId));
+        }
         if (this.userService.hasAdminRoles()) {
             UUID idToFetch = (cardHolderId != null) ? cardHolderId : userService.extractUserIdFromAuth();
             return CardHolderDto.toDto(this.findCardHolderEntity(idToFetch));

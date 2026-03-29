@@ -7,6 +7,9 @@ const port = Number.parseInt(process.env.PORT ?? process.env.SERVER_PORT ?? "808
 const host = process.env.HOST ?? "0.0.0.0";
 const staticRoot = process.env.STATIC_ROOT ?? __dirname;
 const namespace = process.env.K8S_NAMESPACE ?? "streaming-service-app";
+const upstreamRequestTimeoutMs = Number.parseInt(process.env.UPSTREAM_REQUEST_TIMEOUT_MS ?? "5000", 10);
+const errorLogThrottleMs = Number.parseInt(process.env.ERROR_LOG_THROTTLE_MS ?? "30000", 10);
+const throttledErrorState = new Map();
 
 const HOP_BY_HOP_HEADERS = new Set([
     "connection",
@@ -40,28 +43,233 @@ const CONTENT_TYPES = {
     ".txt": "text/plain; charset=utf-8"
 };
 
+const roleCapabilities = {
+    billing_admin: ["operations", "governance", "billing", "billing_write"],
+    finance_analyst: ["operations", "billing", "billing_write"],
+    platform_admin: ["operations", "governance", "ingest", "billing", "billing_write"],
+    programming_manager: ["operations", "governance", "ingest"],
+    executive: ["operations", "governance", "billing"],
+    qa_reviewer: ["operations"],
+    staff_operator: ["operations"]
+};
+
 const protectedProxyRules = [
     {
-        prefix: "/api/v1/demo/content",
+        exact: "/api/v1/demo/content",
+        methods: ["GET"],
+        capabilities: ["operations"],
         upstream: { hostname: serviceHost("content-service-demo"), port: 80 }
     },
     {
         exact: "/api/v1/demo/public/demo-monkey",
         methods: ["PUT"],
+        capabilities: ["governance"],
         upstream: { hostname: serviceHost("media-service-demo"), port: 80 },
         rewritePath: "/api/v1/demo/media/demo-monkey"
     },
     {
-        prefix: "/api/v1/demo/media/",
+        exact: "/api/v1/demo/media/demo-monkey",
+        methods: ["GET"],
+        capabilities: ["operations"],
         upstream: { hostname: serviceHost("media-service-demo"), port: 80 }
     },
     {
-        prefix: "/api/v1/demo/ads/",
+        exact: "/api/v1/demo/media/demo-monkey",
+        methods: ["PUT"],
+        capabilities: ["governance"],
+        upstream: { hostname: serviceHost("media-service-demo"), port: 80 }
+    },
+    {
+        exact: "/api/v1/demo/media/rtsp/jobs",
+        methods: ["GET"],
+        capabilities: ["operations"],
+        upstream: { hostname: serviceHost("media-service-demo"), port: 80 }
+    },
+    {
+        exact: "/api/v1/demo/media/rtsp/jobs",
+        methods: ["POST"],
+        capabilities: ["ingest"],
+        upstream: { hostname: serviceHost("media-service-demo"), port: 80 }
+    },
+    {
+        prefix: "/api/v1/demo/media/rtsp/jobs/",
+        methods: ["GET"],
+        capabilities: ["operations"],
+        upstream: { hostname: serviceHost("media-service-demo"), port: 80 }
+    },
+    {
+        prefix: "/api/v1/demo/media/broadcast/jobs/",
+        methods: ["POST"],
+        capabilities: ["ingest"],
+        upstream: { hostname: serviceHost("media-service-demo"), port: 80 }
+    },
+    {
+        exact: "/api/v1/demo/media/movie.mp4",
+        methods: ["GET"],
+        capabilities: ["operations"],
+        upstream: { hostname: serviceHost("media-service-demo"), port: 80 }
+    },
+    {
+        prefix: "/api/v1/demo/media/library/",
+        methods: ["GET"],
+        capabilities: ["operations"],
+        upstream: { hostname: serviceHost("media-service-demo"), port: 80 }
+    },
+    {
+        prefix: "/api/v1/stream/",
+        methods: ["GET"],
+        capabilities: ["operations"],
+        upstream: { hostname: serviceHost("media-service-demo"), port: 80 }
+    },
+    {
+        exact: "/api/v1/demo/ads/issues",
+        methods: ["GET"],
+        capabilities: ["operations"],
         upstream: { hostname: serviceHost("ad-service-demo"), port: 80 }
     },
     {
-        prefix: "/api/v1/billing/",
+        exact: "/api/v1/demo/ads/issues",
+        methods: ["PUT"],
+        capabilities: ["governance"],
+        upstream: { hostname: serviceHost("ad-service-demo"), port: 80 }
+    },
+    {
+        exact: "/api/v1/demo/ads/program-queue",
+        methods: ["GET"],
+        capabilities: ["operations"],
+        upstream: { hostname: serviceHost("ad-service-demo"), port: 80 }
+    },
+    {
+        exact: "/api/v1/billing/invoices",
+        methods: ["GET"],
+        capabilities: ["billing"],
         upstream: { hostname: serviceHost("billing-service"), port: 8070 }
+    },
+    {
+        exact: "/api/v1/billing/invoices",
+        methods: ["POST"],
+        capabilities: ["billing_write"],
+        upstream: { hostname: serviceHost("billing-service"), port: 8070 }
+    },
+    {
+        prefix: "/api/v1/billing/invoices/",
+        methods: ["GET"],
+        capabilities: ["billing"],
+        upstream: { hostname: serviceHost("billing-service"), port: 8070 }
+    },
+    {
+        prefix: "/api/v1/billing/invoices/",
+        methods: ["POST", "PUT"],
+        capabilities: ["billing_write"],
+        upstream: { hostname: serviceHost("billing-service"), port: 8070 }
+    },
+    {
+        exact: "/api/v1/billing/events",
+        methods: ["GET"],
+        capabilities: ["billing"],
+        upstream: { hostname: serviceHost("billing-service"), port: 8070 }
+    },
+    {
+        exact: "/api/v1/billing/events",
+        methods: ["POST"],
+        capabilities: ["billing_write"],
+        upstream: { hostname: serviceHost("billing-service"), port: 8070 }
+    },
+    {
+        prefix: "/api/v1/billing/accounts/",
+        methods: ["GET"],
+        capabilities: ["billing"],
+        upstream: { hostname: serviceHost("billing-service"), port: 8070 }
+    },
+    {
+        exact: "/api/v1/customers",
+        methods: ["GET"],
+        capabilities: ["billing"],
+        upstream: { hostname: serviceHost("customer-service-demo"), port: 80 }
+    },
+    {
+        exact: "/api/v1/customers",
+        methods: ["PUT"],
+        capabilities: ["billing_write"],
+        upstream: { hostname: serviceHost("customer-service-demo"), port: 80 }
+    },
+    {
+        prefix: "/api/v1/customers/",
+        methods: ["GET"],
+        capabilities: ["billing"],
+        upstream: { hostname: serviceHost("customer-service-demo"), port: 80 }
+    },
+    {
+        exact: "/api/v1/payments/card-holder",
+        methods: ["GET"],
+        capabilities: ["billing"],
+        upstream: { hostname: serviceHost("payment-service-demo"), port: 80 }
+    },
+    {
+        exact: "/api/v1/payments/card-holder",
+        methods: ["POST", "PUT"],
+        capabilities: ["billing_write"],
+        upstream: { hostname: serviceHost("payment-service-demo"), port: 80 }
+    },
+    {
+        exact: "/api/v1/payments/address",
+        methods: ["PUT"],
+        capabilities: ["billing_write"],
+        upstream: { hostname: serviceHost("payment-service-demo"), port: 80 }
+    },
+    {
+        exact: "/api/v1/payments/payment-method",
+        methods: ["PUT"],
+        capabilities: ["billing_write"],
+        upstream: { hostname: serviceHost("payment-service-demo"), port: 80 }
+    },
+    {
+        exact: "/api/v1/payments/transactions",
+        methods: ["GET"],
+        capabilities: ["billing"],
+        upstream: { hostname: serviceHost("payment-service-demo"), port: 80 }
+    },
+    {
+        exact: "/api/v1/subscription/all",
+        methods: ["GET"],
+        capabilities: ["billing"],
+        upstream: { hostname: serviceHost("subscription-service-demo"), port: 80 }
+    },
+    {
+        exact: "/api/v1/subscription/active",
+        methods: ["GET"],
+        capabilities: ["billing"],
+        upstream: { hostname: serviceHost("subscription-service-demo"), port: 80 }
+    },
+    {
+        exact: "/api/v1/subscription/cancel",
+        methods: ["POST"],
+        capabilities: ["billing_write"],
+        upstream: { hostname: serviceHost("subscription-service-demo"), port: 80 }
+    },
+    {
+        exact: "/api/v1/orders",
+        methods: ["GET"],
+        capabilities: ["billing"],
+        upstream: { hostname: serviceHost("order-service-demo"), port: 80 }
+    },
+    {
+        exact: "/api/v1/orders",
+        methods: ["POST"],
+        capabilities: ["billing_write"],
+        upstream: { hostname: serviceHost("order-service-demo"), port: 80 }
+    },
+    {
+        prefix: "/api/v1/orders/",
+        methods: ["GET"],
+        capabilities: ["billing"],
+        upstream: { hostname: serviceHost("order-service-demo"), port: 80 }
+    },
+    {
+        prefix: "/api/v1/orders/",
+        methods: ["PUT"],
+        capabilities: ["billing_write"],
+        upstream: { hostname: serviceHost("order-service-demo"), port: 80 }
     }
 ];
 
@@ -160,11 +368,6 @@ server.listen(port, host, () => {
 async function handleApi(req, res, url) {
     const pathname = url.pathname;
 
-    if (pathname.startsWith("/api/v1/media/video/rtsp/") || pathname.startsWith("/api/v1/stream/")) {
-        writeJson(res, 503, { status: "unavailable" });
-        return;
-    }
-
     const publicRule = matchRule(publicProxyRules, pathname, req.method);
     if (publicRule) {
         await proxyRequest(req, res, buildProxyTarget(publicRule, url));
@@ -173,7 +376,7 @@ async function handleApi(req, res, url) {
 
     const protectedRule = matchRule(protectedProxyRules, pathname, req.method);
     if (protectedRule) {
-        const authResult = await authorize(req);
+        const authResult = await authorize(req, protectedRule.capabilities ?? []);
         if (!authResult.authorized) {
             forwardAuthFailure(res, authResult);
             return;
@@ -189,12 +392,12 @@ async function handleApi(req, res, url) {
     });
 }
 
-async function authorize(req) {
+async function authorize(req, requiredCapabilities = []) {
     return new Promise((resolve) => {
         const upstream = {
             hostname: serviceHost("user-service-demo"),
             port: 80,
-            path: "/api/v1/demo/auth/validate"
+            path: "/api/v1/demo/auth/session"
         };
 
         const authReq = http.request(
@@ -215,18 +418,53 @@ async function authorize(req) {
                 });
 
                 authRes.on("end", () => {
-                    resolve({
-                        authorized: (authRes.statusCode ?? 500) < 400,
-                        statusCode: authRes.statusCode ?? 500,
-                        headers: authRes.headers,
-                        body: Buffer.concat(chunks)
-                    });
+                    const body = Buffer.concat(chunks);
+                    const statusCode = authRes.statusCode ?? 500;
+
+                    if (statusCode >= 400) {
+                        resolve({
+                            authorized: false,
+                            statusCode,
+                            headers: authRes.headers,
+                            body
+                        });
+                        return;
+                    }
+
+                    try {
+                        const payload = JSON.parse(body.toString("utf8"));
+                        const role = normalizeRole(payload?.user?.role ?? payload?.role);
+                        if (!hasRequiredCapabilities(role, requiredCapabilities)) {
+                            resolve(forbiddenAuthResult(requiredCapabilities));
+                            return;
+                        }
+
+                        resolve({
+                            authorized: true,
+                            statusCode,
+                            headers: authRes.headers,
+                            body
+                        });
+                    } catch (error) {
+                        logThrottledError("Auth session parsing failed", error, `${upstream.hostname}:${upstream.port}${upstream.path}`);
+                        resolve({
+                            authorized: false,
+                            statusCode: 502,
+                            headers: { "content-type": "application/json; charset=utf-8" },
+                            body: Buffer.from(
+                                JSON.stringify({
+                                    error: "auth_session_parse_failed",
+                                    message: "Unable to read the current user session."
+                                })
+                            )
+                        });
+                    }
                 });
             }
         );
 
         authReq.on("error", (error) => {
-            console.error("Auth validation failed", error);
+            logThrottledError("Auth validation failed", error, `${upstream.hostname}:${upstream.port}${upstream.path}`);
             resolve({
                 authorized: false,
                 statusCode: 502,
@@ -242,6 +480,38 @@ async function authorize(req) {
 
         authReq.end();
     });
+}
+
+function normalizeRole(role) {
+    const normalizedRole = String(role ?? "").trim().toLowerCase();
+    return normalizedRole || "staff_operator";
+}
+
+function hasRequiredCapabilities(role, requiredCapabilities) {
+    if (!Array.isArray(requiredCapabilities) || requiredCapabilities.length === 0) {
+        return true;
+    }
+
+    const permissions = roleCapabilities[role] ?? roleCapabilities.staff_operator;
+    return requiredCapabilities.every((capability) => permissions.includes(capability));
+}
+
+function forbiddenAuthResult(requiredCapabilities) {
+    const capabilityLabel = Array.isArray(requiredCapabilities) && requiredCapabilities.length
+        ? requiredCapabilities.join(", ")
+        : "the required capability";
+
+    return {
+        authorized: false,
+        statusCode: 403,
+        headers: { "content-type": "application/json; charset=utf-8" },
+        body: Buffer.from(
+            JSON.stringify({
+                error: "insufficient_role_capability",
+                message: `Your current session is not permitted to access this route. Required capability: ${capabilityLabel}.`
+            })
+        )
+    };
 }
 
 function forwardAuthFailure(res, authResult) {
@@ -260,6 +530,7 @@ function forwardAuthFailure(res, authResult) {
 
 async function proxyRequest(req, res, target) {
     return new Promise((resolve) => {
+        const targetKey = `${target.hostname}:${target.port}${target.path}`;
         const upstreamReq = http.request(
             {
                 hostname: target.hostname,
@@ -283,15 +554,19 @@ async function proxyRequest(req, res, target) {
 
                 pipeline(upstreamRes, res, (error) => {
                     if (error) {
-                        console.error("Proxy response pipeline failed", error);
+                        logThrottledError("Proxy response pipeline failed", error, targetKey);
                     }
                     resolve();
                 });
             }
         );
 
+        upstreamReq.setTimeout(upstreamRequestTimeoutMs, () => {
+            upstreamReq.destroy(new Error(`Upstream request timed out after ${upstreamRequestTimeoutMs}ms.`));
+        });
+
         upstreamReq.on("error", (error) => {
-            console.error("Proxy request failed", error);
+            logThrottledError("Proxy request failed", error, targetKey);
             if (!res.headersSent) {
                 writeJson(res, 502, {
                     error: "upstream_unavailable",
@@ -310,7 +585,7 @@ async function proxyRequest(req, res, target) {
 
         pipeline(req, upstreamReq, (error) => {
             if (error && error.code !== "ERR_STREAM_PREMATURE_CLOSE") {
-                console.error("Proxy request pipeline failed", error);
+                logThrottledError("Proxy request pipeline failed", error, targetKey);
             }
         });
     });
@@ -447,4 +722,50 @@ function writeJson(res, statusCode, payload) {
 
 function serviceHost(name) {
     return `${name}.${namespace}.svc.cluster.local`;
+}
+
+function logThrottledError(context, error, key) {
+    const normalizedKey = `${context}:${key}`;
+    const now = Date.now();
+    const previous = throttledErrorState.get(normalizedKey);
+    const summary = summarizeError(error);
+
+    if (!previous || now - previous.loggedAt >= errorLogThrottleMs) {
+        const suppressed = previous?.suppressed ?? 0;
+        throttledErrorState.set(normalizedKey, { loggedAt: now, suppressed: 0 });
+
+        if (suppressed > 0) {
+            console.error(`${context} (${key}) repeated ${suppressed} additional time(s). Latest error: ${summary}`);
+        } else {
+            console.error(`${context} (${key}): ${summary}`);
+        }
+        return;
+    }
+
+    previous.suppressed += 1;
+}
+
+function summarizeError(error) {
+    if (!error) {
+        return "Unknown error.";
+    }
+
+    const parts = [];
+    if (error.code) {
+        parts.push(String(error.code));
+    }
+    if (error.syscall) {
+        parts.push(String(error.syscall));
+    }
+    if (error.address) {
+        parts.push(String(error.address));
+    }
+    if (error.port) {
+        parts.push(String(error.port));
+    }
+    if (error.message) {
+        parts.push(String(error.message));
+    }
+
+    return parts.join(" ") || String(error);
 }

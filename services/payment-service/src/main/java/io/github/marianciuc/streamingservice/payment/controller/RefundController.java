@@ -14,11 +14,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
-@RestController("/api/v1/payments/refund")
+@RestController
+@RequestMapping("/api/v1/payments/refund")
 @RequiredArgsConstructor
 public class RefundController {
 
@@ -26,7 +28,7 @@ public class RefundController {
 
     @PostMapping("/{transaction-id}")
     @PreAuthorize("hasAnyAuthority('ROLE_ADMIN')")
-    private ResponseEntity<Void> refundPayment(@PathVariable("transaction-id") UUID transactionId) {
+    public ResponseEntity<Void> refundPayment(@PathVariable("transaction-id") UUID transactionId) {
         refundService.processRefund(transactionId);
         return ResponseEntity.ok().build();
     }

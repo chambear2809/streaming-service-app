@@ -5,6 +5,7 @@ import io.github.marianciuc.streamingservice.media.dto.RtspIngestStatusDto;
 import io.github.marianciuc.streamingservice.media.services.RtspIngestService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -14,6 +15,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/media/video/rtsp")
+@Profile("!broadcast-demo")
 @RequiredArgsConstructor
 public class RtspController {
 

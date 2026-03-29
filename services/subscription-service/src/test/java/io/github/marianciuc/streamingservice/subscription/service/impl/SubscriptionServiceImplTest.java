@@ -3,27 +3,25 @@ package io.github.marianciuc.streamingservice.subscription.service.impl;
 import io.github.marianciuc.streamingservice.subscription.entity.RecordStatus;
 import io.github.marianciuc.streamingservice.subscription.entity.Subscription;
 import io.github.marianciuc.streamingservice.subscription.exceptions.NotFoundException;
+import io.github.marianciuc.streamingservice.subscription.mapper.SubscriptionMapper;
 import io.github.marianciuc.streamingservice.subscription.repository.SubscriptionRepository;
-import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.*;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
 import org.mockito.Mockito;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-@RequiredArgsConstructor
 public class SubscriptionServiceImplTest {
 
-    @Mock
-    private SubscriptionRepository subscriptionRepositoryMock;
-
-    @InjectMocks
-    private SubscriptionServiceImpl subscriptionServiceImplUnderTest;
+    private final SubscriptionRepository subscriptionRepositoryMock = mock(SubscriptionRepository.class);
+    private final SubscriptionMapper subscriptionMapperMock = mock(SubscriptionMapper.class);
+    private final SubscriptionServiceImpl subscriptionServiceImplUnderTest =
+            new SubscriptionServiceImpl(subscriptionRepositoryMock, subscriptionMapperMock);
 
     private final Subscription subscription = new Subscription();
 
@@ -45,5 +43,22 @@ public class SubscriptionServiceImplTest {
         when(subscriptionRepositoryMock.findById(any(UUID.class))).thenReturn(Optional.empty());
         
         Assertions.assertThrows(NotFoundException.class, () -> subscriptionServiceImplUnderTest.deleteSubscription(id));
+    }
+
+    @Test
+    public void shouldReturnOnlyActiveSubscriptions() {
+        Subscription active = new Subscription();
+        active.setId(UUID.randomUUID());
+        active.setRecordStatus(RecordStatus.ACTIVE);
+        Subscription deleted = new Subscription();
+        deleted.setId(UUID.randomUUID());
+        deleted.setRecordStatus(RecordStatus.DELETED);
+
+        when(subscriptionRepositoryMock.findAll()).thenReturn(List.of(active, deleted));
+        when(subscriptionMapperMock.toResponse(active)).thenReturn(Mockito.mock(io.github.marianciuc.streamingservice.subscription.dto.SubscriptionResponse.class));
+
+        Assertions.assertEquals(1, subscriptionServiceImplUnderTest.getAllSubscriptions().size());
+        Mockito.verify(subscriptionMapperMock, Mockito.times(1)).toResponse(active);
+        Mockito.verify(subscriptionMapperMock, Mockito.never()).toResponse(deleted);
     }
 }

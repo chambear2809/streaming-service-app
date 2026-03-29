@@ -1,37 +1,26 @@
-/*
- * Copyright (c) 2024  Vladimir Marianciuc. All Rights Reserved.
- *
- * Project: STREAMING SERVICE APP
- * File: FFmpegJavaCVServiceTest.java
- *
- */
-
 package io.github.marianciuc.streamingservice.media.services.impl;
 
 import io.github.marianciuc.streamingservice.media.dto.ResolutionDto;
+import io.github.marianciuc.streamingservice.media.exceptions.CompressingException;
 import io.github.marianciuc.streamingservice.media.services.PlaylistService;
 import io.github.marianciuc.streamingservice.media.services.VideoStorageService;
-import io.minio.errors.MinioException;
-import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
+import java.io.InputStream;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
-@SpringBootTest
-@Slf4j
-public class FFmpegJavaCVServiceTest {
+@ExtendWith(MockitoExtension.class)
+class FFmpegJavaCVServiceTest {
 
     @Mock
     private VideoStorageService videoStorageService;
@@ -42,17 +31,22 @@ public class FFmpegJavaCVServiceTest {
     @InjectMocks
     private FFmpegJavaCVService ffmpegJavaCVService;
 
-    private File testInputFile;
-
     @Test
-    void compressVideoAndUploadToStorage() throws IOException, MinioException, NoSuchAlgorithmException, InvalidKeyException {
+    void wrapsStorageIoErrorsInCompressingException() {
         ResolutionDto resolutionDto = new ResolutionDto(UUID.randomUUID(), "1920", "1080", 720, 1280, 3000);
         UUID videoId = UUID.randomUUID();
-        File tempFile = Files.createTempFile("input", ".mp4").toFile();
-        when(videoStorageService.assembleVideo(videoId)).thenReturn(Files.newInputStream(Path.of(tempFile.getAbsolutePath())));
-        String result = ffmpegJavaCVService.compressVideoAndUploadToStorage(resolutionDto, videoId);
-        assertNotNull(result);
-        verify(videoStorageService, atLeastOnce()).uploadFile(anyString(), any(), anyLong(), anyString());
-        tempFile.delete();
+
+        when(videoStorageService.assembleVideo(videoId)).thenReturn(new InputStream() {
+            @Override
+            public int read() throws IOException {
+                throw new IOException("disk unavailable");
+            }
+        });
+
+        assertThrows(CompressingException.class,
+                () -> ffmpegJavaCVService.compressVideoAndUploadToStorage(resolutionDto, videoId));
+
+        verify(videoStorageService).assembleVideo(videoId);
+        verifyNoInteractions(playlistService);
     }
 }

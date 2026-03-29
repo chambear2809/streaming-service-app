@@ -11,6 +11,7 @@ package io.github.marianciuc.streamingservice.media.controllers;
 
 import io.github.marianciuc.streamingservice.media.services.PlaylistService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -24,6 +25,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/stream")
+@Profile("!broadcast-demo")
 @RequiredArgsConstructor
 public class VideoStreamController {
 

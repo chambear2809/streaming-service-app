@@ -76,6 +76,18 @@ spec:
               value: "8080"
             - name: DEMO_MEDIA_URL
               value: /api/v1/demo/media/movie.mp4
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://streaming-postgres.streaming-service-app.svc.cluster.local:5432/streaming?currentSchema=demo_content
+            - name: SPRING_DATASOURCE_USERNAME
+              value: streaming
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: streaming
+            - name: SPRING_FLYWAY_DEFAULT_SCHEMA
+              value: demo_content
+            - name: SPRING_FLYWAY_SCHEMAS
+              value: demo_content
+            - name: SPRING_FLYWAY_TABLE
+              value: demo_content_flyway_schema_history
           readinessProbe:
             httpGet:
               path: /api/v1/demo/content

@@ -1,0 +1,163 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service-demo
+  namespace: streaming-service-app
+  labels:
+    app.kubernetes.io/name: payment-service-demo
+    app.kubernetes.io/part-of: streaming-service-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: payment-service-demo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: payment-service-demo
+        app.kubernetes.io/part-of: streaming-service-app
+      annotations:
+        instrumentation.opentelemetry.io/container-names: app
+        instrumentation.opentelemetry.io/inject-java: otel-splunk/splunk-otel-collector
+    spec:
+      initContainers:
+        - name: extract-source
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              mkdir -p /workspace
+              tar -xzf /source/payment-service-source.tgz -C /workspace
+          volumeMounts:
+            - name: source
+              mountPath: /source
+              readOnly: true
+            - name: workspace
+              mountPath: /workspace
+        - name: build-app
+          image: maven:3.9.9-eclipse-temurin-22
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              cd /workspace/services/payment-service
+              mvn -Dmaven.test.skip=true package
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: maven-repo
+              mountPath: /root/.m2
+      containers:
+        - name: app
+          image: eclipse-temurin:22-jre
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - java -jar /workspace/services/payment-service/target/payment-service-0.0.1-SNAPSHOT.jar
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: payment-service-demo
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: grpc
+            - name: OTEL_PROPAGATORS
+              value: baggage,b3,tracecontext
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.name=$(OTEL_SERVICE_NAME),service.namespace=streaming-service-app,k8s.namespace.name=streaming-service-app,k8s.deployment.name=payment-service-demo,deployment.environment=streaming-app
+            - name: SERVER_PORT
+              value: "8080"
+            - name: SPRING_PROFILES_ACTIVE
+              value: broadcast-demo
+            - name: SPRING_CLOUD_CONFIG_ENABLED
+              value: "false"
+            - name: EUREKA_CLIENT_ENABLED
+              value: "false"
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://streaming-postgres.streaming-service-app.svc.cluster.local:5432/streaming?currentSchema=demo_payment
+            - name: SPRING_DATASOURCE_USERNAME
+              value: streaming
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: streaming
+            - name: SPRING_JPA_HIBERNATE_DDL_AUTO
+              value: validate
+            - name: SPRING_JPA_DATABASE
+              value: postgresql
+            - name: SPRING_JPA_DATABASE_PLATFORM
+              value: org.hibernate.dialect.PostgreSQLDialect
+            - name: SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA
+              value: demo_payment
+            - name: SPRING_FLYWAY_ENABLED
+              value: "true"
+            - name: SPRING_FLYWAY_CREATE_SCHEMAS
+              value: "true"
+            - name: SPRING_FLYWAY_DEFAULT_SCHEMA
+              value: demo_payment
+            - name: SPRING_FLYWAY_SCHEMAS
+              value: demo_payment
+            - name: SPRING_FLYWAY_TABLE
+              value: demo_payment_flyway_schema_history
+            - name: SPRING_FLYWAY_USER
+              value: streaming
+            - name: SPRING_FLYWAY_PASSWORD
+              value: streaming
+            - name: SPRING_FLYWAY_URL
+              value: jdbc:postgresql://streaming-postgres.streaming-service-app.svc.cluster.local:5432/streaming?currentSchema=demo_payment
+            - name: SPRING_KAFKA_LISTENER_AUTO_STARTUP
+              value: "false"
+            - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+              value: health,info
+            - name: STRIPE_API_KEY
+              value: replace-me
+          startupProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+              readOnly: true
+      volumes:
+        - name: source
+          configMap:
+            name: payment-service-source
+        - name: workspace
+          emptyDir: {}
+        - name: maven-repo
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-service-demo
+  namespace: streaming-service-app
+  labels:
+    app.kubernetes.io/name: payment-service-demo
+    app.kubernetes.io/part-of: streaming-service-app
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: payment-service-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

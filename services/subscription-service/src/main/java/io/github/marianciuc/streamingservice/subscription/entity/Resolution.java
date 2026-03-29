@@ -6,18 +6,23 @@ import lombok.*;
 import java.util.Set;
 import java.util.UUID;
 
-@Data
 @Entity
 @Table(name = "resolutions")
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
+@Getter
+@Setter
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
+@ToString(exclude = "subscriptionSet")
 public class Resolution {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @EqualsAndHashCode.Include
     private UUID id;
 
     @Column(nullable = false, name = "name", unique = true)
+    @EqualsAndHashCode.Include
     private String name;
 
     @Column(nullable = false, name = "description")

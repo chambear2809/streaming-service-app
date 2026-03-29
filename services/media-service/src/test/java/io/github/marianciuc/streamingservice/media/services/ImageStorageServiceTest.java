@@ -13,7 +13,6 @@ import io.github.marianciuc.streamingservice.media.services.impl.MinioImageStora
 import io.minio.GetObjectResponse;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
-import io.minio.errors.MinioException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,6 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.UUID;
 
@@ -67,11 +67,7 @@ class ImageStorageServiceTest {
     void upload_ShouldThrowException_ForMinioException() throws Exception {
         String originalFileName = "test.jpg";
         when(file.getOriginalFilename()).thenReturn(originalFileName);
-        when(file.getContentType()).thenReturn("image/jpeg");
-        InputStream inputStream = mock(InputStream.class);
-        when(file.getInputStream()).thenReturn(inputStream);
-
-        doThrow(MinioException.class).when(minioClient).putObject(any(PutObjectArgs.class));
+        when(file.getInputStream()).thenThrow(new IOException("boom"));
 
         assertThrows(ImageUploadException.class, () -> imageStorageService.upload(file));
     }

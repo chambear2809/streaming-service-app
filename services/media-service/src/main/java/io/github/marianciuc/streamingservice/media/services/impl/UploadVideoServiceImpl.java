@@ -55,20 +55,9 @@ public class UploadVideoServiceImpl implements UploadVideoService {
     private void handleChunkUpload(UUID fileId, int chunkNumber, int totalChunks) {
         this.chunkStateService.updateChunkUploadStatus(fileId, chunkNumber, totalChunks);
 
-        Boolean[] chunkStatus = chunkStateService.getChunkUploadStatus(fileId);
-
-        if (chunkStatus != null && areAllChunksUploaded(chunkStatus)) {
+        if (chunkStateService.isUploadComplete(fileId)) {
             chunkStateService.deleteChunkUploadStatus(fileId);
             videoProcessingService.startVideoProcessing(fileId);
         }
-    }
-
-    private boolean areAllChunksUploaded(Boolean[] status) {
-        for (Boolean s : status) {
-            if (s == null || !s) {
-                return false;
-            }
-        }
-        return true;
     }
 }

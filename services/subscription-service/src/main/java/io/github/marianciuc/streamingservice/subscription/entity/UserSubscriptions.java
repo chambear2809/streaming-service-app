@@ -66,5 +66,6 @@ public class UserSubscriptions {
      * The status of the subscription.
      */
     @Column(name = "status")
+    @Enumerated(EnumType.STRING)
     private SubscriptionStatus status;
 }

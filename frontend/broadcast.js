@@ -21,7 +21,8 @@ const elements = {
 };
 
 const state = {
-    activePlaybackUrl: ""
+    activePlaybackUrl: "",
+    lastSuccessfulUpdatedLabel: ""
 };
 
 let presentationFallbackEnabled = false;
@@ -35,6 +36,42 @@ const BROADCAST_REFRESH_INTERVAL_MS = 5000;
 const STALL_RECOVERY_DELAY_MS = 4000;
 const PLAYBACK_WATCHDOG_INTERVAL_MS = 3000;
 const PLAYBACK_STALL_THRESHOLD_MS = 5000;
+const fallbackAdBreakSegmentSeconds = 180;
+const fallbackAdBreakDurationSeconds = 15;
+const fallbackHouseLoopPrograms = [
+    { title: "Big Buck Bunny", durationSeconds: 597 },
+    { title: "Elephants Dream", durationSeconds: 654 },
+    { title: "Sintel", durationSeconds: 888 },
+    { title: "Tears of Steel", durationSeconds: 734 }
+];
+const fallbackHouseLoopSegments = fallbackHouseLoopPrograms.flatMap((program) => {
+    const segments = [];
+    let remaining = program.durationSeconds;
+    let part = 0;
+    const segmentCount = Math.max(1, Math.ceil(program.durationSeconds / fallbackAdBreakSegmentSeconds));
+
+    while (remaining > 0) {
+        const durationSeconds = Math.min(fallbackAdBreakSegmentSeconds, remaining);
+        part += 1;
+        segments.push({
+            title: segmentCount > 1 ? `${program.title} · Part ${part}` : program.title,
+            durationSeconds
+        });
+        remaining -= durationSeconds;
+    }
+
+    return segments;
+});
+const fallbackAdBreakCount = fallbackHouseLoopSegments.length;
+const fallbackAdProgramCycleSeconds = fallbackHouseLoopSegments.reduce((total, segment) => total + segment.durationSeconds, 0)
+    + (fallbackAdBreakDurationSeconds * fallbackAdBreakCount);
+const fallbackAdCycleOriginMs = Date.parse("2026-01-01T00:00:00Z");
+const fallbackAdCampaigns = [
+    { sponsor: "North Coast Sports Network", label: "Regional sports launch pod" },
+    { sponsor: "Metro Weather Desk", label: "Storm desk weather sponsorship" },
+    { sponsor: "City Arts Channel", label: "Festival takeover pod" },
+    { sponsor: "Pop-Up Event East", label: "Opening-week sponsor activation" }
+];
 
 function resolveChannelLabel(label) {
     return String(label ?? "").trim() || runtimeConfig.defaultBroadcastChannelLabel || "Acme Network East";
@@ -45,7 +82,76 @@ function resolveBroadcastTitle(title) {
 }
 
 function resolveBroadcastDetail(detail) {
-    return String(detail ?? "").trim() || runtimeConfig.defaultBroadcastDetail || "External distribution is available from this page.";
+    return String(detail ?? "").trim()
+        || runtimeConfig.defaultBroadcastDetail
+        || "Big Buck Bunny, Elephants Dream, Sintel, and Tears of Steel rotate on the external channel with sponsor pods roughly every three minutes until a contribution feed is taken live.";
+}
+
+function addSeconds(date, seconds) {
+    return new Date(date.getTime() + seconds * 1000);
+}
+
+function fallbackCampaignForSequence(sequence) {
+    const normalized = Math.abs(Number.parseInt(sequence, 10) || 0);
+    return fallbackAdCampaigns[normalized % fallbackAdCampaigns.length];
+}
+
+function fallbackAdCycle(reference = new Date()) {
+    const elapsedSeconds = Math.max(0, Math.floor((reference.getTime() - fallbackAdCycleOriginMs) / 1000));
+    const cycleSequence = Math.floor(elapsedSeconds / fallbackAdProgramCycleSeconds);
+    const cycleStart = new Date(fallbackAdCycleOriginMs + cycleSequence * fallbackAdProgramCycleSeconds * 1000);
+    return { cycleSequence, cycleStart };
+}
+
+function fallbackAdWindows(reference = new Date()) {
+    const { cycleSequence, cycleStart } = fallbackAdCycle(reference);
+    const windows = [];
+    let cursor = cycleStart;
+    for (let segmentIndex = 0; segmentIndex < fallbackHouseLoopSegments.length; segmentIndex += 1) {
+        cursor = addSeconds(cursor, fallbackHouseLoopSegments[segmentIndex].durationSeconds);
+
+        const start = cursor;
+        const end = addSeconds(start, fallbackAdBreakDurationSeconds);
+        windows.push({
+            sequence: cycleSequence * fallbackAdBreakCount + segmentIndex,
+            slotIndex: segmentIndex,
+            start,
+            end
+        });
+        cursor = end;
+    }
+
+    return { cycleSequence, cycleStart, windows };
+}
+
+function fallbackActiveOrNextAdWindow(reference = new Date()) {
+    const current = fallbackAdWindows(reference);
+    const activeWindow = current.windows.find((window) => reference >= window.start && reference < window.end) ?? null;
+    const nextWindow = current.windows.find((window) => reference < window.start)
+        ?? fallbackAdWindows(addSeconds(current.cycleStart, fallbackAdProgramCycleSeconds)).windows[0];
+
+    return {
+        activeWindow,
+        scheduledWindow: activeWindow ?? nextWindow
+    };
+}
+
+function fallbackAdStatus() {
+    const { activeWindow, scheduledWindow } = fallbackActiveOrNextAdWindow();
+    const campaign = fallbackCampaignForSequence(scheduledWindow?.sequence ?? 0);
+    const slotIndex = Number.isFinite(scheduledWindow?.slotIndex) ? scheduledWindow.slotIndex : 0;
+
+    return {
+        state: activeWindow ? "IN_BREAK" : "ARMED",
+        podLabel: `Sponsor pod ${String.fromCharCode(65 + slotIndex)}`,
+        sponsorLabel: campaign.sponsor,
+        decisioningMode: "Server-side stitched pod",
+        breakStartAt: scheduledWindow?.start?.toISOString?.() ?? "",
+        breakEndAt: scheduledWindow?.end?.toISOString?.() ?? "",
+        detail: activeWindow
+            ? `${campaign.label} is active and the short sponsor clip is stitched into the house lineup right now.`
+            : `${campaign.label} is armed for the next sponsor pod inside the house lineup.`
+    };
 }
 
 function absoluteUrl(path) {
@@ -80,6 +186,27 @@ function syncPresentationMode() {
     document.body.classList.toggle("is-presentation-mode", active);
     elements.presentationToggle.setAttribute("aria-pressed", String(active));
     elements.presentationToggle.textContent = active ? "Exit fullscreen" : "Presentation mode";
+}
+
+function markBroadcastStatusStale() {
+    const hasSnapshot = Boolean(state.lastSuccessfulUpdatedLabel);
+    const fallbackAd = fallbackAdStatus();
+
+    elements.status.textContent = hasSnapshot ? "Status stale" : "Unavailable";
+    elements.statusCopy.textContent = hasSnapshot
+        ? `Live metadata refresh failed. Showing the last known broadcast snapshot from ${state.lastSuccessfulUpdatedLabel}.`
+        : "The external distribution feed could not be loaded.";
+    elements.updated.textContent = hasSnapshot ? state.lastSuccessfulUpdatedLabel : "Unavailable";
+    elements.sourceType.textContent = hasSnapshot ? "Previous feed snapshot" : "House lineup";
+    elements.sourceCopy.textContent = hasSnapshot
+        ? "The status endpoint did not refresh successfully, so treat the current source and sponsor details on this page as stale until the next successful poll."
+        : resolveBroadcastDetail(runtimeConfig.defaultBroadcastDetail);
+    elements.adPod.textContent = `${fallbackAd.podLabel} · ${fallbackAd.sponsorLabel}`;
+    elements.adCopy.textContent = fallbackAd.detail;
+    elements.adMode.textContent = hasSnapshot ? "Snapshot only" : "Program feed";
+    elements.adModeCopy.textContent = hasSnapshot
+        ? "Sponsor timing and transport metadata are showing the last successful refresh."
+        : `${fallbackAd.decisioningMode} · ${formatStamp(fallbackAd.breakStartAt)} - ${formatStamp(fallbackAd.breakEndAt)}`;
 }
 
 async function togglePresentationMode() {
@@ -298,6 +425,7 @@ async function refreshBroadcast() {
     const adStatus = payload?.adStatus ?? {};
     const adState = String(adStatus?.state ?? "ARMED").toUpperCase();
     const adBreakActive = adState === "IN_BREAK";
+    const updatedLabel = formatStamp(payload?.updatedAt);
 
     elements.title.textContent = resolveBroadcastTitle(payload?.title);
     elements.detail.textContent = resolveBroadcastDetail(payload?.detail);
@@ -312,10 +440,11 @@ async function refreshBroadcast() {
     elements.adCopy.textContent = adStatus?.detail ?? "The current sponsor pod detail is unavailable.";
     elements.adMode.textContent = adBreakActive ? "Sponsor break live" : "Program feed";
     elements.adModeCopy.textContent = `${adStatus?.decisioningMode ?? "Server-side stitched pod"} · ${formatStamp(adStatus?.breakStartAt)} - ${formatStamp(adStatus?.breakEndAt)}`;
-    elements.updated.textContent = formatStamp(payload?.updatedAt);
+    elements.updated.textContent = updatedLabel;
     elements.playbackUrl.textContent = absoluteUrl(publicPlaybackUrl);
     elements.pageUrl.textContent = broadcastPageUrl;
     elements.directLink.href = absoluteUrl(publicPlaybackUrl);
+    state.lastSuccessfulUpdatedLabel = updatedLabel === "Unavailable" ? "" : updatedLabel;
     updatePlayer(publicPlaybackUrl);
 }
 
@@ -326,13 +455,13 @@ async function bootstrap() {
         await refreshBroadcast();
     } catch (error) {
         console.warn("Unable to load the external distribution feed.", error);
-        elements.status.textContent = "Unavailable";
-        elements.statusCopy.textContent = "The external distribution feed could not be loaded.";
+        markBroadcastStatusStale();
     }
 
     window.setInterval(() => {
         refreshBroadcast().catch((error) => {
             console.warn("Unable to refresh the external distribution feed.", error);
+            markBroadcastStatusStale();
         });
     }, BROADCAST_REFRESH_INTERVAL_MS);
 }
@@ -343,6 +472,7 @@ elements.presentationToggle.addEventListener("click", () => {
 window.addEventListener("focus", () => {
     refreshBroadcast().catch((error) => {
         console.warn("Unable to refresh the external distribution feed.", error);
+        markBroadcastStatusStale();
     });
 });
 document.addEventListener("visibilitychange", () => {
@@ -351,6 +481,7 @@ document.addEventListener("visibilitychange", () => {
     }
     refreshBroadcast().catch((error) => {
         console.warn("Unable to refresh the external distribution feed.", error);
+        markBroadcastStatusStale();
     });
 });
 document.addEventListener("fullscreenchange", () => {

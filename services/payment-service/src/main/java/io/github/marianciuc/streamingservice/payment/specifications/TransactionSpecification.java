@@ -30,7 +30,7 @@ public class TransactionSpecification {
             if (userId == null) {
                 return criteriaBuilder.conjunction();
             }
-            return criteriaBuilder.equal(root.get("userId"), userId);
+            return criteriaBuilder.equal(root.join("cardHolder").get("userId"), userId);
         };
     }
 
