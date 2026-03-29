@@ -1,3 +1,9 @@
+import {
+    DEFAULT_BROADCAST_DETAIL,
+    buildDefaultAdStatus,
+    buildFallbackAdProgramQueue
+} from "./demo-ad-schedule.mjs";
+
 const runtimeConfig = window.STREAMING_CONFIG ?? {};
 
 const storageKeys = {
@@ -236,52 +242,6 @@ const demoMonkeyDependencyOptions = [
 ];
 
 const defaultDemoMonkeyDependencyService = "ad-service-demo";
-const fallbackAdBreakProgramInterval = 1;
-
-function hasFallbackAdBreakAfterProgram(index) {
-    return fallbackAdBreakProgramInterval > 0 && (index + 1) % fallbackAdBreakProgramInterval === 0;
-}
-
-const fallbackAdBreakDurationSeconds = 15;
-const fallbackHouseLoopPrograms = [
-    {
-        title: "Big Buck Bunny",
-        durationSeconds: 597,
-        playbackUrl: "/api/v1/demo/media/library/big-buck-bunny.mp4",
-        detail: "Forest slapstick opens the house lineup before sponsor pod A."
-    },
-    {
-        title: "Elephants Dream",
-        durationSeconds: 654,
-        playbackUrl: "/api/v1/demo/media/library/elephants-dream.mp4",
-        detail: "The machine-world feature follows sponsor pod A and leads into the next stitched break."
-    },
-    {
-        title: "Sintel",
-        durationSeconds: 888,
-        playbackUrl: "/api/v1/demo/media/library/sintel.mp4",
-        detail: "The longer fantasy feature carries the mid-show window before sponsor pod C."
-    },
-    {
-        title: "Tears of Steel",
-        durationSeconds: 734,
-        playbackUrl: "/api/v1/demo/media/library/tears-of-steel.mp4",
-        detail: "The closing hybrid feature resets the channel before the lineup rolls into the next sponsor pod."
-    }
-];
-const fallbackAdBreakCount = fallbackHouseLoopPrograms.reduce(
-    (count, _program, index) => count + (hasFallbackAdBreakAfterProgram(index) ? 1 : 0),
-    0
-);
-const fallbackAdProgramCycleSeconds = fallbackHouseLoopPrograms.reduce((total, program) => total + program.durationSeconds, 0)
-    + (fallbackAdBreakDurationSeconds * fallbackAdBreakCount);
-const fallbackAdCycleOriginMs = Date.parse("2026-01-01T00:00:00Z");
-const fallbackAdCampaigns = [
-    { sponsor: "North Coast Sports Network", label: "Regional sports launch pod" },
-    { sponsor: "Metro Weather Desk", label: "Storm desk weather sponsorship" },
-    { sponsor: "City Arts Channel", label: "Festival takeover pod" },
-    { sponsor: "Pop-Up Event East", label: "Opening-week sponsor activation" }
-];
 
 const boothPersonas = {
     viewer: {
@@ -376,21 +336,7 @@ function defaultDemoMonkeyState() {
 }
 
 function defaultAdStatus() {
-    const { activeWindow, scheduledWindow } = fallbackActiveOrNextAdWindow();
-    const campaign = fallbackCampaignForSequence(scheduledWindow?.sequence ?? 0);
-    const slotIndex = Number.isFinite(scheduledWindow?.slotIndex) ? scheduledWindow.slotIndex : 0;
-
-    return {
-        state: activeWindow ? "IN_BREAK" : "ARMED",
-        podLabel: `Sponsor pod ${String.fromCharCode(65 + slotIndex)}`,
-        sponsorLabel: campaign.sponsor,
-        decisioningMode: "Server-side stitched pod",
-        breakStartAt: scheduledWindow?.start?.toISOString?.() ?? "",
-        breakEndAt: scheduledWindow?.end?.toISOString?.() ?? "",
-        detail: activeWindow
-            ? `${campaign.label} is active and the short sponsor clip is stitched into the house lineup right now.`
-            : `${campaign.label} is armed for the next sponsor pod inside the house lineup.`
-    };
+    return buildDefaultAdStatus();
 }
 
 function defaultAdIssueState() {
@@ -400,7 +346,7 @@ function defaultAdIssueState() {
         responseDelayMs: 0,
         adLoadFailureEnabled: false,
         updatedAt: "",
-        summary: "Ad service is healthy. Sponsor clips are inserted between every house-lineup title without additional delay.",
+        summary: "Ad service is healthy. Sponsor clips are inserted about every 90 seconds throughout the house loop without additional delay.",
         affectedPaths: [
             "/api/v1/demo/ads/current",
             "/api/v1/demo/ads/program-queue",
@@ -419,134 +365,15 @@ function defaultBroadcastTitle() {
 }
 
 function defaultBroadcastDetail() {
-    return runtimeConfig.defaultBroadcastDetail
-        ?? "Big Buck Bunny, Elephants Dream, Sintel, and Tears of Steel rotate on the external channel with sponsor pods roughly every three minutes until a contribution feed is taken live.";
+    return runtimeConfig.defaultBroadcastDetail ?? DEFAULT_BROADCAST_DETAIL;
 }
 
-function addSeconds(date, seconds) {
-    return new Date(date.getTime() + seconds * 1000);
-}
-
-function fallbackCampaignForSequence(sequence) {
-    const normalized = Math.abs(Number.parseInt(sequence, 10) || 0);
-    return fallbackAdCampaigns[normalized % fallbackAdCampaigns.length];
-}
-
-function fallbackAdCycle(reference = new Date()) {
-    const elapsedSeconds = Math.max(0, Math.floor((reference.getTime() - fallbackAdCycleOriginMs) / 1000));
-    const cycleSequence = Math.floor(elapsedSeconds / fallbackAdProgramCycleSeconds);
-    const cycleStart = new Date(fallbackAdCycleOriginMs + cycleSequence * fallbackAdProgramCycleSeconds * 1000);
-    return { cycleSequence, cycleStart };
-}
-
-function fallbackAdWindows(reference = new Date()) {
-    const { cycleSequence, cycleStart } = fallbackAdCycle(reference);
-    const windows = [];
-    let cursor = cycleStart;
-    let breakIndex = 0;
-
-    for (let programIndex = 0; programIndex < fallbackHouseLoopPrograms.length; programIndex += 1) {
-        cursor = addSeconds(cursor, fallbackHouseLoopPrograms[programIndex].durationSeconds);
-        if (!hasFallbackAdBreakAfterProgram(programIndex)) {
-            continue;
-        }
-
-        const start = cursor;
-        const end = addSeconds(start, fallbackAdBreakDurationSeconds);
-
-        windows.push({
-            sequence: cycleSequence * fallbackAdBreakCount + breakIndex,
-            slotIndex: breakIndex,
-            start,
-            end
-        });
-        breakIndex += 1;
-        cursor = end;
-    }
-
-    return { cycleSequence, cycleStart, windows };
-}
-
-function fallbackActiveOrNextAdWindow(reference = new Date()) {
-    const current = fallbackAdWindows(reference);
-    const activeWindow = current.windows.find((window) => reference >= window.start && reference < window.end) ?? null;
-    const nextWindow = current.windows.find((window) => reference < window.start)
-        ?? fallbackAdWindows(addSeconds(current.cycleStart, fallbackAdProgramCycleSeconds)).windows[0];
-
-    return {
-        cycleSequence: current.cycleSequence,
-        cycleStart: current.cycleStart,
-        activeWindow,
-        scheduledWindow: activeWindow ?? nextWindow
-    };
-}
-
-function formatFallbackDurationLabel(seconds) {
-    if (seconds % 60 === 0) {
-        return `${seconds / 60}m`;
-    }
-
-    if (seconds > 60) {
-        const minutes = Math.floor(seconds / 60);
-        const remainder = seconds % 60;
-        return `${minutes}m ${remainder}s`;
-    }
-
-    return `${seconds}s`;
-}
-
-function buildFallbackAdProgramQueue(reference = new Date()) {
-    const { cycleSequence, cycleStart } = fallbackAdCycle(reference);
-    const entries = [];
-    let cursor = cycleStart;
-    let breakIndex = 0;
-
-    for (let index = 0; index < fallbackHouseLoopPrograms.length; index += 1) {
-        const program = fallbackHouseLoopPrograms[index];
-        const contentDurationSeconds = program.durationSeconds;
-        const contentEnd = addSeconds(cursor, contentDurationSeconds);
-        const contentActive = reference >= cursor && reference < contentEnd;
-
-        entries.push({
-            entryId: `fallback-content-${cycleSequence}-${index}`,
-            contentId: "",
-            kind: "CONTENT",
-            title: program.title,
-            channelLabel: state.broadcast?.channelLabel ?? defaultBroadcastChannelLabel(),
-            slotLabel: `${formatClock(cursor)} - ${formatClock(contentEnd)}`,
-            status: contentActive ? "NOW" : "QUEUED",
-            detail: program.detail,
-            playbackUrl: program.playbackUrl,
-            durationLabel: formatFallbackDurationLabel(contentDurationSeconds)
-        });
-        cursor = contentEnd;
-
-        if (!hasFallbackAdBreakAfterProgram(index)) {
-            continue;
-        }
-
-        const breakSequence = cycleSequence * fallbackAdBreakCount + breakIndex;
-        const campaign = fallbackCampaignForSequence(breakSequence);
-        const adEnd = addSeconds(cursor, fallbackAdBreakDurationSeconds);
-        const adActive = reference >= cursor && reference < adEnd;
-
-        entries.push({
-            entryId: `fallback-ad-${breakSequence}`,
-            contentId: "",
-            kind: "AD",
-            title: campaign.sponsor,
-            channelLabel: state.broadcast?.channelLabel ?? defaultBroadcastChannelLabel(),
-            slotLabel: `${formatClock(cursor)} - ${formatClock(adEnd)}`,
-            status: adActive ? "NOW" : "READY",
-            detail: `${campaign.label} inserts the short sponsor clip between house-lineup titles.`,
-            playbackUrl: "/api/v1/demo/media/library/sponsor-break.mp4",
-            durationLabel: formatFallbackDurationLabel(fallbackAdBreakDurationSeconds)
-        });
-        breakIndex += 1;
-        cursor = adEnd;
-    }
-
-    return entries;
+function buildFallbackAdQueue(reference = new Date()) {
+    return buildFallbackAdProgramQueue({
+        reference,
+        channelLabel: state.broadcast?.channelLabel ?? defaultBroadcastChannelLabel(),
+        formatClock
+    });
 }
 
 const seedContent = [
@@ -5135,7 +4962,7 @@ async function loadBroadcastStatus({ silent = false } = {}) {
 
 async function loadAdProgramQueue({ silent = false } = {}) {
     if (!state.session) {
-        state.adQueue = buildFallbackAdProgramQueue();
+        state.adQueue = buildFallbackAdQueue();
         renderBroadcastDeck();
         return;
     }
@@ -5150,7 +4977,7 @@ async function loadAdProgramQueue({ silent = false } = {}) {
             clearSessionState(true);
             state.catalogSource = "locked";
             state.library = buildLibrary([]);
-            state.adQueue = buildFallbackAdProgramQueue();
+            state.adQueue = buildFallbackAdQueue();
             showAuthMessage("Your session expired. Sign in again to continue.", true);
             hydratePlayerForCurrentSelection();
             renderLayout();
@@ -5163,11 +4990,11 @@ async function loadAdProgramQueue({ silent = false } = {}) {
 
         const payload = await response.json();
         const normalizedQueue = normalizeAdProgramQueue(payload);
-        state.adQueue = normalizedQueue.length ? normalizedQueue : buildFallbackAdProgramQueue();
+        state.adQueue = normalizedQueue.length ? normalizedQueue : buildFallbackAdQueue();
         renderBroadcastDeck();
     } catch (error) {
         console.warn("Unable to load the ad-service program queue.", error);
-        state.adQueue = buildFallbackAdProgramQueue();
+        state.adQueue = buildFallbackAdQueue();
         renderBroadcastDeck();
         if (!silent) {
             setAdIssueMessage("Live ad-service queue unavailable. Showing the seeded sponsor schedule.", true);

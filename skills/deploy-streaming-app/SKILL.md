@@ -33,6 +33,10 @@ Use this skill when the task is to deploy this repository's demo stack into a Ku
 
 5. Validate the rollout and report the access path.
    - Check `streaming-postgres`, `content-service-demo`, `media-service-demo`, `user-service-demo`, `billing-service`, `ad-service-demo`, and `streaming-frontend`.
+   - Leave rollout progress snapshots enabled unless the user explicitly wants quiet output. `skills/deploy-streaming-app/scripts/deploy-demo.sh` now prints periodic pod snapshots, restart reasons, best-effort `kubectl top` output, and `media-service-demo` init progress while it waits.
+   - Use `--rollout-snapshot-interval <seconds>` or `ROLLOUT_SNAPSHOT_INTERVAL_SECONDS` to tune how often snapshots print. Use `0` only when the user wants plain `rollout status` output.
+   - During `media-service-demo` rollout, treat `Init:*` as "working" until the snapshots stop moving. The skill should surface the latest `stage-demo-movie` log marker, the current 90-second segment-file count, and endpoint cutover so long FFmpeg prep does not look dead.
+   - If a pod restarts during rollout, call out `CrashLoopBackOff`, `OOMKilled`, or rising restart counts explicitly instead of summarizing the rollout as merely "slow."
    - On OpenShift, report the Route host.
    - On Kubernetes LoadBalancer services, let the script wait for an external address before giving up.
    - If RTSP is not externally exposed, say that explicitly instead of leaving the old demo URL implied.
@@ -87,7 +91,8 @@ Standard Kubernetes deployment:
 ```bash
 bash skills/deploy-streaming-app/scripts/deploy-demo.sh \
   --platform kubernetes \
-  --namespace streaming-demo
+  --namespace streaming-demo \
+  --rollout-snapshot-interval 15
 ```
 
 OpenShift deployment:
@@ -178,7 +183,8 @@ python3 scripts/thousandeyes/create-demo-dashboards.py \
 - For OpenShift, the script rewrites Maven cache paths to `/tmp/.m2` so in-cluster builds are less dependent on root-owned paths.
 - The frontend build picks up deployment-specific labels at build time through environment overrides in `frontend/scripts/build.mjs`.
 - Splunk RUM sourcemap upload is best-effort. If the Splunk API returns an error after the frontend build completes, the deploy scripts warn and continue with the rollout.
-- The media library is generated in-cluster with FFmpeg, so the default rollout no longer downloads public MP4 assets during pod startup.
+- `media-service-demo` rollout can legitimately spend several minutes in `stage-demo-movie` while it downloads the sample source MP4s and prebuilds 90-second loop segments. Use the rollout snapshots before deciding the pod is stuck.
+- When the cluster exposes the Metrics API, the deploy script includes best-effort `kubectl top pod --containers` output in rollout snapshots. If metrics are unavailable, it skips that section and keeps waiting.
 - `namespace` and `FRONTEND_ROUTE_NAME` must be lowercase RFC 1123 labels.
 - External frontend and RTSP URLs are best-effort discoveries. Tune `--external-url-timeout` or `EXTERNAL_URL_TIMEOUT_SECONDS` when the cluster provisions addresses slowly.
 - ThousandEyes automation in this repo is split between `scripts/thousandeyes/create-rtsp-tests.sh` for direct API use and `scripts/thousandeyes/deploy-k8s-rtsp-tests.sh` for the in-cluster Job path.

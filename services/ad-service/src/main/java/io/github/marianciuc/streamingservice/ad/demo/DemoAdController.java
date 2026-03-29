@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class DemoAdController {
 
     private static final int MAX_DELAY_MS = 15_000;
-    private static final int DEMO_AD_BREAK_SEGMENT_SECONDS = 180;
+    private static final int DEMO_AD_BREAK_SEGMENT_SECONDS = 90;
     private static final int DEMO_AD_BREAK_DURATION_SECONDS = 15;
     private static final Duration PROGRAM_AD_SLOT = Duration.ofSeconds(DEMO_AD_BREAK_DURATION_SECONDS);
     private static final List<HouseLoopProgram> HOUSE_LOOP_PROGRAMS = List.of(
@@ -111,7 +111,7 @@ public class DemoAdController {
                 ? campaign.label() + " is scheduled, but the injected ad-load failure is forcing a missed sponsor break inside the house loop."
                 : activeWindow != null
                     ? campaign.label() + " is active and the short sponsor clip is stitched into the house loop right now."
-                    : campaign.label() + " is armed for the next sponsor pod inside the tighter house loop.";
+                    : campaign.label() + " is armed for the next sponsor pod in the 90-second house loop.";
 
         return new AdCurrentResponse(
                 serviceState,
@@ -242,7 +242,7 @@ public class DemoAdController {
                     failed ? FAILED_STATUS : activeBreak ? "NOW" : current.enabled() ? DEGRADED_STATUS : READY_STATUS,
                     failed
                             ? campaign.label() + " is queued here, but the injected ad fault will make this sponsor break miss."
-                            : campaign.label() + " inserts the short sponsor clip at the next three-minute break.",
+                            : campaign.label() + " inserts the short sponsor clip at the next 90-second break.",
                     failed ? null : "/api/v1/demo/media/library/sponsor-break.mp4",
                     DEMO_AD_BREAK_DURATION_SECONDS + "s"
             ));
@@ -315,7 +315,7 @@ public class DemoAdController {
 
     private String issueSummary(AdIssueState state) {
         if (!state.enabled()) {
-            return "Ad service is healthy. Sponsor clips are inserted roughly every three minutes throughout the house loop without additional delay.";
+            return "Ad service is healthy. Sponsor clips are inserted about every 90 seconds throughout the house loop without additional delay.";
         }
 
         java.util.List<String> effects = new java.util.ArrayList<>();

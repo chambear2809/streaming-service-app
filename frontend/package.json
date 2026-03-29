@@ -2,6 +2,7 @@
   "name": "streaming-frontend",
   "private": true,
   "scripts": {
+    "test": "node --test ./test/*.test.mjs",
     "build": "node ./scripts/build.mjs",
     "sourcemaps:inject": "splunk-rum sourcemaps inject --path dist",
     "build:production": "npm run build && npm run sourcemaps:inject"

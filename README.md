@@ -162,6 +162,7 @@ For a static preview of the broadcast UI:
 ```bash
 cd frontend
 npm install
+npm test
 npm run build
 python3 -m http.server 8080 -d dist
 ```
@@ -179,6 +180,13 @@ There is no root Maven aggregator POM in this repository. Build services by poin
 ```bash
 ./mvnw -f services/billing-service/pom.xml test
 ./mvnw -f services/media-service/pom.xml package -DskipTests
+```
+
+For the frontend demo scheduling and fallback logic:
+
+```bash
+cd frontend
+npm test
 ```
 
 ### Canonical Kubernetes Or OpenShift Demo Deployment

@@ -46,32 +46,84 @@ spec:
             - -c
             - |
               set -eu
-              FONT_BOLD=/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf
-              FONT_REGULAR=/usr/share/fonts/dejavu/DejaVuSans.ttf
-              mkdir -p /opt/demo/library
 
-              build_demo_asset() {
-                OUTPUT_PATH="$1"
-                ACCENT_COLOR="$2"
-                TITLE="$3"
-                SUBTITLE="$4"
-                AUDIO_TONE="$5"
-
-                ffmpeg -hide_banner -loglevel warning -y \
-                  -f lavfi -i color=c=0x101820:s=1280x720:r=24:d=30 \
-                  -f lavfi -i sine=frequency="${AUDIO_TONE}":sample_rate=44100:duration=30 \
-                  -vf "drawbox=x=72:y=72:w=1136:h=576:color=${ACCENT_COLOR}:t=6,drawbox=x=120:y=468:w=1040:h=120:color=0x000000@0.24:t=fill,drawtext=fontfile=${FONT_BOLD}:text='STREAMING SERVICE DEMO':fontcolor=white:fontsize=40:x=(w-text_w)/2:y=140,drawtext=fontfile=${FONT_BOLD}:text='${TITLE}':fontcolor=${ACCENT_COLOR}:fontsize=68:x=(w-text_w)/2:y=246,drawtext=fontfile=${FONT_REGULAR}:text='${SUBTITLE}':fontcolor=white:fontsize=30:x=(w-text_w)/2:y=370" \
-                  -shortest \
-                  -c:v libx264 -preset veryfast -pix_fmt yuv420p -r 24 \
-                  -c:a aac -ar 44100 -b:a 128k -movflags +faststart \
-                  "${OUTPUT_PATH}"
+              log_step() {
+                printf '%s %s\n' "$(date -u '+%Y-%m-%d %H:%M:%S UTC')" "$1"
               }
 
-              build_demo_asset /opt/demo/demo.mp4 0xcaa85c 'House Lineup' 'Primary public channel' 440
+              mkdir -p /opt/demo/library
+              mkdir -p /opt/demo/house-loop-segments
+
+              log_step "Downloading house-loop source assets"
+              wget -U "AcmeDemoLibrary/1.0" -O /opt/demo/demo.mp4 "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
               cp /opt/demo/demo.mp4 /opt/demo/library/big-buck-bunny.mp4
-              build_demo_asset /opt/demo/library/elephants-dream.mp4 0x8fd3dc 'Events Desk' 'Contribution preview reel' 554
-              build_demo_asset /opt/demo/library/sintel.mp4 0xf29d52 'Review Desk' 'Editorial screening loop' 659
-              build_demo_asset /opt/demo/library/tears-of-steel.mp4 0xbddf7a 'Regional Sports' 'Sponsor-ready house package' 784
+              wget -U "AcmeDemoLibrary/1.0" -O /opt/demo/library/elephants-dream.mp4 "https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4"
+              wget -U "AcmeDemoLibrary/1.0" -O /opt/demo/library/sintel.mp4 "https://storage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4"
+              wget -U "AcmeDemoLibrary/1.0" -O /opt/demo/library/tears-of-steel.mp4 "https://storage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
+              log_step "Downloads complete; preparing 90-second house-loop segments"
+
+              segment_house_asset() {
+                SEGMENT_PREFIX="$1"
+                INPUT_FILE="$2"
+
+                log_step "Starting segment build for ${SEGMENT_PREFIX}"
+                ffmpeg -hide_banner -loglevel warning -y -i "${INPUT_FILE}" \
+                  -map 0:v:0 -map 0:a:0 \
+                  -c:v libx264 -preset superfast -threads 2 -pix_fmt yuv420p -r 24 -g 48 -keyint_min 48 -sc_threshold 0 \
+                  -force_key_frames "expr:gte(t,n_forced*90)" \
+                  -c:a aac -ar 44100 -b:a 128k \
+                  -f segment -segment_time 90 -reset_timestamps 1 \
+                  "/opt/demo/house-loop-segments/${SEGMENT_PREFIX}-%03d.mp4"
+              }
+
+              wait_for_segment_job() {
+                JOB_PID="$1"
+                JOB_LABEL="$2"
+
+                if [ -z "${JOB_PID}" ]; then
+                  return 0
+                fi
+
+                if wait "${JOB_PID}"; then
+                  log_step "Finished segment build for ${JOB_LABEL}"
+                  return 0
+                fi
+
+                log_step "Segment build failed for ${JOB_LABEL}"
+                return 1
+              }
+
+              run_segment_batch() {
+                FIRST_LABEL="$1"
+                FIRST_INPUT="$2"
+                SECOND_LABEL="$3"
+                SECOND_INPUT="$4"
+                BATCH_FAILED=0
+
+                segment_house_asset "${FIRST_LABEL}" "${FIRST_INPUT}" &
+                FIRST_PID="$!"
+                SECOND_PID=""
+                if [ -n "${SECOND_LABEL}" ] && [ -n "${SECOND_INPUT}" ]; then
+                  segment_house_asset "${SECOND_LABEL}" "${SECOND_INPUT}" &
+                  SECOND_PID="$!"
+                fi
+
+                if ! wait_for_segment_job "${FIRST_PID}" "${FIRST_LABEL}"; then
+                  BATCH_FAILED=1
+                fi
+                if ! wait_for_segment_job "${SECOND_PID}" "${SECOND_LABEL}"; then
+                  BATCH_FAILED=1
+                fi
+
+                if [ "${BATCH_FAILED}" -ne 0 ]; then
+                  return 1
+                fi
+              }
+
+              run_segment_batch "010-big-buck-bunny" "/opt/demo/library/big-buck-bunny.mp4" "030-sintel" "/opt/demo/library/sintel.mp4"
+              run_segment_batch "020-elephants-dream" "/opt/demo/library/elephants-dream.mp4" "040-tears-of-steel" "/opt/demo/library/tears-of-steel.mp4"
+              SEGMENT_COUNT="$(find /opt/demo/house-loop-segments -maxdepth 1 -type f -name '*.mp4' | wc -l | tr -d ' ')"
+              log_step "House-loop segment preparation complete with ${SEGMENT_COUNT} segment files"
           volumeMounts:
             - name: demo-media
               mountPath: /opt/demo
@@ -219,13 +271,23 @@ spec:
               set -eu
               DEMO_SOURCE_FILE="/opt/demo/demo.mp4"
               ROUTE_FILE="/broadcast-state/current-source.txt"
-              HOUSE_BREAK_SEGMENT_SECONDS="${HOUSE_BREAK_SEGMENT_SECONDS:-180}"
+              HOUSE_BREAK_SEGMENT_SECONDS="${HOUSE_BREAK_SEGMENT_SECONDS:-90}"
               HOUSE_BREAK_SOURCE_INTERVAL="${HOUSE_BREAK_SOURCE_INTERVAL:-1}"
+              LIVE_HLS_TIMEOUT_SECONDS="${LIVE_HLS_TIMEOUT_SECONDS:-10}"
+              LIVE_HLS_STARTUP_GRACE_SECONDS="${LIVE_HLS_STARTUP_GRACE_SECONDS:-75}"
               DEMO_PID=""
               LIVE_PID=""
               LIVE_CONFIG=""
               LIVE_HLS_FAILURES=0
+              LIVE_MODE=""
+              LIVE_ROUTE_STARTED_AT=""
               ROUTE_WORK_DIR=""
+              PREP_PID=""
+              PREP_ROUTE_KEY=""
+              PREP_WORK_DIR=""
+              PREP_PLAYLIST=""
+              PREP_READY_FILE=""
+              PREP_FAILED_FILE=""
 
               stop_pid() {
                 PID="$1"
@@ -240,9 +302,53 @@ spec:
                 DEMO_PID=""
               }
 
+              stop_work_dir_processes() {
+                WORK_DIR_PATH="$1"
+                MATCHED_PIDS=""
+
+                if [ -z "${WORK_DIR_PATH}" ]; then
+                  return 0
+                fi
+
+                MATCHED_PIDS="$(ps -o pid,args | awk -v work_dir="${WORK_DIR_PATH}" 'NR > 1 && index($0, work_dir) > 0 {print $1}')"
+                if [ -z "${MATCHED_PIDS}" ]; then
+                  return 0
+                fi
+
+                for MATCHED_PID in ${MATCHED_PIDS}; do
+                  if [ -n "${MATCHED_PID}" ] && kill -0 "${MATCHED_PID}" 2>/dev/null; then
+                    kill "${MATCHED_PID}" || true
+                  fi
+                done
+
+                sleep 1
+
+                for MATCHED_PID in ${MATCHED_PIDS}; do
+                  if [ -n "${MATCHED_PID}" ] && kill -0 "${MATCHED_PID}" 2>/dev/null; then
+                    kill -9 "${MATCHED_PID}" || true
+                  fi
+                done
+              }
+
+              stop_route_prep() {
+                stop_work_dir_processes "${PREP_WORK_DIR}"
+                stop_pid "${PREP_PID}"
+                PREP_PID=""
+                PREP_ROUTE_KEY=""
+                PREP_PLAYLIST=""
+                PREP_READY_FILE=""
+                PREP_FAILED_FILE=""
+                if [ -n "${PREP_WORK_DIR}" ] && [ -d "${PREP_WORK_DIR}" ]; then
+                  rm -rf "${PREP_WORK_DIR}" || true
+                fi
+                PREP_WORK_DIR=""
+              }
+
               stop_live_stream() {
                 stop_pid "${LIVE_PID}"
                 LIVE_PID=""
+                LIVE_MODE=""
+                LIVE_ROUTE_STARTED_AT=""
                 if [ -n "${ROUTE_WORK_DIR}" ] && [ -d "${ROUTE_WORK_DIR}" ]; then
                   rm -rf "${ROUTE_WORK_DIR}" || true
                 fi
@@ -255,127 +361,331 @@ spec:
               }
 
               broadcast_hls_ready() {
-                wget -q -T 2 -O- http://127.0.0.1:8888/live/index.m3u8 2>/dev/null | grep -q '#EXTM3U'
+                wget -q -T "${LIVE_HLS_TIMEOUT_SECONDS}" -O- http://127.0.0.1:8888/live/index.m3u8 2>/dev/null | grep -q '#EXTM3U'
               }
 
-              start_live_stream() {
-                ROUTE_KIND="$1"
-                ROUTE_SOURCE="$2"
-                ROUTE_LOOP="$3"
-                ROUTE_INSERT_AD="$4"
-                ROUTE_SLOW_AD="$5"
-                ROUTE_AD_LOAD_FAILURE="$6"
-                ROUTE_AD_ASSET="$7"
-                ROUTE_STALL_ASSET="$8"
-                ROUTE_WORK_DIR="$(mktemp -d /tmp/live-route.XXXXXX)"
-                ROUTE_PLAYLIST="${ROUTE_WORK_DIR}/live-playlist.txt"
-                ROUTE_SEGMENT_DIR="${ROUTE_WORK_DIR}/segments"
+              media_duration_seconds() {
+                SOURCE_PATH="$1"
 
-                append_ad_break_assets() {
-                  if [ "${ROUTE_SLOW_AD}" = "true" ] && [ -n "${ROUTE_STALL_ASSET}" ] && [ -f "${ROUTE_STALL_ASSET}" ]; then
-                    printf "file '%s'\n" "${ROUTE_STALL_ASSET}" >> "${ROUTE_PLAYLIST}"
-                  fi
+                if [ ! -f "${SOURCE_PATH}" ]; then
+                  return 1
+                fi
 
-                  if [ "${ROUTE_AD_LOAD_FAILURE}" = "true" ]; then
-                    if [ -n "${ROUTE_STALL_ASSET}" ] && [ -f "${ROUTE_STALL_ASSET}" ]; then
-                      printf "file '%s'\n" "${ROUTE_STALL_ASSET}" >> "${ROUTE_PLAYLIST}"
-                    fi
-                  elif [ -n "${ROUTE_AD_ASSET}" ] && [ -f "${ROUTE_AD_ASSET}" ]; then
-                    printf "file '%s'\n" "${ROUTE_AD_ASSET}" >> "${ROUTE_PLAYLIST}"
-                  fi
-                }
+                ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${SOURCE_PATH}" 2>/dev/null \
+                  | awk 'NF { printf("%d\n", ($1 == int($1)) ? $1 : int($1) + 1); exit }'
+              }
 
-                build_segmented_loop_playlist() {
-                  PREBUILT_SEGMENT_DIR="/opt/demo/house-loop-segments"
-                  if [ -d "${PREBUILT_SEGMENT_DIR}" ] && find "${PREBUILT_SEGMENT_DIR}" -maxdepth 1 -type f -name 'segment-*.mp4' | grep -q .; then
-                    find "${PREBUILT_SEGMENT_DIR}" -maxdepth 1 -type f -name 'segment-*.mp4' | sort > "${ROUTE_WORK_DIR}/segments.list"
-                  else
-                    mkdir -p "${ROUTE_SEGMENT_DIR}"
-                    ffmpeg -hide_banner -loglevel warning -y -i "${ROUTE_SOURCE}" -map 0:v:0 -map 0:a:0 -c:v libx264 -preset veryfast -pix_fmt yuv420p -r 24 -g 48 -keyint_min 48 -sc_threshold 0 -force_key_frames "expr:gte(t,n_forced*${HOUSE_BREAK_SEGMENT_SECONDS})" -c:a aac -ar 44100 -b:a 128k -f segment -segment_time "${HOUSE_BREAK_SEGMENT_SECONDS}" -reset_timestamps 1 "${ROUTE_SEGMENT_DIR}/segment-%03d.mp4" >/dev/null 2>&1 || return 1
-                    find "${ROUTE_SEGMENT_DIR}" -maxdepth 1 -type f -name 'segment-*.mp4' | sort > "${ROUTE_WORK_DIR}/segments.list"
-                  fi
-                  SEGMENT_COUNT="$(wc -l < "${ROUTE_WORK_DIR}/segments.list" | tr -d ' ')"
-                  if [ -z "${SEGMENT_COUNT}" ] || [ "${SEGMENT_COUNT}" -le 1 ]; then
+              should_check_hls_readiness() {
+                if [ "${LIVE_MODE}" = "clean-file" ] && [ -n "${PREP_PID}" ] && kill -0 "${PREP_PID}" 2>/dev/null; then
+                  return 1
+                fi
+
+                if [ -n "${LIVE_ROUTE_STARTED_AT}" ]; then
+                  NOW_SECONDS="$(date +%s)"
+                  ROUTE_AGE_SECONDS=$((NOW_SECONDS - LIVE_ROUTE_STARTED_AT))
+                  if [ "${ROUTE_AGE_SECONDS}" -lt "${LIVE_HLS_STARTUP_GRACE_SECONDS}" ]; then
                     return 1
                   fi
+                fi
 
-                  : > "${ROUTE_PLAYLIST}"
-                  SEGMENT_INDEX=0
-                  LAST_SEGMENT_INDEX=$((SEGMENT_COUNT - 1))
-                  while IFS= read -r SEGMENT_PATH; do
-                    [ -n "${SEGMENT_PATH}" ] || continue
-                    printf "file '%s'\n" "${SEGMENT_PATH}" >> "${ROUTE_PLAYLIST}"
-                    if [ "${SEGMENT_INDEX}" -lt "${LAST_SEGMENT_INDEX}" ]; then
-                      append_ad_break_assets
-                    fi
-                    SEGMENT_INDEX=$((SEGMENT_INDEX + 1))
-                  done < "${ROUTE_WORK_DIR}/segments.list"
-                }
+                return 0
+              }
 
-                build_source_list_playlist() {
-                  if [ ! -f "${ROUTE_SOURCE}" ]; then
-                    return 1
+              append_ad_break_assets() {
+                PLAYLIST_PATH="$1"
+                ROUTE_SLOW_AD_FLAG="$2"
+                ROUTE_AD_LOAD_FAILURE_FLAG="$3"
+                ROUTE_AD_ASSET_PATH="$4"
+                ROUTE_STALL_ASSET_PATH="$5"
+
+                if [ "${ROUTE_SLOW_AD_FLAG}" = "true" ] && [ -n "${ROUTE_STALL_ASSET_PATH}" ] && [ -f "${ROUTE_STALL_ASSET_PATH}" ]; then
+                  printf "file '%s'\n" "${ROUTE_STALL_ASSET_PATH}" >> "${PLAYLIST_PATH}"
+                fi
+
+                if [ "${ROUTE_AD_LOAD_FAILURE_FLAG}" = "true" ]; then
+                  if [ -n "${ROUTE_STALL_ASSET_PATH}" ] && [ -f "${ROUTE_STALL_ASSET_PATH}" ]; then
+                    printf "file '%s'\n" "${ROUTE_STALL_ASSET_PATH}" >> "${PLAYLIST_PATH}"
                   fi
+                elif [ -n "${ROUTE_AD_ASSET_PATH}" ] && [ -f "${ROUTE_AD_ASSET_PATH}" ]; then
+                  printf "file '%s'\n" "${ROUTE_AD_ASSET_PATH}" >> "${PLAYLIST_PATH}"
+                fi
+              }
 
-                  grep -v '^[[:space:]]*$' "${ROUTE_SOURCE}" > "${ROUTE_WORK_DIR}/source-list" || true
-                  SOURCE_COUNT="$(wc -l < "${ROUTE_WORK_DIR}/source-list" | tr -d ' ')"
-                  if [ -z "${SOURCE_COUNT}" ] || [ "${SOURCE_COUNT}" -le 0 ]; then
-                    return 1
+              build_segmented_loop_playlist() {
+                SOURCE_PATH="$1"
+                WORK_DIR_PATH="$2"
+                PLAYLIST_PATH="$3"
+                ROUTE_SLOW_AD_FLAG="$4"
+                ROUTE_AD_LOAD_FAILURE_FLAG="$5"
+                ROUTE_AD_ASSET_PATH="$6"
+                ROUTE_STALL_ASSET_PATH="$7"
+                SEGMENT_DIR_PATH="${WORK_DIR_PATH}/segments"
+
+                mkdir -p "${SEGMENT_DIR_PATH}"
+                ffmpeg -hide_banner -loglevel warning -y -i "${SOURCE_PATH}" \
+                  -map 0:v:0 -map 0:a:0 \
+                  -c:v libx264 -preset veryfast -threads 2 -pix_fmt yuv420p -r 24 -g 48 -keyint_min 48 -sc_threshold 0 \
+                  -force_key_frames "expr:gte(t,n_forced*${HOUSE_BREAK_SEGMENT_SECONDS})" \
+                  -c:a aac -ar 44100 -b:a 128k \
+                  -f segment -segment_time "${HOUSE_BREAK_SEGMENT_SECONDS}" -reset_timestamps 1 \
+                  "${SEGMENT_DIR_PATH}/segment-%03d.mp4" >/dev/null 2>&1 || return 1
+                find "${SEGMENT_DIR_PATH}" -maxdepth 1 -type f -name 'segment-*.mp4' | sort > "${WORK_DIR_PATH}/segments.list"
+
+                SEGMENT_COUNT="$(wc -l < "${WORK_DIR_PATH}/segments.list" | tr -d ' ')"
+                if [ -z "${SEGMENT_COUNT}" ] || [ "${SEGMENT_COUNT}" -le 0 ]; then
+                  return 1
+                fi
+                if [ "${SEGMENT_COUNT}" -le 1 ]; then
+                  return 2
+                fi
+
+                : > "${PLAYLIST_PATH}"
+                SEGMENT_INDEX=0
+                LAST_SEGMENT_INDEX=$((SEGMENT_COUNT - 1))
+                while IFS= read -r SEGMENT_PATH; do
+                  [ -n "${SEGMENT_PATH}" ] || continue
+                  printf "file '%s'\n" "${SEGMENT_PATH}" >> "${PLAYLIST_PATH}"
+                  if [ "${SEGMENT_INDEX}" -lt "${LAST_SEGMENT_INDEX}" ]; then
+                    append_ad_break_assets "${PLAYLIST_PATH}" "${ROUTE_SLOW_AD_FLAG}" "${ROUTE_AD_LOAD_FAILURE_FLAG}" "${ROUTE_AD_ASSET_PATH}" "${ROUTE_STALL_ASSET_PATH}"
                   fi
+                  SEGMENT_INDEX=$((SEGMENT_INDEX + 1))
+                done < "${WORK_DIR_PATH}/segments.list"
+              }
 
-                  : > "${ROUTE_PLAYLIST}"
-                  SOURCE_INDEX=0
-                  while IFS= read -r SOURCE_PATH; do
-                    [ -n "${SOURCE_PATH}" ] || continue
-                    printf "file '%s'\n" "${SOURCE_PATH}" >> "${ROUTE_PLAYLIST}"
-                    if [ "${ROUTE_INSERT_AD}" = "true" ] && [ "${HOUSE_BREAK_SOURCE_INTERVAL}" -gt 0 ] && [ $(( (SOURCE_INDEX + 1) % HOUSE_BREAK_SOURCE_INTERVAL )) -eq 0 ]; then
-                      append_ad_break_assets
-                    fi
-                    SOURCE_INDEX=$((SOURCE_INDEX + 1))
-                  done < "${ROUTE_WORK_DIR}/source-list"
-                }
+              build_source_list_playlist() {
+                SOURCE_LIST_PATH="$1"
+                WORK_DIR_PATH="$2"
+                PLAYLIST_PATH="$3"
+                ROUTE_INSERT_AD_FLAG="$4"
+                ROUTE_SLOW_AD_FLAG="$5"
+                ROUTE_AD_LOAD_FAILURE_FLAG="$6"
+                ROUTE_AD_ASSET_PATH="$7"
+                ROUTE_STALL_ASSET_PATH="$8"
 
-                build_route_playlist() {
-                  : > "${ROUTE_PLAYLIST}"
+                if [ ! -f "${SOURCE_LIST_PATH}" ]; then
+                  return 1
+                fi
 
-                  if [ "${ROUTE_KIND}" = "playlist" ]; then
-                    build_source_list_playlist
-                    return $?
+                grep -v '^[[:space:]]*$' "${SOURCE_LIST_PATH}" > "${WORK_DIR_PATH}/source-list" || true
+                SOURCE_COUNT="$(wc -l < "${WORK_DIR_PATH}/source-list" | tr -d ' ')"
+                if [ -z "${SOURCE_COUNT}" ] || [ "${SOURCE_COUNT}" -le 0 ]; then
+                  return 1
+                fi
+
+                : > "${PLAYLIST_PATH}"
+                SOURCE_INDEX=0
+                while IFS= read -r SOURCE_PATH; do
+                  [ -n "${SOURCE_PATH}" ] || continue
+                  printf "file '%s'\n" "${SOURCE_PATH}" >> "${PLAYLIST_PATH}"
+                  if [ "${ROUTE_INSERT_AD_FLAG}" = "true" ] && [ "${HOUSE_BREAK_SOURCE_INTERVAL}" -gt 0 ] && [ $(( (SOURCE_INDEX + 1) % HOUSE_BREAK_SOURCE_INTERVAL )) -eq 0 ]; then
+                    append_ad_break_assets "${PLAYLIST_PATH}" "${ROUTE_SLOW_AD_FLAG}" "${ROUTE_AD_LOAD_FAILURE_FLAG}" "${ROUTE_AD_ASSET_PATH}" "${ROUTE_STALL_ASSET_PATH}"
                   fi
+                  SOURCE_INDEX=$((SOURCE_INDEX + 1))
+                done < "${WORK_DIR_PATH}/source-list"
+              }
 
-                  if [ ! -f "${ROUTE_SOURCE}" ]; then
-                    return 1
-                  fi
+              build_route_playlist() {
+                ROUTE_KIND_ARG="$1"
+                ROUTE_SOURCE_ARG="$2"
+                ROUTE_LOOP_ARG="$3"
+                ROUTE_INSERT_AD_ARG="$4"
+                ROUTE_SLOW_AD_ARG="$5"
+                ROUTE_AD_LOAD_FAILURE_ARG="$6"
+                ROUTE_AD_ASSET_ARG="$7"
+                ROUTE_STALL_ASSET_ARG="$8"
+                WORK_DIR_PATH="$9"
+                PLAYLIST_PATH="${WORK_DIR_PATH}/live-playlist.txt"
 
-                  if [ "${ROUTE_INSERT_AD}" = "true" ] && [ "${ROUTE_LOOP}" = "true" ]; then
-                    if build_segmented_loop_playlist; then
-                      return 0
-                    fi
-                  fi
+                : > "${PLAYLIST_PATH}"
 
-                  printf "file '%s'\n" "${ROUTE_SOURCE}" >> "${ROUTE_PLAYLIST}"
+                if [ "${ROUTE_KIND_ARG}" = "playlist" ]; then
+                  build_source_list_playlist "${ROUTE_SOURCE_ARG}" "${WORK_DIR_PATH}" "${PLAYLIST_PATH}" "${ROUTE_INSERT_AD_ARG}" "${ROUTE_SLOW_AD_ARG}" "${ROUTE_AD_LOAD_FAILURE_ARG}" "${ROUTE_AD_ASSET_ARG}" "${ROUTE_STALL_ASSET_ARG}"
+                  return $?
+                fi
 
-                  if [ "${ROUTE_INSERT_AD}" != "true" ]; then
+                if [ ! -f "${ROUTE_SOURCE_ARG}" ]; then
+                  return 1
+                fi
+
+                if [ "${ROUTE_INSERT_AD_ARG}" = "true" ] && [ "${ROUTE_LOOP_ARG}" = "true" ]; then
+                  SOURCE_DURATION_SECONDS="$(media_duration_seconds "${ROUTE_SOURCE_ARG}" || true)"
+                  if [ -n "${SOURCE_DURATION_SECONDS}" ] && [ "${SOURCE_DURATION_SECONDS}" -le "${HOUSE_BREAK_SEGMENT_SECONDS}" ]; then
+                    printf "file '%s'\n" "${ROUTE_SOURCE_ARG}" >> "${PLAYLIST_PATH}"
+                    append_ad_break_assets "${PLAYLIST_PATH}" "${ROUTE_SLOW_AD_ARG}" "${ROUTE_AD_LOAD_FAILURE_ARG}" "${ROUTE_AD_ASSET_ARG}" "${ROUTE_STALL_ASSET_ARG}"
                     return 0
                   fi
 
-                  append_ad_break_assets
-                }
+                  if build_segmented_loop_playlist "${ROUTE_SOURCE_ARG}" "${WORK_DIR_PATH}" "${PLAYLIST_PATH}" "${ROUTE_SLOW_AD_ARG}" "${ROUTE_AD_LOAD_FAILURE_ARG}" "${ROUTE_AD_ASSET_ARG}" "${ROUTE_STALL_ASSET_ARG}"; then
+                    return 0
+                  fi
+                  SEGMENT_BUILD_STATUS="$?"
+                  if [ "${SEGMENT_BUILD_STATUS}" -eq 1 ]; then
+                    return 1
+                  fi
+                fi
 
-                if [ "${ROUTE_KIND}" = "file" ] || [ "${ROUTE_KIND}" = "playlist" ]; then
-                  build_route_playlist || return 1
+                printf "file '%s'\n" "${ROUTE_SOURCE_ARG}" >> "${PLAYLIST_PATH}"
+                if [ "${ROUTE_INSERT_AD_ARG}" != "true" ]; then
+                  return 0
+                fi
 
-                  if [ "${ROUTE_LOOP}" = "true" ]; then
-                    ffmpeg -hide_banner -loglevel warning -fflags +genpts -re -stream_loop -1 -f concat -safe 0 -i "${ROUTE_PLAYLIST}" -map 0:v:0 -map 0:a:0 -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -c:a aac -ar 44100 -b:a 128k -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/live &
+                append_ad_break_assets "${PLAYLIST_PATH}" "${ROUTE_SLOW_AD_ARG}" "${ROUTE_AD_LOAD_FAILURE_ARG}" "${ROUTE_AD_ASSET_ARG}" "${ROUTE_STALL_ASSET_ARG}"
+              }
+
+              start_concat_stream() {
+                PLAYLIST_PATH="$1"
+                ROUTE_LOOP_FLAG="$2"
+                START_OFFSET_SECONDS="$3"
+
+                if [ "${ROUTE_LOOP_FLAG}" = "true" ]; then
+                  if [ "${START_OFFSET_SECONDS}" -gt 0 ]; then
+                    ffmpeg -hide_banner -loglevel warning -fflags +genpts -re -stream_loop -1 -f concat -safe 0 -i "${PLAYLIST_PATH}" -ss "${START_OFFSET_SECONDS}" -map 0:v:0 -map 0:a:0 -c:v libx264 -preset ultrafast -threads 2 -tune zerolatency -pix_fmt yuv420p -c:a aac -ar 44100 -b:a 128k -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/live &
                   else
-                    ffmpeg -hide_banner -loglevel warning -fflags +genpts -re -f concat -safe 0 -i "${ROUTE_PLAYLIST}" -map 0:v:0 -map 0:a:0 -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -c:a aac -ar 44100 -b:a 128k -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/live &
+                    ffmpeg -hide_banner -loglevel warning -fflags +genpts -re -stream_loop -1 -f concat -safe 0 -i "${PLAYLIST_PATH}" -map 0:v:0 -map 0:a:0 -c:v libx264 -preset ultrafast -threads 2 -tune zerolatency -pix_fmt yuv420p -c:a aac -ar 44100 -b:a 128k -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/live &
                   fi
                 else
-                  ffmpeg -hide_banner -loglevel warning -rtsp_transport tcp -i "${ROUTE_SOURCE}" -c copy -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/live &
+                  if [ "${START_OFFSET_SECONDS}" -gt 0 ]; then
+                    ffmpeg -hide_banner -loglevel warning -fflags +genpts -re -f concat -safe 0 -i "${PLAYLIST_PATH}" -ss "${START_OFFSET_SECONDS}" -map 0:v:0 -map 0:a:0 -c:v libx264 -preset ultrafast -threads 2 -tune zerolatency -pix_fmt yuv420p -c:a aac -ar 44100 -b:a 128k -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/live &
+                  else
+                    ffmpeg -hide_banner -loglevel warning -fflags +genpts -re -f concat -safe 0 -i "${PLAYLIST_PATH}" -map 0:v:0 -map 0:a:0 -c:v libx264 -preset ultrafast -threads 2 -tune zerolatency -pix_fmt yuv420p -c:a aac -ar 44100 -b:a 128k -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/live &
+                  fi
                 fi
 
                 LIVE_PID="$!"
                 LIVE_HLS_FAILURES=0
+              }
+
+              start_direct_file_stream() {
+                SOURCE_PATH="$1"
+                ROUTE_LOOP_FLAG="$2"
+
+                if [ "${ROUTE_LOOP_FLAG}" = "true" ]; then
+                  ffmpeg -hide_banner -loglevel warning -re -stream_loop -1 -i "${SOURCE_PATH}" -map 0:v:0 -map 0:a:0 -c:v libx264 -preset ultrafast -threads 2 -tune zerolatency -pix_fmt yuv420p -c:a aac -ar 44100 -b:a 128k -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/live &
+                else
+                  ffmpeg -hide_banner -loglevel warning -re -i "${SOURCE_PATH}" -map 0:v:0 -map 0:a:0 -c:v libx264 -preset ultrafast -threads 2 -tune zerolatency -pix_fmt yuv420p -c:a aac -ar 44100 -b:a 128k -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/live &
+                fi
+
+                LIVE_PID="$!"
+                LIVE_HLS_FAILURES=0
+              }
+
+              start_rtsp_passthrough() {
+                SOURCE_PATH="$1"
+                ffmpeg -hide_banner -loglevel warning -rtsp_transport tcp -i "${SOURCE_PATH}" -c copy -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/live &
+                LIVE_PID="$!"
+                LIVE_HLS_FAILURES=0
+              }
+
+              start_file_route_prep() {
+                PREP_ROUTE_KEY="$1"
+                PREP_SOURCE_PATH="$2"
+                PREP_ROUTE_LOOP="$3"
+                PREP_ROUTE_INSERT_AD="$4"
+                PREP_ROUTE_SLOW_AD="$5"
+                PREP_ROUTE_AD_LOAD_FAILURE="$6"
+                PREP_ROUTE_AD_ASSET="$7"
+                PREP_ROUTE_STALL_ASSET="$8"
+
+                PREP_WORK_DIR="$(mktemp -d /tmp/live-route-prep.XXXXXX)"
+                PREP_PLAYLIST="${PREP_WORK_DIR}/live-playlist.txt"
+                PREP_READY_FILE="${PREP_WORK_DIR}/.ready"
+                PREP_FAILED_FILE="${PREP_WORK_DIR}/.failed"
+
+                (
+                  if build_route_playlist "file" "${PREP_SOURCE_PATH}" "${PREP_ROUTE_LOOP}" "${PREP_ROUTE_INSERT_AD}" "${PREP_ROUTE_SLOW_AD}" "${PREP_ROUTE_AD_LOAD_FAILURE}" "${PREP_ROUTE_AD_ASSET}" "${PREP_ROUTE_STALL_ASSET}" "${PREP_WORK_DIR}"; then
+                    : > "${PREP_READY_FILE}"
+                  else
+                    : > "${PREP_FAILED_FILE}"
+                  fi
+                ) &
+                PREP_PID="$!"
+              }
+
+              promote_prepared_file_route() {
+                CURRENT_ROUTE_KEY="$1"
+
+                if [ "${LIVE_MODE}" != "clean-file" ] || [ -z "${PREP_ROUTE_KEY}" ] || [ "${PREP_ROUTE_KEY}" != "${CURRENT_ROUTE_KEY}" ]; then
+                  return 0
+                fi
+
+                if [ -n "${PREP_FAILED_FILE}" ] && [ -f "${PREP_FAILED_FILE}" ]; then
+                  stop_route_prep
+                  return 0
+                fi
+
+                if [ -n "${PREP_READY_FILE}" ] && [ -f "${PREP_READY_FILE}" ] && [ -n "${PREP_PLAYLIST}" ] && [ -f "${PREP_PLAYLIST}" ]; then
+                  START_OFFSET_SECONDS=0
+                  if [ -n "${LIVE_ROUTE_STARTED_AT}" ]; then
+                    NOW_SECONDS="$(date +%s)"
+                    START_OFFSET_SECONDS=$((NOW_SECONDS - LIVE_ROUTE_STARTED_AT))
+                    if [ "${START_OFFSET_SECONDS}" -lt 0 ]; then
+                      START_OFFSET_SECONDS=0
+                    fi
+                  fi
+
+                  stop_pid "${LIVE_PID}"
+                  LIVE_PID=""
+                  if [ -n "${ROUTE_WORK_DIR}" ] && [ -d "${ROUTE_WORK_DIR}" ]; then
+                    rm -rf "${ROUTE_WORK_DIR}" || true
+                  fi
+                  ROUTE_WORK_DIR="${PREP_WORK_DIR}"
+                  PREP_PID=""
+                  PREP_ROUTE_KEY=""
+                  PREP_WORK_DIR=""
+                  PREP_PLAYLIST=""
+                  PREP_READY_FILE=""
+                  PREP_FAILED_FILE=""
+
+                  start_concat_stream "${ROUTE_WORK_DIR}/live-playlist.txt" "true" "${START_OFFSET_SECONDS}"
+                  LIVE_MODE="stitched-file"
+                  return 0
+                fi
+
+                if [ -n "${PREP_PID}" ] && ! kill -0 "${PREP_PID}" 2>/dev/null; then
+                  stop_route_prep
+                fi
+              }
+
+              start_live_stream() {
+                ROUTE_KEY_ARG="$1"
+                ROUTE_KIND_ARG="$2"
+                ROUTE_SOURCE_ARG="$3"
+                ROUTE_LOOP_ARG="$4"
+                ROUTE_INSERT_AD_ARG="$5"
+                ROUTE_SLOW_AD_ARG="$6"
+                ROUTE_AD_LOAD_FAILURE_ARG="$7"
+                ROUTE_AD_ASSET_ARG="$8"
+                ROUTE_STALL_ASSET_ARG="$9"
+
+                if [ "${ROUTE_KIND_ARG}" = "file" ] && [ "${ROUTE_INSERT_AD_ARG}" = "true" ] && [ "${ROUTE_LOOP_ARG}" = "true" ]; then
+                  start_direct_file_stream "${ROUTE_SOURCE_ARG}" "${ROUTE_LOOP_ARG}"
+                  LIVE_MODE="clean-file"
+                  LIVE_ROUTE_STARTED_AT="$(date +%s)"
+                  start_file_route_prep "${ROUTE_KEY_ARG}" "${ROUTE_SOURCE_ARG}" "${ROUTE_LOOP_ARG}" "${ROUTE_INSERT_AD_ARG}" "${ROUTE_SLOW_AD_ARG}" "${ROUTE_AD_LOAD_FAILURE_ARG}" "${ROUTE_AD_ASSET_ARG}" "${ROUTE_STALL_ASSET_ARG}"
+                  return 0
+                fi
+
+                ROUTE_WORK_DIR="$(mktemp -d /tmp/live-route.XXXXXX)"
+                if [ "${ROUTE_KIND_ARG}" = "file" ] || [ "${ROUTE_KIND_ARG}" = "playlist" ]; then
+                  if ! build_route_playlist "${ROUTE_KIND_ARG}" "${ROUTE_SOURCE_ARG}" "${ROUTE_LOOP_ARG}" "${ROUTE_INSERT_AD_ARG}" "${ROUTE_SLOW_AD_ARG}" "${ROUTE_AD_LOAD_FAILURE_ARG}" "${ROUTE_AD_ASSET_ARG}" "${ROUTE_STALL_ASSET_ARG}" "${ROUTE_WORK_DIR}"; then
+                    rm -rf "${ROUTE_WORK_DIR}" || true
+                    ROUTE_WORK_DIR=""
+                    return 1
+                  fi
+                  start_concat_stream "${ROUTE_WORK_DIR}/live-playlist.txt" "${ROUTE_LOOP_ARG}" "0"
+                  if [ "${ROUTE_KIND_ARG}" = "playlist" ]; then
+                    LIVE_MODE="playlist"
+                  else
+                    LIVE_MODE="stitched-file"
+                  fi
+                else
+                  rm -rf "${ROUTE_WORK_DIR}" || true
+                  ROUTE_WORK_DIR=""
+                  start_rtsp_passthrough "${ROUTE_SOURCE_ARG}"
+                  LIVE_MODE="rtsp"
+                fi
+
+                LIVE_ROUTE_STARTED_AT="$(date +%s)"
               }
 
               read_route() {
@@ -400,7 +710,7 @@ spec:
                 [ -n "${ROUTE_KEY}" ] && [ -n "${ROUTE_KIND}" ] && [ -n "${ROUTE_SOURCE}" ]
               }
 
-              trap 'stop_live_stream; stop_demo_source; exit 0' INT TERM
+              trap 'stop_route_prep; stop_live_stream; stop_demo_source; exit 0' INT TERM
 
               while true; do
                 if [ -f "${DEMO_SOURCE_FILE}" ]; then
@@ -415,19 +725,34 @@ spec:
                 if read_route; then
                   NEXT_CONFIG="${ROUTE_KEY}|${ROUTE_KIND}|${ROUTE_LOOP}|${ROUTE_SOURCE}|${ROUTE_INSERT_AD}|${ROUTE_SLOW_AD}|${ROUTE_AD_LOAD_FAILURE}|${ROUTE_AD_ASSET}|${ROUTE_STALL_ASSET}"
                   if [ "${NEXT_CONFIG}" != "${LIVE_CONFIG}" ] || [ -z "${LIVE_PID}" ] || ! kill -0 "${LIVE_PID}" 2>/dev/null; then
+                    stop_route_prep
                     stop_live_stream
                     LIVE_CONFIG="${NEXT_CONFIG}"
-                    start_live_stream "${ROUTE_KIND}" "${ROUTE_SOURCE}" "${ROUTE_LOOP}" "${ROUTE_INSERT_AD}" "${ROUTE_SLOW_AD}" "${ROUTE_AD_LOAD_FAILURE}" "${ROUTE_AD_ASSET}" "${ROUTE_STALL_ASSET}"
-                  elif broadcast_hls_ready; then
-                    LIVE_HLS_FAILURES=0
+                    start_live_stream "${ROUTE_KEY}" "${ROUTE_KIND}" "${ROUTE_SOURCE}" "${ROUTE_LOOP}" "${ROUTE_INSERT_AD}" "${ROUTE_SLOW_AD}" "${ROUTE_AD_LOAD_FAILURE}" "${ROUTE_AD_ASSET}" "${ROUTE_STALL_ASSET}"
                   else
-                    LIVE_HLS_FAILURES=$((LIVE_HLS_FAILURES + 1))
-                    if [ "${LIVE_HLS_FAILURES}" -ge 10 ]; then
+                    if [ "${ROUTE_KIND}" = "file" ] && [ "${ROUTE_INSERT_AD}" = "true" ] && [ "${ROUTE_LOOP}" = "true" ]; then
+                      promote_prepared_file_route "${ROUTE_KEY}"
+                    fi
+
+                    if [ -z "${LIVE_PID}" ] || ! kill -0 "${LIVE_PID}" 2>/dev/null; then
+                      stop_route_prep
                       stop_live_stream
-                      start_live_stream "${ROUTE_KIND}" "${ROUTE_SOURCE}" "${ROUTE_LOOP}" "${ROUTE_INSERT_AD}" "${ROUTE_SLOW_AD}" "${ROUTE_AD_LOAD_FAILURE}" "${ROUTE_AD_ASSET}" "${ROUTE_STALL_ASSET}"
+                      start_live_stream "${ROUTE_KEY}" "${ROUTE_KIND}" "${ROUTE_SOURCE}" "${ROUTE_LOOP}" "${ROUTE_INSERT_AD}" "${ROUTE_SLOW_AD}" "${ROUTE_AD_LOAD_FAILURE}" "${ROUTE_AD_ASSET}" "${ROUTE_STALL_ASSET}"
+                    elif ! should_check_hls_readiness; then
+                      LIVE_HLS_FAILURES=0
+                    elif broadcast_hls_ready; then
+                      LIVE_HLS_FAILURES=0
+                    else
+                      LIVE_HLS_FAILURES=$((LIVE_HLS_FAILURES + 1))
+                      if [ "${LIVE_HLS_FAILURES}" -ge 10 ]; then
+                        stop_route_prep
+                        stop_live_stream
+                        start_live_stream "${ROUTE_KEY}" "${ROUTE_KIND}" "${ROUTE_SOURCE}" "${ROUTE_LOOP}" "${ROUTE_INSERT_AD}" "${ROUTE_SLOW_AD}" "${ROUTE_AD_LOAD_FAILURE}" "${ROUTE_AD_ASSET}" "${ROUTE_STALL_ASSET}"
+                      fi
                     fi
                   fi
                 else
+                  stop_route_prep
                   stop_live_stream
                   LIVE_CONFIG=""
                   LIVE_HLS_FAILURES=0
@@ -438,10 +763,10 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 256Mi
+              memory: 384Mi
             limits:
               cpu: 500m
-              memory: 768Mi
+              memory: 1Gi
           volumeMounts:
             - name: broadcast-state
               mountPath: /broadcast-state

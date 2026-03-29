@@ -22,6 +22,7 @@ SPLUNK_RUM_APP_NAME="${SPLUNK_RUM_APP_NAME-}"
 SPLUNK_RUM_ACCESS_TOKEN="${SPLUNK_RUM_ACCESS_TOKEN-}"
 FRONTEND_ROUTE_NAME="${FRONTEND_ROUTE_NAME-}"
 ROLLOUT_TIMEOUT="${ROLLOUT_TIMEOUT-}"
+ROLLOUT_SNAPSHOT_INTERVAL_SECONDS="${ROLLOUT_SNAPSHOT_INTERVAL_SECONDS-}"
 EXTERNAL_URL_TIMEOUT_SECONDS="${EXTERNAL_URL_TIMEOUT_SECONDS-}"
 DEMO_AUTH_SECRET="${DEMO_AUTH_SECRET-}"
 DEMO_AUTH_PASSWORD="${DEMO_AUTH_PASSWORD-}"
@@ -50,6 +51,7 @@ Options:
   --public-rtsp-url <url>
   --app-version <version>
   --rollout-timeout <duration>
+  --rollout-snapshot-interval <seconds>
   --external-url-timeout <seconds>
   --help
 
@@ -61,6 +63,7 @@ Environment variables:
   SPLUNK_RUM_APP_NAME                  Optional frontend RUM app name
   DEMO_AUTH_PASSWORD / DEMO_AUTH_SECRET
                                         Optional demo login credentials to persist
+  ROLLOUT_SNAPSHOT_INTERVAL_SECONDS   How often to print rollout progress snapshots
   EXTERNAL_URL_TIMEOUT_SECONDS         How long to wait for Route/LB hosts
 EOF
 }
@@ -184,6 +187,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --rollout-timeout)
       ROLLOUT_TIMEOUT="${2:?missing value for --rollout-timeout}"
+      shift 2
+      ;;
+    --rollout-snapshot-interval)
+      ROLLOUT_SNAPSHOT_INTERVAL_SECONDS="${2:?missing value for --rollout-snapshot-interval}"
       shift 2
       ;;
     --external-url-timeout)
@@ -373,12 +380,145 @@ ensure_demo_auth_secret() {
 restart_and_wait() {
   local deployment="$1"
   "${KUBECLI}" -n "${NAMESPACE}" rollout restart "deployment/${deployment}" >/dev/null
-  "${KUBECLI}" -n "${NAMESPACE}" rollout status "deployment/${deployment}" --timeout="${ROLLOUT_TIMEOUT}"
+  wait_for_deployment "${deployment}"
+}
+
+log_block() {
+  local line
+
+  while IFS= read -r line; do
+    [[ -n "${line}" ]] || continue
+    log "  ${line}"
+  done <<< "$1"
+}
+
+deployment_selector() {
+  local deployment="$1"
+  printf 'app.kubernetes.io/name=%s\n' "${deployment}"
+}
+
+show_rollout_pod_table() {
+  local deployment="$1"
+  local selector
+  local pod_table
+
+  selector="$(deployment_selector "${deployment}")"
+  pod_table="$("${KUBECLI}" -n "${NAMESPACE}" get pods -l "${selector}" -o wide 2>/dev/null || true)"
+  [[ -n "${pod_table}" ]] || return 0
+
+  log "Rollout snapshot for deployment/${deployment}"
+  log_block "${pod_table}"
+}
+
+show_rollout_pod_health() {
+  local deployment="$1"
+  local selector
+  local pod_refs
+  local pod_ref
+  local pod_name
+  local pod_summary
+
+  selector="$(deployment_selector "${deployment}")"
+  pod_refs="$("${KUBECLI}" -n "${NAMESPACE}" get pods -l "${selector}" -o name 2>/dev/null || true)"
+  [[ -n "${pod_refs}" ]] || return 0
+
+  while IFS= read -r pod_ref; do
+    [[ -n "${pod_ref}" ]] || continue
+    pod_name="${pod_ref#pod/}"
+    pod_summary="$("${KUBECLI}" -n "${NAMESPACE}" get "${pod_ref}" -o jsonpath='{range .status.initContainerStatuses[*]}init:{.name}:restart={.restartCount}:wait={.state.waiting.reason}:last={.lastState.terminated.reason}{" "}{end}{range .status.containerStatuses[*]}container:{.name}:ready={.ready}:restart={.restartCount}:wait={.state.waiting.reason}:last={.lastState.terminated.reason}{" "}{end}' 2>/dev/null || true)"
+    [[ -n "${pod_summary}" ]] || continue
+    log "  pod ${pod_name}: ${pod_summary}"
+  done <<< "${pod_refs}"
+}
+
+show_rollout_metrics() {
+  local deployment="$1"
+  local selector
+  local metrics
+
+  selector="$(deployment_selector "${deployment}")"
+  metrics="$("${KUBECLI}" -n "${NAMESPACE}" top pod -l "${selector}" --containers 2>/dev/null || true)"
+  [[ -n "${metrics}" ]] || return 0
+
+  log "  metrics:"
+  log_block "${metrics}"
+}
+
+show_media_rollout_progress() {
+  local selector
+  local pod_ref
+  local pod_name
+  local latest_log
+  local segment_count
+  local endpoints
+
+  selector="$(deployment_selector media-service-demo)"
+  pod_ref="$("${KUBECLI}" -n "${NAMESPACE}" get pods -l "${selector}" -o name 2>/dev/null | head -n 1)"
+  [[ -n "${pod_ref}" ]] || return 0
+
+  pod_name="${pod_ref#pod/}"
+
+  latest_log="$("${KUBECLI}" -n "${NAMESPACE}" logs "${pod_name}" -c stage-demo-movie --tail=1 2>/dev/null || true)"
+  if [[ -n "${latest_log}" ]]; then
+    log "  media init: ${latest_log}"
+  fi
+
+  segment_count="$("${KUBECLI}" -n "${NAMESPACE}" exec "${pod_name}" -c stage-demo-movie -- sh -c 'find /opt/demo/house-loop-segments -maxdepth 1 -type f -name "*.mp4" | wc -l' 2>/dev/null | tr -d '[:space:]' || true)"
+  if [[ "${segment_count}" =~ ^[0-9]+$ ]]; then
+    log "  media init segment files: ${segment_count}"
+  fi
+
+  endpoints="$("${KUBECLI}" -n "${NAMESPACE}" get endpoints media-service-demo media-service-demo-rtsp -o wide 2>/dev/null || true)"
+  [[ -n "${endpoints}" ]] || return 0
+
+  log "  media endpoints:"
+  log_block "${endpoints}"
+}
+
+print_rollout_snapshot() {
+  local deployment="$1"
+
+  show_rollout_pod_table "${deployment}"
+  show_rollout_pod_health "${deployment}"
+  show_rollout_metrics "${deployment}"
+
+  if [[ "${deployment}" == "media-service-demo" ]]; then
+    show_media_rollout_progress
+  fi
 }
 
 wait_for_deployment() {
   local deployment="$1"
-  "${KUBECLI}" -n "${NAMESPACE}" rollout status "deployment/${deployment}" --timeout="${ROLLOUT_TIMEOUT}"
+  local rollout_pid=0
+  local rollout_status=0
+  local next_snapshot_epoch
+  local current_epoch
+
+  log "Waiting for deployment/${deployment} rollout"
+
+  if (( ROLLOUT_SNAPSHOT_INTERVAL_SECONDS <= 0 )); then
+    "${KUBECLI}" -n "${NAMESPACE}" rollout status "deployment/${deployment}" --timeout="${ROLLOUT_TIMEOUT}"
+    return
+  fi
+
+  "${KUBECLI}" -n "${NAMESPACE}" rollout status "deployment/${deployment}" --timeout="${ROLLOUT_TIMEOUT}" &
+  rollout_pid="$!"
+  next_snapshot_epoch=$(( $(date +%s) + ROLLOUT_SNAPSHOT_INTERVAL_SECONDS ))
+
+  while kill -0 "${rollout_pid}" 2>/dev/null; do
+    current_epoch="$(date +%s)"
+    if (( current_epoch >= next_snapshot_epoch )); then
+      print_rollout_snapshot "${deployment}"
+      next_snapshot_epoch=$(( current_epoch + ROLLOUT_SNAPSHOT_INTERVAL_SECONDS ))
+    fi
+    sleep 1
+  done
+
+  wait "${rollout_pid}" || rollout_status=$?
+  if (( rollout_status != 0 )); then
+    print_rollout_snapshot "${deployment}"
+    return "${rollout_status}"
+  fi
 }
 
 patch_service_type() {
@@ -621,10 +761,12 @@ PLATFORM="${PLATFORM:-auto}"
 SPLUNK_RUM_APP_NAME="${SPLUNK_RUM_APP_NAME:-streaming-app-frontend}"
 FRONTEND_ROUTE_NAME="${FRONTEND_ROUTE_NAME:-streaming-frontend}"
 ROLLOUT_TIMEOUT="${ROLLOUT_TIMEOUT:-900s}"
+ROLLOUT_SNAPSHOT_INTERVAL_SECONDS="${ROLLOUT_SNAPSHOT_INTERVAL_SECONDS:-15}"
 EXTERNAL_URL_TIMEOUT_SECONDS="${EXTERNAL_URL_TIMEOUT_SECONDS:-60}"
 
 validate_dns_label "${NAMESPACE}" "namespace"
 validate_dns_label "${FRONTEND_ROUTE_NAME}" "frontend route name"
+validate_non_negative_integer "${ROLLOUT_SNAPSHOT_INTERVAL_SECONDS}" "rollout snapshot interval"
 validate_non_negative_integer "${EXTERNAL_URL_TIMEOUT_SECONDS}" "external URL timeout"
 
 if [[ "${PLATFORM}" == "auto" ]]; then
@@ -685,6 +827,7 @@ log "CLI: ${KUBECLI}"
 log "Namespace: ${NAMESPACE}"
 log "Frontend service type: ${FRONTEND_SERVICE_TYPE}"
 log "RTSP service type: ${RTSP_SERVICE_TYPE}"
+log "Rollout snapshot interval: ${ROLLOUT_SNAPSHOT_INTERVAL_SECONDS}s"
 log "External URL timeout: ${EXTERNAL_URL_TIMEOUT_SECONDS}s"
 log "Env file: ${ENV_FILE}"
 log "Skill path: ${SKILL_DIR}"

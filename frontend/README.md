@@ -40,6 +40,7 @@ From the repository root:
 
 ```bash
 cd frontend && npm install
+npm test
 npm run build
 python3 -m http.server 8080 -d dist
 ```

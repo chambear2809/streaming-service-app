@@ -111,55 +111,14 @@ public class DemoMediaController {
     private static final String BROADCAST_CHANNEL_ID = "acme-network-east";
     private static final String BROADCAST_CHANNEL_LABEL = "Acme Network East";
     private static final String HOUSE_LINEUP_TITLE = "Acme House Lineup";
-    private static final String HOUSE_LINEUP_DETAIL =
-            "Big Buck Bunny, Elephants Dream, Sintel, and Tears of Steel rotate on the external channel with sponsor pods roughly every three minutes until a contribution feed is taken live.";
+    private static final String HOUSE_LINEUP_DETAIL = DemoBroadcastAdSchedule.DEFAULT_BROADCAST_DETAIL;
     private static final String BROADCAST_STATUS_ON_AIR = "ON_AIR";
     private static final String BROADCAST_STATUS_DEMO_LOOP = "DEMO_LOOP";
     private static final String BROADCAST_SOURCE_TYPE_RTSP = "RTSP_CONTRIBUTION";
     private static final String BROADCAST_SOURCE_TYPE_DEMO = "DEMO_LIBRARY";
-    private static final String BROADCAST_AD_STATE_ARMED = "ARMED";
-    private static final String BROADCAST_AD_STATE_IN_BREAK = "IN_BREAK";
-    private static final int DEMO_AD_BREAK_SEGMENT_SECONDS = 180;
-    private static final int DEMO_AD_BREAK_DURATION_SECONDS = 15;
-    private static final Duration DEMO_AD_BREAK_DURATION = Duration.ofSeconds(DEMO_AD_BREAK_DURATION_SECONDS);
     private static final String BROADCAST_ROUTE_KIND_PLAYLIST = "playlist";
-    private static final List<HouseLoopAsset> HOUSE_LOOP_ASSETS = List.of(
-            new HouseLoopAsset(
-                    "big-buck-bunny.mp4",
-                    "Big Buck Bunny",
-                    Duration.ofSeconds(597),
-                    "/api/v1/demo/media/library/big-buck-bunny.mp4",
-                    "Forest slapstick opens the house lineup before sponsor pod A."
-            ),
-            new HouseLoopAsset(
-                    "elephants-dream.mp4",
-                    "Elephants Dream",
-                    Duration.ofSeconds(654),
-                    "/api/v1/demo/media/library/elephants-dream.mp4",
-                    "The machine-world feature follows sponsor pod A and leads into the next stitched break."
-            ),
-            new HouseLoopAsset(
-                    "sintel.mp4",
-                    "Sintel",
-                    Duration.ofSeconds(888),
-                    "/api/v1/demo/media/library/sintel.mp4",
-                    "The longer fantasy feature carries the mid-show window before sponsor pod C."
-            ),
-            new HouseLoopAsset(
-                    "tears-of-steel.mp4",
-                    "Tears of Steel",
-                    Duration.ofSeconds(734),
-                    "/api/v1/demo/media/library/tears-of-steel.mp4",
-                    "The closing hybrid feature resets the channel before the lineup rolls into the next sponsor pod."
-            )
-    );
-    private static final List<HouseLoopSegment> HOUSE_LOOP_SEGMENTS = buildHouseLoopSegments();
-    private static final int DEMO_AD_BREAK_COUNT = HOUSE_LOOP_SEGMENTS.size();
-    private static final Duration DEMO_AD_CYCLE = HOUSE_LOOP_SEGMENTS.stream()
-            .map(HouseLoopSegment::duration)
-            .reduce(Duration.ZERO, Duration::plus)
-            .plus(DEMO_AD_BREAK_DURATION.multipliedBy(DEMO_AD_BREAK_COUNT));
-    private static final Instant DEMO_AD_CYCLE_ORIGIN = Instant.parse("2026-01-01T00:00:00Z");
+    private static final DemoBroadcastAdSchedule BROADCAST_AD_SCHEDULE = DemoBroadcastAdSchedule.defaultSchedule();
+    private static final List<DemoBroadcastAdSchedule.HouseLoopAsset> HOUSE_LOOP_ASSETS = BROADCAST_AD_SCHEDULE.houseLoopAssets();
     private static final int DEMO_AD_SLOW_DELAY_MS = 3000;
     private static final String BROADCAST_ROUTE_KIND_FILE = "file";
     private static final String BROADCAST_ROUTE_KIND_RTSP = "rtsp";
@@ -170,12 +129,6 @@ public class DemoMediaController {
             "content-service-demo",
             "billing-service",
             "ad-service-demo"
-    );
-    private static final List<DemoAdCampaign> DEMO_AD_CAMPAIGNS = List.of(
-            new DemoAdCampaign("North Coast Sports Network", "Regional sports launch pod", "two 15-second sports spots and a 30-second brand anthem"),
-            new DemoAdCampaign("Metro Weather Desk", "Storm desk weather sponsorship", "a 30-second forecast sponsor followed by two 15-second local promos"),
-            new DemoAdCampaign("City Arts Channel", "Festival takeover pod", "a 30-second arts festival sponsor with two 15-second tune-in promos"),
-            new DemoAdCampaign("Pop-Up Event East", "Opening-week sponsor activation", "three 15-second event launch spots with a branded lower-third callout")
     );
     private static final Set<String> DEMO_RTSP_HOSTS = Set.of(
             "demo.acmebroadcasting.local",
@@ -204,7 +157,7 @@ public class DemoMediaController {
     private final AtomicReference<String> stagedBroadcastKey = new AtomicReference<>("");
     private final AtomicReference<String> publishedBroadcastRouteKey = new AtomicReference<>("");
     private final AtomicReference<String> publishedBroadcastRouteDefinition = new AtomicReference<>("");
-    private final AtomicReference<Instant> demoAdCycleOrigin = new AtomicReference<>(DEMO_AD_CYCLE_ORIGIN);
+    private final AtomicReference<Instant> demoAdCycleOrigin = new AtomicReference<>(BROADCAST_AD_SCHEDULE.defaultCycleOrigin());
     private final AtomicReference<DemoMonkeyState> demoMonkeyState = new AtomicReference<>(DemoMonkeyState.disabled());
     private final AtomicLong demoAdTimelineGeneration = new AtomicLong();
     private final ExecutorService rtspExecutor = Executors.newCachedThreadPool(new RtspWorkerThreadFactory());
@@ -733,7 +686,7 @@ public class DemoMediaController {
             reviewPath = createReviewFile(job.jobId());
             tempPath = Files.createTempFile("rtsp-capture-" + job.jobId() + "-", ".mp4");
             if (isBundledDemoRtspSource(sourceUrl)) {
-                captureBundledDemoFeed(tempPath, job);
+                captureBundledDemoFeed(tempPath, job.captureDurationSeconds(), job);
             } else {
                 captureRtspToFile(sourceUrl, tempPath, job.captureDurationSeconds(), job);
             }
@@ -810,15 +763,59 @@ public class DemoMediaController {
         }
     }
 
-    private void captureBundledDemoFeed(Path outputFile, RtspJob job) throws IOException {
+    private void captureBundledDemoFeed(Path outputFile, int captureDurationSeconds, RtspJob job) throws Exception {
         Path bundledFeed = Path.of(demoMediaFile);
         if (!Files.exists(bundledFeed)) {
             throw new IllegalStateException("Bundled RTSP demo feed is unavailable.");
         }
 
-        job.markStatus(CAPTURING_STATUS);
-        persistRtspJob(job);
-        Files.copy(bundledFeed, outputFile, StandardCopyOption.REPLACE_EXISTING);
+        long maxDurationMicros = Duration.ofSeconds(captureDurationSeconds).toMillis() * 1000L;
+
+        try (FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(bundledFeed.toFile())) {
+            grabber.start();
+
+            int width = grabber.getImageWidth();
+            int height = grabber.getImageHeight();
+            if (width <= 0 || height <= 0) {
+                throw new IllegalStateException("Bundled RTSP demo feed did not expose a video stream.");
+            }
+
+            try (FFmpegFrameRecorder recorder = new FFmpegFrameRecorder(
+                    outputFile.toFile(),
+                    width,
+                    height,
+                    Math.max(grabber.getAudioChannels(), 0)
+            )) {
+                configureRecorder(recorder, grabber);
+                recorder.start();
+
+                boolean receivedFrame = false;
+                long firstTimestampMicros = -1L;
+                Frame frame;
+                while ((frame = grabber.grabFrame()) != null) {
+                    long currentTimestampMicros = Math.max(grabber.getTimestamp(), 0L);
+                    if (firstTimestampMicros < 0L) {
+                        firstTimestampMicros = currentTimestampMicros;
+                    } else if (currentTimestampMicros - firstTimestampMicros >= maxDurationMicros) {
+                        break;
+                    }
+
+                    if (!receivedFrame) {
+                        job.markStatus(CAPTURING_STATUS);
+                        persistRtspJob(job);
+                        receivedFrame = true;
+                    }
+                    recorder.record(frame);
+                }
+
+                recorder.stop();
+                if (!receivedFrame) {
+                    throw new IllegalStateException("Bundled RTSP demo feed did not yield any frames.");
+                }
+            }
+
+            grabber.stop();
+        }
     }
 
     private void configureGrabber(FFmpegFrameGrabber grabber) {
@@ -906,7 +903,7 @@ public class DemoMediaController {
                 || isBroadcastReady(job);
     }
 
-    private BroadcastSelection resolveBroadcastSelection() {
+    BroadcastSelection resolveBroadcastSelection() {
         UUID activeJobId = activeBroadcastJobId.get();
         if (activeJobId != null) {
             RtspJob activeJob = rtspJobs.get(activeJobId);
@@ -1000,7 +997,7 @@ public class DemoMediaController {
         }
     }
 
-    private synchronized void ensureBroadcastRelayConfigured(BroadcastSelection selection) throws IOException {
+    synchronized void ensureBroadcastRelayConfigured(BroadcastSelection selection) throws IOException {
         Path broadcastRoot = Files.createDirectories(Path.of(demoBroadcastRoot));
         Path routePath = broadcastRoot.resolve(PUBLIC_BROADCAST_ROUTE_FILE_NAME);
         String nextKey = broadcastSelectionKey(selection);
@@ -1731,7 +1728,7 @@ public class DemoMediaController {
         );
     }
 
-    private BroadcastAdStatusResponse resolveAdStatus(BroadcastSelection selection) {
+    BroadcastAdStatusResponse resolveAdStatus(BroadcastSelection selection) {
         try {
             return fetchAdServiceStatus(selection);
         } catch (Exception exception) {
@@ -1813,33 +1810,11 @@ public class DemoMediaController {
             return synchronizedDemoLoopAdStatus(selection, null, errorDetail);
         }
 
-        DemoAdLoopCycle currentCycle = currentAdLoopCycle();
-        ZonedDateTime now = ZonedDateTime.now();
-        List<DemoAdBreakWindow> windows = demoAdBreakWindows(currentCycle.sequence(), currentCycle.start());
-        DemoAdBreakWindow activeWindow = windows.stream()
-                .filter(window -> !now.isBefore(window.start()) && now.isBefore(window.end()))
-                .findFirst()
-                .orElse(null);
-        DemoAdBreakWindow scheduledWindow = activeWindow != null
-                ? activeWindow
-                : windows.stream()
-                    .filter(window -> now.isBefore(window.start()))
-                    .min(Comparator.comparing(DemoAdBreakWindow::start))
-                    .orElseGet(() -> demoAdBreakWindows(currentCycle.sequence() + 1, currentCycle.end()).getFirst());
-        DemoAdCampaign campaign = campaignForWindow(scheduledWindow);
-        boolean liveContribution = BROADCAST_STATUS_ON_AIR.equals(selection.status());
-        String playoutLabel = liveContribution ? "live contribution feed" : "house loop";
-
-        return new BroadcastAdStatusResponse(
-                activeWindow != null ? BROADCAST_AD_STATE_IN_BREAK : BROADCAST_AD_STATE_ARMED,
-                "Sponsor pod " + (char) ('A' + scheduledWindow.slotIndex()),
-                campaign.sponsorLabel(),
-                liveContribution ? "Fallback live splice" : "Fallback stitched pod",
-                scheduledWindow.start().toInstant().toString(),
-                scheduledWindow.end().toInstant().toString(),
-                activeWindow != null
-                        ? campaign.campaignLabel() + " with " + campaign.creativeMix() + " is stitched into the " + playoutLabel + " right now. Ad service fallback is active: " + errorDetail
-                        : campaign.campaignLabel() + " with " + campaign.creativeMix() + " is queued for the next sponsor pod on the " + playoutLabel + ". Ad service fallback is active: " + errorDetail
+        return BROADCAST_AD_SCHEDULE.fallbackStatus(
+                BROADCAST_STATUS_ON_AIR.equals(selection.status()),
+                errorDetail,
+                demoAdCycleOrigin.get(),
+                ZonedDateTime.now()
         );
     }
 
@@ -1848,107 +1823,21 @@ public class DemoMediaController {
             AdServiceCurrentResponse payload,
             String errorDetail
     ) {
-        DemoAdLoopCycle currentCycle = currentAdLoopCycle();
-        ZonedDateTime now = ZonedDateTime.now();
-        List<DemoAdBreakWindow> windows = demoAdBreakWindows(currentCycle.sequence(), currentCycle.start());
-        DemoAdBreakWindow activeWindow = windows.stream()
-                .filter(window -> !now.isBefore(window.start()) && now.isBefore(window.end()))
-                .findFirst()
-                .orElse(null);
-        DemoAdBreakWindow scheduledWindow = activeWindow != null
-                ? activeWindow
-                : windows.stream()
-                    .filter(window -> now.isBefore(window.start()))
-                    .min(Comparator.comparing(DemoAdBreakWindow::start))
-                    .orElseGet(() -> demoAdBreakWindows(currentCycle.sequence() + 1, currentCycle.end()).getFirst());
-        DemoAdCampaign campaign = campaignForWindow(scheduledWindow);
-        boolean adLoadFailureEnabled = payload != null && payload.adLoadFailureEnabled();
-        boolean slowAdEnabled = payload != null && payload.slowAdEnabled();
-        String sponsorLabel = payload != null && payload.sponsorLabel() != null && !payload.sponsorLabel().isBlank()
-                ? payload.sponsorLabel()
-                : campaign.sponsorLabel();
-        String decisioningMode = payload != null && payload.decisioningMode() != null && !payload.decisioningMode().isBlank()
-                ? payload.decisioningMode()
-                : "Fallback stitched pod";
-        String detail = adLoadFailureEnabled
-                ? campaign.campaignLabel() + " is scheduled, but the injected ad-load failure will miss this sponsor pod inside the house loop."
-                : activeWindow != null
-                    ? campaign.campaignLabel() + " is active and the sponsor pod is stitched into the house loop right now."
-                    : campaign.campaignLabel() + " is armed for the next sponsor pod inside the house loop.";
-        if (slowAdEnabled && !adLoadFailureEnabled) {
-            detail += " Ad decisioning delay is active for this break.";
-        }
-        if (payload != null && payload.issueSummary() != null && !payload.issueSummary().isBlank()) {
-            detail += " " + payload.issueSummary();
-        }
-        if (errorDetail != null && !errorDetail.isBlank()) {
-            detail += " Ad service fallback is active: " + errorDetail;
-        }
-
-        return new BroadcastAdStatusResponse(
-                activeWindow != null ? BROADCAST_AD_STATE_IN_BREAK : BROADCAST_AD_STATE_ARMED,
-                "Sponsor pod " + (char) ('A' + scheduledWindow.slotIndex()),
-                sponsorLabel,
-                decisioningMode,
-                scheduledWindow.start().toInstant().toString(),
-                scheduledWindow.end().toInstant().toString(),
-                detail
+        DemoBroadcastAdSchedule.CurrentAdPayload currentPayload = payload == null
+                ? null
+                : new DemoBroadcastAdSchedule.CurrentAdPayload(
+                        payload.sponsorLabel(),
+                        payload.decisioningMode(),
+                        payload.issueSummary(),
+                        payload.slowAdEnabled(),
+                        payload.adLoadFailureEnabled()
+                );
+        return BROADCAST_AD_SCHEDULE.synchronizedDemoLoopStatus(
+                currentPayload,
+                errorDetail,
+                demoAdCycleOrigin.get(),
+                ZonedDateTime.now()
         );
-    }
-
-    private List<DemoAdBreakWindow> demoAdBreakWindows(long cycleSequence, ZonedDateTime cycleStart) {
-        List<DemoAdBreakWindow> windows = new ArrayList<>();
-
-        long cursorSeconds = 0;
-        for (int segmentIndex = 0; segmentIndex < HOUSE_LOOP_SEGMENTS.size(); segmentIndex++) {
-            cursorSeconds += HOUSE_LOOP_SEGMENTS.get(segmentIndex).duration().toSeconds();
-
-            ZonedDateTime breakStart = cycleStart.plusSeconds(cursorSeconds);
-            windows.add(new DemoAdBreakWindow(
-                    cycleSequence * DEMO_AD_BREAK_COUNT + segmentIndex,
-                    segmentIndex,
-                    breakStart,
-                    breakStart.plusSeconds(DEMO_AD_BREAK_DURATION_SECONDS)
-            ));
-            cursorSeconds += DEMO_AD_BREAK_DURATION_SECONDS;
-        }
-
-        return windows;
-    }
-
-    private DemoAdLoopCycle currentAdLoopCycle() {
-        long cycleSeconds = DEMO_AD_CYCLE.getSeconds();
-        Instant cycleOrigin = demoAdCycleOrigin.get();
-        long elapsedSeconds = Duration.between(cycleOrigin, Instant.now()).getSeconds();
-        long cycleSequence = Math.floorDiv(elapsedSeconds, cycleSeconds);
-        Instant cycleStartInstant = cycleOrigin.plusSeconds(cycleSequence * cycleSeconds);
-        ZonedDateTime cycleStart = ZonedDateTime.ofInstant(cycleStartInstant, ZonedDateTime.now().getZone());
-        return new DemoAdLoopCycle(cycleSequence, cycleStart, cycleStart.plus(DEMO_AD_CYCLE));
-    }
-
-    private static List<HouseLoopSegment> buildHouseLoopSegments() {
-        List<HouseLoopSegment> segments = new ArrayList<>();
-
-        for (HouseLoopAsset asset : HOUSE_LOOP_ASSETS) {
-            long totalSeconds = asset.duration().toSeconds();
-            int segmentCount = Math.max(1, (int) Math.ceil((double) totalSeconds / DEMO_AD_BREAK_SEGMENT_SECONDS));
-            long remainingSeconds = totalSeconds;
-
-            for (int part = 1; remainingSeconds > 0; part++) {
-                long segmentSeconds = Math.min(DEMO_AD_BREAK_SEGMENT_SECONDS, remainingSeconds);
-                segments.add(new HouseLoopSegment(
-                        segmentCount > 1 ? asset.title() + " · Part " + part : asset.title(),
-                        Duration.ofSeconds(segmentSeconds),
-                        asset.playbackUrl(),
-                        segmentCount > 1
-                                ? asset.detail() + " Part " + part + " of " + segmentCount + " in the tighter sponsor loop."
-                                : asset.detail()
-                ));
-                remainingSeconds -= segmentSeconds;
-            }
-        }
-
-        return List.copyOf(segments);
     }
 
     private DemoMonkeyState currentDemoMonkeyState() {
@@ -1995,30 +1884,7 @@ public class DemoMediaController {
         } catch (Exception ignored) {
         }
 
-        return currentOrNextAdBreakWindow().end().toInstant();
-    }
-
-    private DemoAdBreakWindow currentOrNextAdBreakWindow() {
-        DemoAdLoopCycle currentCycle = currentAdLoopCycle();
-        ZonedDateTime now = ZonedDateTime.now();
-        List<DemoAdBreakWindow> windows = demoAdBreakWindows(currentCycle.sequence(), currentCycle.start());
-        DemoAdBreakWindow activeWindow = windows.stream()
-                .filter(window -> !now.isBefore(window.start()) && now.isBefore(window.end()))
-                .findFirst()
-                .orElse(null);
-        if (activeWindow != null) {
-            return activeWindow;
-        }
-
-        return windows.stream()
-                .filter(window -> now.isBefore(window.start()))
-                .min(Comparator.comparing(DemoAdBreakWindow::start))
-                .orElseGet(() -> demoAdBreakWindows(currentCycle.sequence() + 1, currentCycle.end()).getFirst());
-    }
-
-    private DemoAdCampaign campaignForWindow(DemoAdBreakWindow window) {
-        int campaignIndex = (int) Math.floorMod(window.sequence(), DEMO_AD_CAMPAIGNS.size());
-        return DEMO_AD_CAMPAIGNS.get(campaignIndex);
+        return BROADCAST_AD_SCHEDULE.currentOrNextBreakEnd(demoAdCycleOrigin.get(), ZonedDateTime.now());
     }
 
     private DemoMonkeyState normalizeDemoMonkeyRequest(DemoMonkeyConfigRequest request) {
@@ -2468,7 +2334,7 @@ public class DemoMediaController {
     ) {
     }
 
-    private record BroadcastSelection(
+    record BroadcastSelection(
             UUID jobId,
             String title,
             String status,
@@ -2488,45 +2354,6 @@ public class DemoMediaController {
             boolean adLoadFailure,
             String adAssetPath,
             String stallAssetPath
-    ) {
-    }
-
-    private record DemoAdCampaign(
-            String sponsorLabel,
-            String campaignLabel,
-            String creativeMix
-    ) {
-    }
-
-    private record HouseLoopAsset(
-            String fileName,
-            String title,
-            Duration duration,
-            String playbackUrl,
-            String detail
-    ) {
-    }
-
-    private record HouseLoopSegment(
-            String title,
-            Duration duration,
-            String playbackUrl,
-            String detail
-    ) {
-    }
-
-    private record DemoAdBreakWindow(
-            long sequence,
-            int slotIndex,
-            ZonedDateTime start,
-            ZonedDateTime end
-    ) {
-    }
-
-    private record DemoAdLoopCycle(
-            long sequence,
-            ZonedDateTime start,
-            ZonedDateTime end
     ) {
     }
 
