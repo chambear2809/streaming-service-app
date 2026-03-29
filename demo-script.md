@@ -120,18 +120,25 @@ Diagram notes:
 
 ## What ThousandEyes And Splunk Should Show
 
-ThousandEyes in this repo is not generic. The demo uses specific tests:
+ThousandEyes in this repo is not generic. The demo uses specific configured tests. The names below match the current `.env` defaults, so if your booth renamed them, swap in the values from `TE_RTSP_TCP_TEST_NAME`, `TE_UDP_MEDIA_TEST_NAME`, `TE_RTP_STREAM_TEST_NAME`, `TE_TRACE_MAP_TEST_NAME`, and `TE_BROADCAST_TEST_NAME`.
 
 - `aleccham-broadcast-playback`
-  HTTP server test for `/api/v1/demo/public/broadcast/live/index.m3u8`
+  HTTP server test for `/api/v1/demo/public/broadcast/live/index.m3u8`. This is the outside-in viewer baseline for the public HLS playback path. Use it first when the story is playback failure, startup delay, or public-channel instability.
 - `aleccham-broadcast-trace-map`
-  HTTP server test for `/api/v1/demo/public/trace-map`
+  HTTP server test for `/api/v1/demo/public/trace-map`. This is the outside-in application pivot for the public trace fanout. Use it when you want ThousandEyes to prove the request path into `streaming-frontend`, `media-service-demo`, and the backend dependency chain.
 - `RTSP-TCP-8554`
-  RTSP control-path visibility
+  RTSP control-path visibility for the public RTSP service on `TCP/8554`. This proves reachability and path health to the control endpoint, but it does not tell the audience whether the actual RTP stream quality is good.
 - `UDP-Media-Path`
-  UDP transport-path visibility
+  UDP transport-path visibility between ThousandEyes agents. This is the deeper media-transport proof for packet delivery and path posture when the room wants to see whether the network path is behaving differently from the application path.
 - `RTP-Stream-Proxy`
-  RTP proxy quality visibility
+  RTP proxy quality visibility through the ThousandEyes voice test model. Use this when you need loss, jitter, and delay evidence for the media story, especially if the audience wants to talk about degraded transport quality instead of broken application logic.
+
+Quick presenter mapping:
+
+- Start with `aleccham-broadcast-playback` when the audience cares about what the viewer felt.
+- Add `aleccham-broadcast-trace-map` when you need to prove the public request path and application fanout.
+- Bring in `RTSP-TCP-8554` when someone asks whether the RTSP control endpoint was reachable at all.
+- Bring in `UDP-Media-Path` and `RTP-Stream-Proxy` when the room shifts from application timing to media transport quality.
 
 Splunk Observability is also organized for the walkthrough. The current dashboard order is:
 
@@ -223,7 +230,9 @@ What to say:
 
 - Playback gives you the outside-in baseline for the public path.
 - Trace map gives you the path into the application dependency fanout.
+- Playback and trace map are the two tests most likely to move during sponsor-delay, slow-start, playback, or Demo Monkey HTTP faults because they hit the public frontend-backed paths directly.
 - If the audience asks about media transport, keep `RTSP-TCP-8554`, `UDP-Media-Path`, and `RTP-Stream-Proxy` ready as the deeper media-path proof.
+- `RTSP-TCP-8554` answers `could the agent reach the public RTSP control endpoint`, while `UDP-Media-Path` and `RTP-Stream-Proxy` answer `was the transport path or media quality degraded`.
 - For the sponsor-delay story, ThousandEyes is the supporting path view. Splunk APM is still the main diagnosis pivot once the break starts slipping.
 
 Talk track:
