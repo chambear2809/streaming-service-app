@@ -39,7 +39,7 @@ Use this skill when the task is to deploy this repository's demo stack into a Ku
    - Ask whether the ThousandEyes tests should target `local` cluster-private endpoints or `external` public endpoints. Make the choice explicit before you create or update any tests.
    - For `local` mode, prefer the in-cluster or private-service addresses that Enterprise Agents on the same network can reach, such as `streaming-frontend.<namespace>.svc.cluster.local` and the cluster-reachable RTSP endpoint.
    - For `external` mode, require the browser-facing or internet-reachable frontend base URL and RTSP hostname instead of silently using `svc.cluster.local` defaults.
-   - Before calling the ThousandEyes API, check whether `.env` or the current shell already defines `THOUSANDEYES_BEARER_TOKEN`. For the create flows, also confirm the needed per-test inputs such as `TE_SOURCE_AGENT_IDS`, `TE_TARGET_AGENT_ID`, and the RTSP or HTTP target variables for the chosen mode.
+   - Before calling the ThousandEyes API, check whether `.env` or the current shell already defines `THOUSANDEYES_BEARER_TOKEN`. For the create flows, also confirm the needed per-test inputs such as `TE_SOURCE_AGENT_IDS`, `TE_TARGET_AGENT_ID`, optional `TE_UDP_TARGET_AGENT_ID`, and the RTSP or HTTP target variables for the chosen mode.
    - `THOUSANDEYES_ACCOUNT_GROUP_ID` is the preferred repo setting for deterministic org or account-group targeting and is required later for dashboard sync, but the direct ThousandEyes create helper can still use the token's default account group when it is omitted.
    - If any required token or object ID for the chosen flow is missing, stop and prompt the user for the exact variable names. Tell them they can either edit the repo-root `.env` or export the variables in their shell for the current session.
    - Use `THOUSANDEYES_BEARER_TOKEN` as the primary auth variable. `THOUSANDEYES_TOKEN` is only a compatibility fallback.
@@ -47,13 +47,13 @@ Use this skill when the task is to deploy this repository's demo stack into a Ku
    - Discover visible account groups with `scripts/thousandeyes/create-rtsp-tests.sh list-account-groups`.
    - Discover visible agents with `scripts/thousandeyes/create-rtsp-tests.sh list-agents`.
    - Summarize the returned org or account-group names and IDs, then use the selected ID for `THOUSANDEYES_ACCOUNT_GROUP_ID`.
-   - Make the user-facing mapping explicit: `THOUSANDEYES_ACCOUNT_GROUP_ID` comes from `list-orgs`, while `TE_SOURCE_AGENT_IDS` and `TE_TARGET_AGENT_ID` come from `list-agents`.
+   - Make the user-facing mapping explicit: `THOUSANDEYES_ACCOUNT_GROUP_ID` comes from `list-orgs`, while `TE_SOURCE_AGENT_IDS`, `TE_TARGET_AGENT_ID`, and optional `TE_UDP_TARGET_AGENT_ID` come from `list-agents`.
    - If the user asks for a specific Enterprise Agent, search the visible agents and, if needed, query `/v7/agents?aid=<account-group-id>` for each visible account group until the named agent is found.
-   - Write the chosen `THOUSANDEYES_ACCOUNT_GROUP_ID`, `TE_SOURCE_AGENT_IDS`, and `TE_TARGET_AGENT_ID` into the repo `.env` when the user wants the setup persisted.
+   - Write the chosen `THOUSANDEYES_ACCOUNT_GROUP_ID`, `TE_SOURCE_AGENT_IDS`, `TE_TARGET_AGENT_ID`, and, when used, `TE_UDP_TARGET_AGENT_ID` into the repo `.env` when the user wants the setup persisted.
    - In `external` mode, prompt for `TE_RTSP_SERVER`, `TE_RTSP_PORT`, and either `TE_DEMO_MONKEY_FRONTEND_BASE_URL` or the derived `TE_TRACE_MAP_TEST_URL` and `TE_BROADCAST_TEST_URL` before creating tests if they are not already set.
    - In `local` mode, if the RTSP endpoint cannot be discovered automatically, prompt the user for `TE_RTSP_SERVER` and `TE_RTSP_PORT` before creating tests.
    - Prefer a far-away Cloud Agent as the target when the user wants geographic separation from `us-east-1`. A valid example already confirmed in this repo is Cloud Agent `3` `Singapore`.
-   - If either side of the UDP test is a Cloud Agent, set `TE_A2A_THROUGHPUT_MEASUREMENTS=false` before running the create flow. ThousandEyes rejects throughput measurements when a Cloud Agent participates.
+   - If either side of the UDP test is a Cloud Agent, set `TE_A2A_THROUGHPUT_MEASUREMENTS=false` before running the create flow. ThousandEyes rejects throughput measurements when a Cloud Agent participates. When RTP should stay on an Enterprise Agent, prefer `TE_UDP_TARGET_AGENT_ID` instead of changing the shared `TE_TARGET_AGENT_ID`.
    - The RTSP control-path test is agent-to-server and can run with only one Enterprise Agent. The UDP and RTP proxy tests still need a valid target agent.
    - For Demo Monkey-driven demos, prefer the `http-server` tests for `/api/v1/demo/public/trace-map` and `/api/v1/demo/public/broadcast/live/index.m3u8`. Those are the endpoints Demo Monkey actually degrades.
 
@@ -70,6 +70,7 @@ Use this skill when the task is to deploy this repository's demo stack into a Ku
    - If the user wants to update an existing dashboard group and the group ID is not already known, first consider `--group-name` or the script's automatic single-prefix match. Prompt for `SPLUNK_DEMO_DASHBOARD_GROUP_ID` only when multiple matching groups make the target ambiguous.
    - If the demo was deployed into a non-default namespace, either pass `--namespace <deployed-namespace>` to the script or persist that value in `STREAMING_K8S_NAMESPACE`.
    - If the dashboard-write token cannot read SignalFlow metric data, set `SPLUNK_VALIDATION_TOKEN` or pass `--skip-te-metric-validation` before you rerun the sync.
+   - If the RTP dashboard should be populated, verify that an enabled ThousandEyes OTel metric stream includes the RTP test in `testMatch` or exports the `voice` test type. The dashboard helper now warns when the repo RTP test exists but no enabled metric stream appears to cover it.
    - When the repo ThousandEyes tests were created with non-default names or duplicate names exist, set the matching `TE_*_TEST_NAME` or `TE_*_TEST_ID` overrides before syncing dashboards.
    - If any required Splunk token or object ID is missing, stop and prompt the user for the exact variable names. Tell them they can either edit the repo-root `.env` or export the variables in their shell for the current session.
    - Keep the dashboard group easy to follow for the demo: `01 Start Here: Network Symptoms`, `02 Pivot: User Impact To Root Cause`, `03 Backend Critical Path`, then the protocol deep dives.
