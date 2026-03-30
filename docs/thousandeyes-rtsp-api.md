@@ -383,6 +383,220 @@ The script keeps the dashboards ordered for the walkthrough:
 - `05 Deep Dive: Broadcast Playback Path`
 - `06 Deep Dive: RTP Media Quality`
 
+## How To Read The Dashboard Group
+
+If you are a Splunk Observability Cloud user and not a networking specialist, do not think of these dashboards as low-level packet-analysis screens.
+
+Think of them as a guided story:
+
+1. is there a user-visible symptom?
+2. does the symptom look like a frontend reachability problem, a media-path problem, or an application problem?
+3. which test or path got worse first?
+4. how does that line up with the app and infrastructure telemetry already in Splunk?
+
+The dashboards are intentionally ordered so you can move from broad symptom detection to narrower path diagnosis.
+
+### How The Networking Story Fits This Demo
+
+In this repo, the dashboards mix two kinds of views:
+
+- endpoint reachability views, where a ThousandEyes source agent is trying to reach an application URL or RTSP endpoint
+- path-quality views, where a ThousandEyes source agent is sending traffic toward a ThousandEyes target agent
+
+That distinction matters when you interpret the charts:
+
+- HTTP and RTSP dashboards usually mean "can the agent reach the app-side endpoint?"
+- UDP and RTP dashboards usually mean "what does the path between two test locations look like?"
+
+For the current demo story:
+
+- Ashburn Enterprise Agents represent a location near the app environment in `us-east-1`
+- the Singapore Cloud Agent represents a location far from the app environment
+
+So, when a dashboard is based on a source-to-target media test:
+
+- Ashburn -> Ashburn means "near-app baseline path"
+- Ashburn -> Singapore means "long-distance path with real geographic separation"
+
+That is why the same chart type can tell different stories depending on which agents the test used.
+
+## What Each Dashboard Is For
+
+### `01 Start Here: Network Symptoms`
+
+Use this dashboard first.
+
+Its job is to answer:
+
+- is anything obviously failing from the point of view of the ThousandEyes tests?
+- are the problems on the frontend-facing HTTP paths, the RTSP path, or the media-quality path?
+
+Read it as a high-level symptom board, not as the final root-cause board.
+
+If this dashboard looks clean, the user-facing network checks are probably healthy and you should not jump straight to a media-path explanation.
+
+### `02 Pivot: User Impact To Root Cause`
+
+Use this after you confirm there is a symptom.
+
+Its job is to help you move from:
+
+- "a test is failing"
+
+to:
+
+- "is this more likely a network path issue, a frontend/API issue, or a backend service issue?"
+
+This is the bridge dashboard between ThousandEyes signals and the rest of Splunk Observability.
+
+### `03 Backend Critical Path`
+
+Use this when you need to see whether the application and infrastructure side of the demo also look unhealthy.
+
+This dashboard matters because not every failed ThousandEyes test means the network is the problem.
+
+For example:
+
+- if HTTP tests fail and the backend critical path also looks unhealthy, the incident may be application-side
+- if the backend critical path looks stable while the path-oriented ThousandEyes tests degrade, the problem is more likely in connectivity or path quality
+
+### `04 Deep Dive: Trace Map Path`
+
+This dashboard narrows the view to the trace-map endpoint.
+
+Use it when:
+
+- the trace-map HTTP test is degraded
+- the broadcast playback path looks normal
+- you need to know whether the specific trace-map user journey is the one breaking
+
+This is useful because it focuses on one user-facing API path instead of mixing all frontend symptoms together.
+
+### `05 Deep Dive: Broadcast Playback Path`
+
+This dashboard narrows the view to the broadcast playback path.
+
+Use it when:
+
+- the HLS or playback-related HTTP test is degraded
+- the trace-map path looks healthier than the playback path
+- you want to focus on the user experience of watching the broadcast rather than the trace-map demo flow
+
+For a Splunk user, this is usually the most intuitive network-to-user-experience dashboard because it maps directly to "can users actually get the stream manifest and playback path?"
+
+### `06 Deep Dive: RTP Media Quality`
+
+This dashboard is the most network-specific of the set.
+
+Use it when:
+
+- you are specifically talking about media quality
+- RTP metrics are available in Splunk
+- you want to explain loss, jitter, and delay as media-quality symptoms rather than as generic availability failures
+
+This dashboard is not just "is the app up?" It is closer to "if the network path is working, how healthy is it for real-time media?"
+
+## How To Interpret The Dashboards By Symptom Pattern
+
+### HTTP Problems But UDP Or RTP Look Fine
+
+This usually means:
+
+- the frontend URL or API path is unhealthy
+- the app endpoint might be failing
+- the media-path between agents is not the first place to look
+
+In plain language: the network path between locations may be fine, but the web-facing application path is not.
+
+### UDP Or RTP Problems But HTTP Looks Fine
+
+This usually means:
+
+- the web app may still be reachable
+- the network path used for media-style traffic is degraded
+- the issue is more about transport quality than plain frontend reachability
+
+In plain language: users may still load the page, but real-time media quality or cross-location path quality may be poor.
+
+### Trace Map Path Bad, Playback Path Healthy
+
+This usually means the issue is specific to the trace-map endpoint or its upstream application path, not the whole frontend experience.
+
+### Playback Path Bad, Trace Map Path Healthy
+
+This usually means the broadcast delivery flow is more impacted than the general API path.
+
+That often makes the playback dashboard a better starting point than the trace-map dashboard.
+
+### Near-App Agents Healthy, Far-Away Agent Degraded
+
+This usually means the issue grows with geographic distance.
+
+In the current demo story, if the Ashburn-side tests stay healthy while the Singapore-targeted path looks worse, read that as a long-distance path symptom, not as a total app outage.
+
+### Near-App And Far-Away Tests Both Degraded
+
+This usually means the problem is broader.
+
+It could be:
+
+- an app-side outage
+- a frontend endpoint outage
+- a path issue close to the application environment
+- a more general service reachability failure
+
+That is when you should pivot from the pure ThousandEyes views into the backend critical-path dashboard and the rest of Splunk APM and infrastructure data.
+
+## What "Good" Looks Like
+
+For a newcomer, the easiest way to judge the dashboards is not to memorize hard thresholds first. Start with relative behavior.
+
+Healthy dashboards usually look like:
+
+- consistent test success instead of repeated failures
+- low and stable latency relative to the normal baseline for that path
+- no sustained packet-loss or jitter spikes on the RTP-style views
+- similar behavior across repeated test intervals rather than wild swings every run
+
+Unhealthy dashboards usually look like:
+
+- repeated failures, not just a single brief blip
+- clear sustained degradation across multiple test windows
+- one path looking much worse than the others in a way that matches the user symptom you are investigating
+
+## Why A Dashboard Might Be Empty
+
+Empty or partially empty dashboards are common during setup. That does not always mean the sync failed.
+
+Check these causes in order:
+
+- the ThousandEyes tests do not exist yet in the selected account group
+- the dashboard sync pointed at the wrong test names or IDs
+- the tests exist, but they have not run long enough yet for fresh data to appear
+- the dashboard token cannot read the validation data and `SPLUNK_VALIDATION_TOKEN` is missing
+- the RTP test exists, but the ThousandEyes OpenTelemetry metric stream is not exporting the RTP data into Splunk
+- the namespace is wrong for the infrastructure-oriented charts, so the Kubernetes workload views do not match the deployed app namespace
+
+The most important special case is the RTP dashboard:
+
+- the RTP ThousandEyes test can exist and even be healthy
+- but the Splunk RTP dashboard can still be empty
+- if the ThousandEyes metric stream is not exporting the `voice` or RTP-related series into Splunk
+
+So "empty RTP dashboard" does not automatically mean "broken test." It often means "missing metric stream coverage."
+
+## Recommended Reading Order During A Demo Or Incident
+
+For a non-networking audience, use this sequence:
+
+1. open `01 Start Here: Network Symptoms`
+2. move to `02 Pivot: User Impact To Root Cause`
+3. choose `04 Deep Dive: Trace Map Path` or `05 Deep Dive: Broadcast Playback Path` based on which user-facing path is worse
+4. open `06 Deep Dive: RTP Media Quality` only when you are specifically talking about media-path quality
+5. use `03 Backend Critical Path` when you need to connect the ThousandEyes symptoms back to application and service behavior in Splunk
+
+This order keeps the conversation anchored in user impact before it moves into lower-level path quality metrics.
+
 Before you call the Splunk API, make sure the repo-root `.env` or your current shell defines:
 
 - `SPLUNK_REALM`
