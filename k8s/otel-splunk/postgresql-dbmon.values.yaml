@@ -1,0 +1,73 @@
+clusterReceiver:
+  # Keep DBMON isolated in dedicated pipelines so this thin overlay does not
+  # replace the chart's default metrics receiver list.
+  extraEnvs:
+    - name: SPLUNK_DBMON_POSTGRES_ENDPOINT
+      value: streaming-postgres.streaming-service-app.svc.cluster.local:5432
+    - name: SPLUNK_DBMON_EVENT_ENDPOINT
+      value: https://ingest.us1.signalfx.com/v3/event
+    - name: SPLUNK_DBMON_POSTGRES_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: streaming-postgres-dbmon
+          key: username
+    - name: SPLUNK_DBMON_POSTGRES_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: streaming-postgres-dbmon
+          key: password
+    - name: SPLUNK_DBMON_ACCESS_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: streaming-postgres-dbmon
+          key: access-token
+  config:
+    receivers:
+      postgresql:
+        collection_interval: 10s
+        endpoint: ${env:SPLUNK_DBMON_POSTGRES_ENDPOINT}
+        databases:
+          - streaming
+        username: ${env:SPLUNK_DBMON_POSTGRES_USERNAME}
+        password: ${env:SPLUNK_DBMON_POSTGRES_PASSWORD}
+        events:
+          db.server.query_sample:
+            enabled: true
+          db.server.top_query:
+            enabled: true
+        tls:
+          insecure: true
+    exporters:
+      otlphttp/dbmon:
+        headers:
+          X-SF-Token: ${env:SPLUNK_DBMON_ACCESS_TOKEN}
+          X-splunk-instrumentation-library: dbmon
+        logs_endpoint: ${env:SPLUNK_DBMON_EVENT_ENDPOINT}
+        sending_queue:
+          batch:
+            flush_timeout: 15s
+            max_size: 10485760 # 10 MiB
+            sizer: bytes
+    service:
+      pipelines:
+        # Keep the DBMON metrics and logs pipelines aligned with each other.
+        metrics/dbmon:
+          receivers:
+            - postgresql
+          processors:
+            - memory_limiter
+            - batch
+            - resourcedetection
+            - resource/add_environment
+          exporters:
+            - signalfx
+        logs/dbmon:
+          receivers:
+            - postgresql
+          processors:
+            - memory_limiter
+            - batch
+            - resourcedetection
+            - resource/add_environment
+          exporters:
+            - otlphttp/dbmon

@@ -278,6 +278,17 @@ The full set lives in [`example.env`](example.env). The variables below are the 
 - `DEMO_AUTH_PASSWORD` pins the demo login password instead of letting the canonical deploy generate one
 - `DEMO_AUTH_SECRET` pins the user-service demo signing secret instead of letting the canonical deploy generate one
 
+### PostgreSQL DB Monitoring
+
+- `SPLUNK_DBMON_POSTGRES_ENDPOINT` points the PostgreSQL receiver at the shared demo database service
+- `SPLUNK_DBMON_POSTGRES_DATABASES` should stay `streaming` for this repo because the demo services share one database and separate themselves by schema
+- `SPLUNK_DBMON_POSTGRES_USERNAME` and `SPLUNK_DBMON_POSTGRES_PASSWORD` are the PostgreSQL credentials the collector will use
+- `SPLUNK_DBMON_ACCESS_TOKEN` is the Splunk Observability access token used by the `dbmon` event exporter
+- `SPLUNK_DBMON_EVENT_ENDPOINT` is the realm-specific Splunk Observability event endpoint, for example `https://ingest.us1.signalfx.com/v3/event`
+- `SPLUNK_DBMON_TLS_INSECURE` matches the receiver TLS setting for demo or lab environments
+- `SPLUNK_DBMON_ENABLE_QUERY_SAMPLES` and `SPLUNK_DBMON_ENABLE_TOP_QUERIES` control the PostgreSQL receiver events that feed Database Monitoring
+- `SPLUNK_DB_LOGS_ENABLED` is only a prompt flag for the skill; PostgreSQL server log forwarding is not part of the default repo flow
+
 ### ThousandEyes Test Creation
 
 - `THOUSANDEYES_BEARER_TOKEN` is required for ThousandEyes API calls
@@ -299,16 +310,27 @@ Choose the ThousandEyes target mode explicitly before deriving URLs:
 The main docs are:
 
 - [`docs/distributed-tracing.md`](docs/distributed-tracing.md)
+- [`docs/postgresql-db-monitoring.md`](docs/postgresql-db-monitoring.md)
 - [`docs/thousandeyes-rtsp-api.md`](docs/thousandeyes-rtsp-api.md)
+
+The checked-in collector override for PostgreSQL DB monitoring lives at:
+
+- [`k8s/otel-splunk/postgresql-dbmon.values.yaml`](k8s/otel-splunk/postgresql-dbmon.values.yaml)
 
 The main scripts are:
 
 - [`scripts/thousandeyes/create-rtsp-tests.sh`](scripts/thousandeyes/create-rtsp-tests.sh) for direct ThousandEyes API workflows
 - [`scripts/thousandeyes/deploy-k8s-rtsp-tests.sh`](scripts/thousandeyes/deploy-k8s-rtsp-tests.sh) for the in-cluster Kubernetes Job wrapper
 - [`scripts/thousandeyes/create-demo-dashboards.py`](scripts/thousandeyes/create-demo-dashboards.py) for Splunk Observability dashboard sync
+- [`skills/deploy-streaming-app/tests/postgresql-db-monitoring-config.test.sh`](skills/deploy-streaming-app/tests/postgresql-db-monitoring-config.test.sh) for repo-side DB monitoring config validation
+- [`skills/deploy-streaming-app/tests/postgresql-db-monitoring-live-smoke.test.sh`](skills/deploy-streaming-app/tests/postgresql-db-monitoring-live-smoke.test.sh) for a live cluster smoke test of the collector and PostgreSQL path
 
 Important behavior:
 
+- PostgreSQL DB monitoring belongs on the Splunk OTel Collector `clusterReceiver`, not the `agent` DaemonSet, so the shared database is scraped once instead of once per node.
+- The checked-in DBMON overlay uses dedicated `metrics/dbmon` and `logs/dbmon` pipelines so it can layer on top of the chart defaults without replacing the main `metrics` receiver list.
+- The current demo deploy uses one PostgreSQL database named `streaming` and multiple schemas, so the receiver `databases` list should target `streaming`, not `demo_content`, `billing`, or the other schema names.
+- PostgreSQL server logs are optional and intentionally out of the default repo flow unless you also have Splunk Platform access and choose to design that path.
 - The direct ThousandEyes helper can use the token's default account group when `THOUSANDEYES_ACCOUNT_GROUP_ID` is omitted, but dashboard sync requires both `THOUSANDEYES_BEARER_TOKEN` and `THOUSANDEYES_ACCOUNT_GROUP_ID`.
 - Use `THOUSANDEYES_JOB_ACTION=create-demo-monkey-http` when you only want the two Demo Monkey-sensitive HTTP tests.
 - If the UDP media-path test uses a Cloud Agent endpoint, set `TE_A2A_THROUGHPUT_MEASUREMENTS=false`.

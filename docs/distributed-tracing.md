@@ -7,6 +7,8 @@ This repo's Kubernetes demo services use the Splunk OpenTelemetry Operator Java 
 - `k8s/backend-demo/user-service.yaml`
 - `k8s/backend-demo/billing-service.yaml`
 
+For PostgreSQL database monitoring of `streaming-postgres`, use the separate guide in [`docs/postgresql-db-monitoring.md`](postgresql-db-monitoring.md). Database monitoring is a collector configuration change, not part of the app-side Java or Node.js auto-instrumentation described here.
+
 ## Runtime Requirements
 
 The app containers must keep the following OpenTelemetry propagator order so ThousandEyes metadata is preserved in Splunk APM:

@@ -41,7 +41,26 @@ Use this skill when the task is to deploy this repository's demo stack into a Ku
    - On Kubernetes LoadBalancer services, let the script wait for an external address before giving up.
    - If RTSP is not externally exposed, say that explicitly instead of leaving the old demo URL implied.
 
-6. When the user wants ThousandEyes coverage, set up and validate the ThousandEyes inputs before creating tests.
+6. When the user wants PostgreSQL DB monitoring in Splunk Observability Cloud, treat it as a follow-on collector change, not as part of the app deploy itself.
+   - Read `docs/postgresql-db-monitoring.md`.
+   - Use `k8s/otel-splunk/postgresql-dbmon.values.yaml` as the repo's checked-in override fragment for the collector Helm release.
+   - Ask explicitly whether the user wants PostgreSQL DB monitoring configured.
+   - Ask explicitly whether the user also wants PostgreSQL server logs forwarded to Splunk Platform, whether Splunk Cloud Platform or Splunk Enterprise.
+   - In this repo environment, default the DB log answer to `no` unless the user confirms they have access to Splunk Platform and wants that extra path.
+   - The canonical deploy script does not install or mutate the Splunk OTel Collector. Keep the collector change in the Helm values the cluster already uses for the collector.
+   - Check whether `.env` or the current shell already defines `SPLUNK_DBMON_POSTGRES_ENDPOINT`, `SPLUNK_DBMON_POSTGRES_DATABASES`, `SPLUNK_DBMON_POSTGRES_USERNAME`, `SPLUNK_DBMON_POSTGRES_PASSWORD`, `SPLUNK_DBMON_ACCESS_TOKEN`, `SPLUNK_DBMON_EVENT_ENDPOINT`, `SPLUNK_DBMON_TLS_INSECURE`, `SPLUNK_DBMON_ENABLE_QUERY_SAMPLES`, and `SPLUNK_DBMON_ENABLE_TOP_QUERIES`.
+   - In this repo, the PostgreSQL receiver `databases` list should target `streaming`, not schema names such as `demo_content`, `demo_media`, or `billing`.
+   - If the app was deployed into a non-default namespace, update the PostgreSQL endpoint away from the checked-in default `streaming-postgres.streaming-service-app.svc.cluster.local:5432`.
+   - On Kubernetes, put the `postgresql` receiver under `clusterReceiver.config`, not `agent.config`, so the shared database is scraped once instead of once per node.
+   - Add dedicated `metrics/dbmon` and `logs/dbmon` pipelines for PostgreSQL DB monitoring, and keep their processors identical in the same order.
+   - Do not try to append `postgresql` to the chart's default `metrics` receiver list through a thin overlay unless you intentionally want to take ownership of that whole list.
+   - Verify that PostgreSQL itself is ready for query-level DB monitoring. In this repo that means `shared_preload_libraries=pg_stat_statements` and `CREATE EXTENSION IF NOT EXISTS pg_stat_statements` in both the `streaming` and `postgres` databases.
+   - If the PostgreSQL pod predates the manifest change in `k8s/backend-demo/postgres.yaml`, call out that a controlled PostgreSQL restart or one-time in-place enablement is still required before query samples and top queries can succeed.
+   - If required DB monitoring values are missing, stop and prompt for the exact variable names instead of guessing them.
+   - After the collector Helm upgrade, validate the cluster receiver logs for PostgreSQL receiver startup or auth failures and state clearly whether query samples and top queries were enabled.
+   - For repo live validation, use `skills/deploy-streaming-app/tests/postgresql-db-monitoring-live-smoke.test.sh` and override `POSTGRES_ENDPOINT` when the PostgreSQL service FQDN differs from the repo default.
+
+7. When the user wants ThousandEyes coverage, set up and validate the ThousandEyes inputs before creating tests.
    - Read `docs/thousandeyes-rtsp-api.md` for the supported test model and the repo scripts.
    - Ensure the repo-root `.env` exists. If it does not, create it from `example.env`.
    - Ask whether the ThousandEyes tests should target `local` cluster-private endpoints or `external` public endpoints. Make the choice explicit before you create or update any tests.
@@ -65,14 +84,14 @@ Use this skill when the task is to deploy this repository's demo stack into a Ku
    - The RTSP control-path test is agent-to-server and can run with only one Enterprise Agent. The UDP and RTP proxy tests still need a valid target agent.
    - For Demo Monkey-driven demos, prefer the `http-server` tests for `/api/v1/demo/public/trace-map` and `/api/v1/demo/public/broadcast/live/index.m3u8`. Those are the endpoints Demo Monkey actually degrades.
 
-7. Create the ThousandEyes tests from the cluster only after the relevant endpoints are reachable.
+8. Create the ThousandEyes tests from the cluster only after the relevant endpoints are reachable.
    - For `local` mode, use `scripts/thousandeyes/deploy-k8s-rtsp-tests.sh` so the job discovers the `media-service-demo-rtsp` LoadBalancer hostname, derives the in-cluster `streaming-frontend` base URL, and creates the ThousandEyes tests from inside Kubernetes.
    - For `external` mode, either export `TE_DEMO_MONKEY_FRONTEND_BASE_URL`, `TE_TRACE_MAP_TEST_URL`, `TE_BROADCAST_TEST_URL`, `TE_RTSP_SERVER`, and `TE_RTSP_PORT` before using the direct API helper, or override those values before running the Kubernetes wrapper so it does not fall back to cluster-local targets.
    - Use `K8S_DRY_RUN=true` first when the user wants manifest verification without creating the Secret, ConfigMap, and Job for real.
    - Use `THOUSANDEYES_JOB_ACTION=create-demo-monkey-http` when the user specifically wants the Demo Monkey-sensitive HTTP tests.
    - Report whether the created tests target `local` or `external` endpoints, the resolved RTSP hostname and port, the frontend base URL or explicit HTTP test URLs, and state clearly if the agent-to-agent tests are partially constrained by Cloud Agent rules.
 
-8. Build the Splunk demo dashboards only after the ThousandEyes tests are live.
+9. Build the Splunk demo dashboards only after the ThousandEyes tests are live.
    - Use `scripts/thousandeyes/create-demo-dashboards.py` so the dashboard group stays reproducible and ordered for the demo.
    - Before calling the Splunk API, check whether `.env` or the current shell already defines `SPLUNK_REALM`, `SPLUNK_ACCESS_TOKEN`, `THOUSANDEYES_BEARER_TOKEN`, and `THOUSANDEYES_ACCOUNT_GROUP_ID`. `SPLUNK_RUM_APP_NAME` and `SPLUNK_DEPLOYMENT_ENVIRONMENT` can fall back to repo defaults, but override them when the deployed demo uses different names.
    - If the user wants to update an existing dashboard group and the group ID is not already known, first consider `--group-name` or the script's automatic single-prefix match. Prompt for `SPLUNK_DEMO_DASHBOARD_GROUP_ID` only when multiple matching groups make the target ambiguous.
@@ -180,6 +199,7 @@ python3 scripts/thousandeyes/create-demo-dashboards.py \
 ## Notes
 
 - The deploy flow includes `k8s/backend-demo/postgres.yaml` because `billing-service` needs it.
+- PostgreSQL DB monitoring is a separate Splunk OTel Collector change after the app deploy. The repo skill now treats it as a follow-on Helm values update rather than as part of `deploy-demo.sh`.
 - For OpenShift, the script rewrites Maven cache paths to `/tmp/.m2` so in-cluster builds are less dependent on root-owned paths.
 - The frontend build picks up deployment-specific labels at build time through environment overrides in `frontend/scripts/build.mjs`.
 - Splunk RUM sourcemap upload is best-effort. If the Splunk API returns an error after the frontend build completes, the deploy scripts warn and continue with the rollout.
@@ -190,6 +210,7 @@ python3 scripts/thousandeyes/create-demo-dashboards.py \
 - ThousandEyes automation in this repo is split between `scripts/thousandeyes/create-rtsp-tests.sh` for direct API use and `scripts/thousandeyes/deploy-k8s-rtsp-tests.sh` for the in-cluster Job path.
 - The ThousandEyes workflow now has two target modes: `local` for cluster-private or same-network endpoints, and `external` for publicly reachable endpoints. Make the user choose one before you derive test URLs.
 - Splunk dashboard automation in this repo uses `scripts/thousandeyes/create-demo-dashboards.py`.
+- PostgreSQL server log forwarding is optional and should be treated as a separate yes or no prompt. In this repo environment, default that answer to `no` unless the user confirms they have Splunk Platform access.
 - User-facing ThousandEyes "org" selection in this repo maps to `THOUSANDEYES_ACCOUNT_GROUP_ID`, and the helper script exposes that through `list-orgs`.
 - The full test-plus-dashboard flow needs the ThousandEyes bearer token, source agent IDs, target agent ID, and usually an account-group ID. The direct test-creation helper can fall back to the default account group, but dashboard sync requires `THOUSANDEYES_ACCOUNT_GROUP_ID`.
 - Dashboard sync always needs `SPLUNK_REALM` and `SPLUNK_ACCESS_TOKEN`, plus the ThousandEyes bearer token and account-group ID so it can resolve tests. `SPLUNK_RUM_APP_NAME`, `SPLUNK_DEPLOYMENT_ENVIRONMENT`, `SPLUNK_VALIDATION_TOKEN`, namespace, group selection, and custom test-name or test-id overrides are situational. Prompt for missing values instead of guessing them.
