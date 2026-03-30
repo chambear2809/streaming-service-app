@@ -1,9 +1,9 @@
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/content
-    username: root
+    username: ${POSTGRES_USER}
     driver-class-name: org.postgresql.Driver
-    password: root
+    password: ${POSTGRES_PASSWORD}
   kafka:
     bootstrap-servers: localhost:9092
     consumer:
@@ -20,7 +20,7 @@ spring:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
   flyway:
     baseline-on-migrate: true
-    enable: true
+    enabled: true
     baseline-description: "init"
     baseline-version: 0
     user: ${spring.datasource.username}

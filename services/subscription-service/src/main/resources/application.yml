@@ -2,12 +2,12 @@ spring:
   application:
     name: subscription-service
   config:
-    import: optional:configserver:http://localhost:8880
+    import: optional:configserver:http://localhost:8888
   datasource:
     url: jdbc:postgresql://localhost:5432/subscriptions
-    username: root
+    username: ${POSTGRES_USER}
     driver-class-name: org.postgresql.Driver
-    password: root
+    password: ${POSTGRES_PASSWORD}
   jpa:
     hibernate:
       ddl-auto: validate

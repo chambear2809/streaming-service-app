@@ -145,6 +145,25 @@ cp example.env .env
 The shipped template includes working local backing-service defaults, and the
 canonical deploy script now reads that repo-root `.env` automatically.
 
+If you run legacy JVM services directly outside the deploy script, generate the
+local auth keys once and then export the values from `.env` into your shell so
+Spring can see the database, MinIO, and auth settings:
+
+```bash
+bash scripts/local/generate-dev-auth-env.sh
+set -a
+source .env
+set +a
+```
+
+Services such as `user-service` still pull their database and JWT settings from
+the local config server, so start `config-server` before launching them:
+
+```bash
+./mvnw -f services/config-server/pom.xml spring-boot:run
+./mvnw -f services/user-service/pom.xml spring-boot:run
+```
+
 ### Local Dependency Services Only
 
 ```bash

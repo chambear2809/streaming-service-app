@@ -5,20 +5,14 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.3.2</version>
-        <relativePath/>
+        <groupId>io.github.marianciuc.streamingservice</groupId>
+        <artifactId>streaming-service-app</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <groupId>io.github.marianciuc.streamingservice</groupId>
     <artifactId>ad-service-demo</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
     <name>ad-service-demo</name>
-
-    <properties>
-        <java.version>22</java.version>
-    </properties>
 
     <dependencies>
         <dependency>

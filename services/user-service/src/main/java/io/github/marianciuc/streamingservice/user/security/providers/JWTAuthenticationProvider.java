@@ -30,11 +30,10 @@ public class JWTAuthenticationProvider implements AuthenticationProvider {
 
     @Override
     public Authentication authenticate(Authentication authentication) throws AuthenticationException {
-        log.info("Authenticating user with JWT token provided");
         Token token = (Token) authentication.getPrincipal();
-        log.info("Token: {}", token);
         JWTUserPrincipal userPrincipal = (JWTUserPrincipal) userDetailsService.loadUserDetails(authentication);
         if (token != null) {
+            log.debug("Authenticated JWT principal {}", userPrincipal.getUsername());
             return new PreAuthenticatedAuthenticationToken(userPrincipal, userPrincipal.getPassword(), userPrincipal.getAuthorities());
         }
         throw new BadCredentialsException("Invalid token");

@@ -1,8 +1,8 @@
 spring:
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/streaming?currentSchema=demo_ad}
-    username: ${SPRING_DATASOURCE_USERNAME:streaming}
-    password: ${SPRING_DATASOURCE_PASSWORD:streaming}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
   flyway:
     enabled: true
     create-schemas: true

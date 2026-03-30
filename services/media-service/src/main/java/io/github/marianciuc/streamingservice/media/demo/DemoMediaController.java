@@ -160,6 +160,7 @@ public class DemoMediaController {
     private final AtomicReference<Instant> demoAdCycleOrigin = new AtomicReference<>(BROADCAST_AD_SCHEDULE.defaultCycleOrigin());
     private final AtomicReference<DemoMonkeyState> demoMonkeyState = new AtomicReference<>(DemoMonkeyState.disabled());
     private final AtomicLong demoAdTimelineGeneration = new AtomicLong();
+    private final Object demoMonkeyStateLock = new Object();
     private final ExecutorService rtspExecutor = Executors.newCachedThreadPool(new RtspWorkerThreadFactory());
     private final ScheduledExecutorService rtspCleanupExecutor = Executors.newSingleThreadScheduledExecutor(new RtspCleanupThreadFactory());
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -436,9 +437,11 @@ public class DemoMediaController {
     @PutMapping("/api/v1/demo/media/demo-monkey")
     public DemoMonkeyStatusResponse updateDemoMonkey(@RequestBody DemoMonkeyConfigRequest request) {
         DemoMonkeyState updated = normalizeDemoMonkeyRequest(request);
-        syncAdServiceIssues(updated);
-        demoMonkeyState.set(updated);
-        persistDemoMonkeyState(updated);
+        synchronized (demoMonkeyStateLock) {
+            syncAdServiceIssues(updated);
+            demoMonkeyState.set(updated);
+            persistDemoMonkeyState(updated);
+        }
         try {
             ensureBroadcastRelayConfigured(resolveBroadcastSelection());
         } catch (IOException exception) {
@@ -1760,7 +1763,7 @@ public class DemoMediaController {
                 .timeout(PUBLIC_BROADCAST_PROXY_TIMEOUT)
                 .build();
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() < 200 || response.statusCode() >= 400) {
+        if (!isSuccessfulHttpStatus(response.statusCode())) {
             throw new IOException("Ad service returned HTTP " + response.statusCode());
         }
 
@@ -1775,7 +1778,7 @@ public class DemoMediaController {
                 .PUT(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(request)))
                 .build();
         HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() < 200 || response.statusCode() >= 400) {
+        if (!isSuccessfulHttpStatus(response.statusCode())) {
             throw new IOException("Ad timeline service returned HTTP " + response.statusCode());
         }
     }
@@ -1795,7 +1798,7 @@ public class DemoMediaController {
                     .PUT(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(request)))
                     .build();
             HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() < 200 || response.statusCode() >= 400) {
+            if (!isSuccessfulHttpStatus(response.statusCode())) {
                 throw new IOException("Ad service returned HTTP " + response.statusCode());
             }
         } catch (ResponseStatusException exception) {
@@ -1803,6 +1806,10 @@ public class DemoMediaController {
         } catch (Exception exception) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Unable to synchronize Demo Monkey ad issues with the ad service.");
         }
+    }
+
+    private boolean isSuccessfulHttpStatus(int statusCode) {
+        return statusCode >= 200 && statusCode < 300;
     }
 
     private BroadcastAdStatusResponse fallbackAdStatus(BroadcastSelection selection, String errorDetail) {
@@ -1841,8 +1848,17 @@ public class DemoMediaController {
     }
 
     private DemoMonkeyState currentDemoMonkeyState() {
-        while (true) {
-            DemoMonkeyState current = demoMonkeyState.get();
+        DemoMonkeyState current = demoMonkeyState.get();
+        if (current == null) {
+            return DemoMonkeyState.disabled();
+        }
+
+        if (!shouldAutoClearDemoMonkey(current)) {
+            return current;
+        }
+
+        synchronized (demoMonkeyStateLock) {
+            current = demoMonkeyState.get();
             if (current == null) {
                 return DemoMonkeyState.disabled();
             }
@@ -1852,13 +1868,13 @@ public class DemoMediaController {
             }
 
             DemoMonkeyState cleared = DemoMonkeyState.disabledAt(Instant.now());
-            if (demoMonkeyState.compareAndSet(current, cleared)) {
+            try {
+                syncAdServiceIssues(cleared);
+                demoMonkeyState.set(cleared);
                 persistDemoMonkeyState(cleared);
-                try {
-                    syncAdServiceIssues(cleared);
-                } catch (ResponseStatusException ignored) {
-                }
                 return cleared;
+            } catch (ResponseStatusException exception) {
+                return current;
             }
         }
     }

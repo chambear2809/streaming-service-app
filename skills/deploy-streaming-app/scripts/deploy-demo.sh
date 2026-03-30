@@ -397,6 +397,18 @@ deployment_selector() {
   printf 'app.kubernetes.io/name=%s\n' "${deployment}"
 }
 
+latest_rollout_pod_ref() {
+  local deployment="$1"
+  local selector
+  local pod_refs
+
+  selector="$(deployment_selector "${deployment}")"
+  pod_refs="$("${KUBECLI}" -n "${NAMESPACE}" get pods -l "${selector}" --sort-by=.metadata.creationTimestamp -o name 2>/dev/null || true)"
+  [[ -n "${pod_refs}" ]] || return 0
+
+  printf '%s\n' "${pod_refs}" | tail -n 1
+}
+
 show_rollout_pod_table() {
   local deployment="$1"
   local selector
@@ -445,15 +457,13 @@ show_rollout_metrics() {
 }
 
 show_media_rollout_progress() {
-  local selector
   local pod_ref
   local pod_name
   local latest_log
   local segment_count
   local endpoints
 
-  selector="$(deployment_selector media-service-demo)"
-  pod_ref="$("${KUBECLI}" -n "${NAMESPACE}" get pods -l "${selector}" -o name 2>/dev/null | head -n 1)"
+  pod_ref="$(latest_rollout_pod_ref media-service-demo)"
   [[ -n "${pod_ref}" ]] || return 0
 
   pod_name="${pod_ref#pod/}"
@@ -463,7 +473,7 @@ show_media_rollout_progress() {
     log "  media init: ${latest_log}"
   fi
 
-  segment_count="$("${KUBECLI}" -n "${NAMESPACE}" exec "${pod_name}" -c stage-demo-movie -- sh -c 'find /opt/demo/house-loop-segments -maxdepth 1 -type f -name "*.mp4" | wc -l' 2>/dev/null | tr -d '[:space:]' || true)"
+  segment_count="$("${KUBECLI}" -n "${NAMESPACE}" exec "${pod_name}" -c app -- sh -c 'find /opt/demo/house-loop-segments -maxdepth 1 -type f -name "*.mp4" | wc -l' 2>/dev/null | tr -d '[:space:]' || true)"
   if [[ "${segment_count}" =~ ^[0-9]+$ ]]; then
     log "  media init segment files: ${segment_count}"
   fi

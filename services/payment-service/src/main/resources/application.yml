@@ -1,12 +1,12 @@
 spring:
   config:
-    import: optional:configserver:http://localhost:8889
+    import: optional:configserver:http://localhost:8888
   application:
     name: payment-service
   datasource:
     url: jdbc:postgresql://localhost:5432/payment_db
-    username: root
-    password: root
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
     driver-class-name: org.postgresql.Driver
     oracleucp:
       database-name: payment_db

@@ -40,16 +40,13 @@ public class JWTFilter extends OncePerRequestFilter {
 
         if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
             String token = authorizationHeader.substring(7);
-            log.info("Token: {}", token);
             Token jwtToken = tokenDeserializer.apply(token);
 
             if (jwtToken != null) {
-                log.info("JwtToken: {}", jwtToken);
                 JWTUserPrincipal jwtUserPrincipal = new JWTUserPrincipal(jwtToken);
                 Authentication authentication = new UsernamePasswordAuthenticationToken(jwtUserPrincipal, "", jwtUserPrincipal.getAuthorities());
                 SecurityContextHolder.getContext().setAuthentication(authentication);
-                log.info("User authenticated: {}", jwtUserPrincipal);
-                log.info("Security context authentication: {}", SecurityContextHolder.getContext().getAuthentication());
+                log.debug("Authenticated payment-service JWT principal");
             } else {
                 log.warn("Failed to deserialize JWT token");
                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid Token");

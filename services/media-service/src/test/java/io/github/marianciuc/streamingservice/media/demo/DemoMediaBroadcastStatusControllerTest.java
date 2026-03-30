@@ -102,6 +102,22 @@ class DemoMediaBroadcastStatusControllerTest {
     }
 
     @Test
+    void fallsBackToDemoLoopSchedulingWhenTheAdServiceCurrentRouteRedirects() throws Exception {
+        Instant baseNow = baseNow();
+        adService = new StubAdService();
+        adService.setCurrentStatus(302);
+
+        MockMvc mockMvc = mockMvcFor(demoLoopSelection(), baseNow.minusSeconds(30));
+
+        mockMvc.perform(get("/api/v1/demo/public/broadcast/current"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("DEMO_LOOP"))
+                .andExpect(jsonPath("$.adStatus.state").value("ARMED"))
+                .andExpect(jsonPath("$.adStatus.decisioningMode").value("Fallback stitched pod"))
+                .andExpect(jsonPath("$.adStatus.detail").value(org.hamcrest.Matchers.containsString("Ad service fallback is active: Ad service returned HTTP 302")));
+    }
+
+    @Test
     void serializesOnAirBroadcastStatusUsingAdServicePayloadWhenAvailable() throws Exception {
         adService = new StubAdService();
         adService.setCurrentResponse(adServiceCurrentPayload(
@@ -425,10 +441,96 @@ class DemoMediaBroadcastStatusControllerTest {
     }
 
     @Test
+    void demoMonkeyAutoClearRetriesUntilTheClearedAdFlagsSynchronize() throws Exception {
+        Instant baseNow = baseNow();
+        adService = new StubAdService();
+        String expiredBreakEndAt = baseNow.minusSeconds(1).toString();
+        adService.setCurrentResponse(adServiceCurrentPayload(
+                "READY",
+                "ARMED",
+                "Sponsor pod A",
+                "North Coast Sports Network",
+                "Server-side stitched pod",
+                baseNow.minusSeconds(16).toString(),
+                expiredBreakEndAt,
+                "Regional sports launch pod is armed for the next sponsor pod inside the house loop.",
+                "",
+                false,
+                false
+        ));
+
+        MockMvc mockMvc = mockMvcFor(demoLoopSelection(), baseNow.minusSeconds(10));
+
+        mockMvc.perform(put("/api/v1/demo/media/demo-monkey")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "enabled": true,
+                                  "preset": "slow decisioning",
+                                  "slowAdEnabled": true,
+                                  "nextBreakOnlyEnabled": true
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(true))
+                .andExpect(jsonPath("$.autoClearAt").value(expiredBreakEndAt));
+
+        adService.setIssueStatus(503);
+
+        mockMvc.perform(get("/api/v1/demo/media/demo-monkey"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(true))
+                .andExpect(jsonPath("$.preset").value("slow-decisioning"))
+                .andExpect(jsonPath("$.nextBreakOnlyEnabled").value(true))
+                .andExpect(jsonPath("$.autoClearAt").value(expiredBreakEndAt));
+
+        adService.setIssueStatus(200);
+
+        mockMvc.perform(get("/api/v1/demo/media/demo-monkey"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(false))
+                .andExpect(jsonPath("$.preset").value("clear"))
+                .andExpect(jsonPath("$.nextBreakOnlyEnabled").value(false));
+
+        assertEquals(3, adService.issueRequests().size());
+        JsonNode retryClearRequest = objectMapper.readTree(adService.issueRequests().get(1));
+        assertFalse(retryClearRequest.get("enabled").asBoolean());
+        assertEquals("clear", retryClearRequest.get("preset").asText());
+        JsonNode successfulClearRequest = objectMapper.readTree(adService.issueRequests().get(2));
+        assertFalse(successfulClearRequest.get("enabled").asBoolean());
+        assertEquals("clear", successfulClearRequest.get("preset").asText());
+    }
+
+    @Test
     void updateDemoMonkeyReturnsBadGatewayWhenAdIssueSyncFails() throws Exception {
         Instant baseNow = baseNow();
         adService = new StubAdService();
         adService.setIssueStatus(503);
+
+        MockMvc mockMvc = mockMvcFor(demoLoopSelection(), baseNow.minusSeconds(10));
+
+        mockMvc.perform(put("/api/v1/demo/media/demo-monkey")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "enabled": true,
+                                  "preset": "slow decisioning",
+                                  "slowAdEnabled": true
+                                }
+                                """))
+                .andExpect(status().isBadGateway());
+
+        mockMvc.perform(get("/api/v1/demo/media/demo-monkey"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(false))
+                .andExpect(jsonPath("$.preset").value("clear"));
+    }
+
+    @Test
+    void updateDemoMonkeyReturnsBadGatewayWhenAdIssueSyncRedirects() throws Exception {
+        Instant baseNow = baseNow();
+        adService = new StubAdService();
+        adService.setIssueStatus(302);
 
         MockMvc mockMvc = mockMvcFor(demoLoopSelection(), baseNow.minusSeconds(10));
 

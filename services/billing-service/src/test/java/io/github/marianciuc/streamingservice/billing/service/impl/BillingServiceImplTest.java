@@ -10,6 +10,7 @@ import io.github.marianciuc.streamingservice.billing.enums.BillingCurrency;
 import io.github.marianciuc.streamingservice.billing.enums.BillingCycle;
 import io.github.marianciuc.streamingservice.billing.enums.InvoiceStatus;
 import io.github.marianciuc.streamingservice.billing.exception.InvalidBillingStateException;
+import io.github.marianciuc.streamingservice.billing.repository.BillingBusinessEventRepository;
 import io.github.marianciuc.streamingservice.billing.repository.BillingInvoiceRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,11 +38,14 @@ class BillingServiceImplTest {
     @Mock
     private BillingInvoiceRepository billingInvoiceRepository;
 
+    @Mock
+    private BillingBusinessEventRepository billingBusinessEventRepository;
+
     private BillingServiceImpl billingService;
 
     @BeforeEach
     void setUp() {
-        billingService = new BillingServiceImpl(billingInvoiceRepository);
+        billingService = new BillingServiceImpl(billingInvoiceRepository, billingBusinessEventRepository);
     }
 
     @Test

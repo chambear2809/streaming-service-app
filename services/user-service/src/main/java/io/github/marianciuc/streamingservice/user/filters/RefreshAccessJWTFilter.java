@@ -57,13 +57,10 @@ public class RefreshAccessJWTFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
         log.info("RefreshAccessJWTFilter");
         if (requestMatcher.matches(request)) {
-            log.info("Refresh token request");
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
             if (authentication instanceof PreAuthenticatedAuthenticationToken && authentication.getPrincipal() instanceof JWTUserPrincipal userPrincipal) {
-
-                log.info("Refresh token request for user {}", userPrincipal.getUsername());
-                log.info("Token: {}", userPrincipal.getToken());
+                log.debug("Refreshing JWT for {}", userPrincipal.getUsername());
 
                 if (!userPrincipal.getToken().roles().contains("REFRESH::REFRESH_TOKEN")) {
                     log.error("Invalid token, missing required role");

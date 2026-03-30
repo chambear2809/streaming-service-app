@@ -169,6 +169,7 @@ TABLE
   fi
 
   if [[ "${selector}" == "app.kubernetes.io/name=media-service-demo" && "${output}" == "name" ]]; then
+    printf 'pod/media-service-demo-old\n'
     printf 'pod/media-service-demo-new\n'
     exit 0
   fi
@@ -215,15 +216,31 @@ TABLE
   exit 0
 fi
 
-if [[ "${1-}" == "logs" && "${2-}" == "media-service-demo-new" ]]; then
-  printf '2026-03-29 20:15:54 UTC Finished segment build for 010-big-buck-bunny\n'
-  exit 0
-fi
+  if [[ "${1-}" == "logs" && "${2-}" == "media-service-demo-old" ]]; then
+    printf '2026-03-29 20:10:00 UTC Finished segment build for legacy-rollout-pod\n'
+    exit 0
+  fi
 
-if [[ "${1-}" == "exec" && "${2-}" == "media-service-demo-new" ]]; then
-  printf '16\n'
-  exit 0
-fi
+  if [[ "${1-}" == "logs" && "${2-}" == "media-service-demo-new" ]]; then
+    printf '2026-03-29 20:15:54 UTC Finished segment build for 010-big-buck-bunny\n'
+    exit 0
+  fi
+
+  if [[ "${1-}" == "exec" && "${2-}" == "media-service-demo-new" ]]; then
+    if [[ "${command_string}" == *' -c app -- '* ]]; then
+      printf '16\n'
+      exit 0
+    fi
+    exit 1
+  fi
+
+  if [[ "${1-}" == "exec" && "${2-}" == "media-service-demo-old" ]]; then
+    if [[ "${command_string}" == *' -c app -- '* ]]; then
+      printf '4\n'
+      exit 0
+    fi
+    exit 1
+  fi
 
 if [[ "${1-}" == "get" && "${2-}" == "endpoints" ]]; then
   cat <<TABLE

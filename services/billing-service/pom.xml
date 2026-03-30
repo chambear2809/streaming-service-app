@@ -5,28 +5,20 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.3.2</version>
-        <relativePath/>
+        <groupId>io.github.marianciuc.streamingservice</groupId>
+        <artifactId>streaming-service-app</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <groupId>io.github.marianciuc.streamingservice</groupId>
     <artifactId>billing-service</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
     <name>billing-service</name>
     <description>Billing service for invoices, line items, and account summaries</description>
-
-    <properties>
-        <java.version>22</java.version>
-        <spring-cloud.version>2023.0.3</spring-cloud.version>
-    </properties>
 
     <dependencies>
         <dependency>
             <groupId>com.nimbusds</groupId>
             <artifactId>nimbus-jose-jwt</artifactId>
-            <version>9.40</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -89,18 +81,6 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.springframework.cloud</groupId>
-                <artifactId>spring-cloud-dependencies</artifactId>
-                <version>${spring-cloud.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
 
     <build>
         <plugins>
