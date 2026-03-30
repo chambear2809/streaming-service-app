@@ -4,11 +4,11 @@ This repo includes [`scripts/thousandeyes/create-rtsp-tests.sh`](/Users/aleccham
 
 The test-creation script creates these demo tests:
 
-- `RTSP-TCP-8554`: agent-to-server `TCP/8554` reachability and path test for the in-cluster demo path
-- `UDP-Media-Path`: agent-to-agent UDP transport proxy for the media path
-- `RTP-Stream-Proxy`: scheduled voice test for RTP-style loss, jitter, and delay visibility
-- `aleccham-broadcast-trace-map`: HTTP server test for `/api/v1/demo/public/trace-map`
-- `aleccham-broadcast-playback`: HTTP server test for `/api/v1/demo/public/broadcast/live/index.m3u8`
+- `RTSP-TCP-8554`: answers "can the chosen ThousandEyes agent reach the demo RTSP endpoint on TCP port 8554?"
+- `UDP-Media-Path`: answers "can two ThousandEyes agents exchange UDP traffic over the media path?"
+- `RTP-Stream-Proxy`: answers "if this were a real-time media stream, what would packet loss, jitter, and delay look like?"
+- `aleccham-broadcast-trace-map`: answers "can a user or test agent reach the public trace-map API path?"
+- `aleccham-broadcast-playback`: answers "can a user or test agent reach the public broadcast playback manifest URL?"
 
 It uses the ThousandEyes `v7` scheduled test APIs:
 
@@ -24,11 +24,187 @@ Choose the ThousandEyes target mode before you build payloads:
 - `local`: use cluster-private or same-network endpoints that your Enterprise Agents can reach, such as `streaming-frontend.<namespace>.svc.cluster.local`
 - `external`: use browser-facing or internet-reachable frontend and RTSP endpoints that ThousandEyes agents outside the cluster can reach
 
+## Read This First If You Are New To ThousandEyes
+
+If you come from Splunk Observability Cloud and not from a networking background, treat ThousandEyes in this repo as a way to create synthetic "outside-in" checks for the demo.
+
+Splunk APM and RUM tell you what the app did after traffic arrived.
+
+ThousandEyes adds a different perspective:
+
+- can a test agent reach the frontend URL at all?
+- can a test agent reach the RTSP media endpoint at all?
+- if traffic flows between two locations, is the quality stable or degraded?
+
+In plain language, the test types in this repo mean:
+
+- HTTP tests: "can a browser-like path reach this frontend or API URL?"
+- RTSP TCP test: "can a network path reach the RTSP control port?"
+- UDP media-path test: "can two locations exchange UDP packets over the expected media path?"
+- RTP test: "what would real-time audio or video quality look like over this path?"
+
+The terms that confuse new users most often are:
+
+- Enterprise Agent: a ThousandEyes test runner that your team controls, usually on a network you care about
+- Cloud Agent: a ThousandEyes-hosted test runner on the public internet
+- source agent: where the test starts
+- target agent: the remote side used for agent-to-agent media tests
+- account group: the ThousandEyes workspace or org where the tests live
+- `local` mode: test private or same-network addresses, usually for Enterprise Agents that can see your cluster network
+- `external` mode: test public addresses that an outside user or outside agent can reach
+
+If you are unsure which mode to choose:
+
+- choose `local` when your Enterprise Agents can reach the cluster-private frontend or service DNS names
+- choose `external` when you want to test the public URL that a normal outside user would use
+
+If you are unsure which tests to start with:
+
+- start with the HTTP tests first, because they are the easiest to explain and they line up directly with what a user sees in the demo UI
+- add RTSP, UDP, and RTP only after you are comfortable with the frontend path and agent selection
+
+If you do not know an account group ID or agent ID yet, do not guess. The commands later in this doc show you how to list them first.
+
+## How Test Direction Maps To This Environment
+
+This repo's current demo environment is centered on a Kubernetes deployment that typically lives in AWS `us-east-1`.
+
+For the validated demo story in this repo, the ThousandEyes agent placement is:
+
+- source Enterprise Agent near the app environment in Ashburn, Virginia
+- RTP target Enterprise Agent also near the app environment in Ashburn, Virginia
+- optional UDP override target as a far-away Cloud Agent in Singapore
+
+That placement is not arbitrary. It tells a story about direction and distance.
+
+### Start With The Simplest Mental Model
+
+Think of every ThousandEyes test in this repo as starting from somewhere and going toward something:
+
+- HTTP tests start at a ThousandEyes source agent and go toward a frontend or API URL
+- the RTSP TCP test starts at a ThousandEyes source agent and goes toward the RTSP endpoint
+- the UDP media-path test starts at a source agent and sends traffic toward a target agent
+- the RTP test starts at a source agent and sends voice-style media traffic toward a target agent
+
+The most important distinction is:
+
+- agent-to-server tests have one agent and one endpoint
+- agent-to-agent tests have two agents, one on each end of the path
+
+### Which Tests Use Which Direction
+
+#### HTTP Tests
+
+Direction:
+
+- source agent -> frontend or API URL
+
+In this demo, that means:
+
+- source agent -> `streaming-frontend`
+- source agent -> `/api/v1/demo/public/trace-map`
+- source agent -> `/api/v1/demo/public/broadcast/live/index.m3u8`
+
+There is no target agent for these tests. The destination is the application URL itself.
+
+#### RTSP TCP Test
+
+Direction:
+
+- source agent -> RTSP endpoint on `media-service-demo-rtsp:8554`
+
+There is no target agent here either. Like the HTTP tests, this is an agent-to-server reachability check.
+
+#### UDP Media-Path Test
+
+Direction:
+
+- source agent -> target agent
+
+This is no longer a test against an application URL. It is a test between two ThousandEyes agents that represents the expected media path between two locations.
+
+In the repo's current demo story:
+
+- source Enterprise Agent in Ashburn represents the side of the path that is near the app environment
+- target Cloud Agent in Singapore represents a far-away remote location
+
+That is why this test is useful for showing distance-related degradation or long-haul path behavior.
+
+#### RTP Stream Test
+
+Direction:
+
+- source agent -> target agent
+
+Like the UDP media-path test, this is an agent-to-agent test. The difference is that it measures voice or RTP-style media quality rather than generic UDP transport.
+
+In the repo's default demo story:
+
+- source Enterprise Agent in Ashburn
+- target Enterprise Agent in Ashburn
+
+That keeps the RTP path close to the application environment and under Enterprise-Agent control, which is usually the clearest way to show a healthy baseline media-quality path.
+
+### Why The Agent Locations Matter
+
+For this demo environment, the app is usually near `us-east-1`, so an Ashburn Enterprise Agent is treated as "near the app."
+
+That means:
+
+- use Ashburn or another nearby Enterprise Agent when you want to represent users or infrastructure close to the app environment
+- use a far-away Cloud Agent such as Singapore when you want to represent geographic distance from the app
+
+In plain language:
+
+- near agent = "what does this path look like close to where the app runs?"
+- far agent = "what does this path look like from much farther away?"
+
+### Why RTP And UDP Might Use Different Targets
+
+In this repo, it is often useful to keep the RTP test and the UDP media-path test pointed at different target locations.
+
+Recommended demo pattern:
+
+- keep RTP on a nearby Enterprise Agent pair for a stable, easy-to-explain media-quality baseline
+- point the UDP media-path test at a distant Cloud Agent when you want to show how the path changes across geography
+
+That is why the repo supports `TE_UDP_TARGET_AGENT_ID` as an override. It lets the UDP test use a different target without forcing the RTP test to use the same far-away target.
+
+### How To Choose Agent Locations When Your Environment Is Different
+
+If your cluster is not in `us-east-1`, keep the same logic but swap the geography:
+
+- choose a source Enterprise Agent near the deployed application
+- choose a nearby Enterprise Agent target when you want a "healthy close-to-app" RTP baseline
+- choose a distant Cloud Agent target when you want to demonstrate a long-distance UDP path
+
+The exact city can change. The selection logic should not.
+
+### Safe First-Time Recommendation
+
+If you are new to ThousandEyes in this repo:
+
+1. start with HTTP tests from a source agent that can reach the frontend
+2. add the RTSP TCP test from that same source location
+3. keep RTP on a nearby Enterprise-Agent pair
+4. use the Singapore-style far-away Cloud Agent pattern only for the UDP media-path test when you deliberately want to show geographic separation
+
+That sequence is easier to explain to a Splunk Observability Cloud audience because it moves from simple URL reachability to richer network-path and media-quality stories.
+
 ## Prerequisites
 
 - A ThousandEyes bearer token with API access
 - The `agentId` values for your source Enterprise Agents and target Enterprise Agent
 - The account group ID if you want to create the tests in a non-default account group
+
+For a first-time user, the easiest mental model is:
+
+1. make sure the app is already deployed and reachable
+2. decide whether you are testing private addresses or public ones
+3. decide where the source and target agents should sit relative to the app environment
+4. list account groups and agents
+5. dry-run the ThousandEyes payloads before creating anything
+6. use the Kubernetes wrapper if you want the repo to discover the demo endpoints for you
 
 ## Before You Run
 
@@ -51,6 +227,15 @@ Sometimes required:
 - `TE_BROADCAST_TEST_URL`: override this directly when the broadcast test must hit a specific external URL
 
 If you are guiding another user through this flow, explicitly ask them for missing token values or object IDs before calling the API. Do not guess bearer tokens, account-group IDs, or agent IDs.
+
+If you are not sure what to put in those variables, use this translation:
+
+- `THOUSANDEYES_ACCOUNT_GROUP_ID`: "which ThousandEyes workspace should own these tests?"
+- `TE_SOURCE_AGENT_IDS`: "which agent or agents should start the test?"
+- `TE_TARGET_AGENT_ID`: "which remote agent should represent the far side of the media path?"
+- `TE_UDP_TARGET_AGENT_ID`: "should the UDP media-path test use a different remote agent than the RTP test?"
+- `TE_RTSP_SERVER`: "what hostname should ThousandEyes use for the RTSP endpoint?"
+- `TE_DEMO_MONKEY_FRONTEND_BASE_URL`: "what base frontend URL should the HTTP tests hit?"
 
 If you are also going to build the Splunk demo dashboards after the tests are live, ask for the Splunk variable names explicitly too. Do not ask for a generic Splunk token bundle. Use the exact names `SPLUNK_REALM`, `SPLUNK_ACCESS_TOKEN`, `SPLUNK_RUM_APP_NAME`, `SPLUNK_DEPLOYMENT_ENVIRONMENT`, and, when needed, `SPLUNK_DEMO_DASHBOARD_GROUP_ID` and `STREAMING_K8S_NAMESPACE`.
 
@@ -139,6 +324,8 @@ The deploy wrapper:
 - mounts the in-cluster creator script through a ConfigMap
 - launches a one-shot Job that calls the ThousandEyes `v7` test APIs
 
+This is the easiest path for a user who does not want to hand-build payloads or think through every endpoint variable manually.
+
 Example:
 
 ```bash
@@ -166,6 +353,11 @@ To create only the Demo Monkey-sensitive HTTP tests from the cluster:
 export THOUSANDEYES_JOB_ACTION='create-demo-monkey-http'
 scripts/thousandeyes/deploy-k8s-rtsp-tests.sh
 ```
+
+For a non-networking user, this is a good first ThousandEyes exercise because the HTTP tests map directly to visible frontend behavior:
+
+- `/api/v1/demo/public/trace-map`
+- `/api/v1/demo/public/broadcast/live/index.m3u8`
 
 To force the Kubernetes wrapper to create tests against external endpoints instead of cluster-local defaults:
 

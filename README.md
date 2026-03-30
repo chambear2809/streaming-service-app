@@ -136,6 +136,8 @@ Diagram notes:
 
 ## Start Here
 
+If your immediate goal is to get the demo running in Kubernetes, start with the walkthrough in [`docs/kubernetes-deployment-learning-guide.md`](docs/kubernetes-deployment-learning-guide.md). It is the most explanatory operator-facing guide in this repo for the canonical cluster deployment path.
+
 Create a repo-root `.env` first:
 
 ```bash
@@ -221,6 +223,8 @@ bash skills/deploy-streaming-app/scripts/deploy-demo.sh \
 Use `--platform openshift` when you want the frontend exposed through an OpenShift Route instead of a standard Kubernetes `LoadBalancer` path.
 
 This namespace-safe deploy flow is the current full-demo entry point. It renders manifests at apply time instead of forcing you to edit checked-in YAML just to change namespaces.
+
+For a step-by-step Kubernetes learning path around this command, including rollout interpretation, access methods, smoke checks, and common failure modes, read [`docs/kubernetes-deployment-learning-guide.md`](docs/kubernetes-deployment-learning-guide.md).
 
 The current demo manifests still compile the Java services inside the cluster.
 That means the cluster needs outbound access to Maven repositories, or an
@@ -309,6 +313,7 @@ Choose the ThousandEyes target mode explicitly before deriving URLs:
 
 The main docs are:
 
+- [`docs/kubernetes-deployment-learning-guide.md`](docs/kubernetes-deployment-learning-guide.md)
 - [`docs/distributed-tracing.md`](docs/distributed-tracing.md)
 - [`docs/postgresql-db-monitoring.md`](docs/postgresql-db-monitoring.md)
 - [`docs/thousandeyes-rtsp-api.md`](docs/thousandeyes-rtsp-api.md)
