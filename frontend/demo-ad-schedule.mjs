@@ -1,27 +1,27 @@
 export const DEFAULT_BROADCAST_DETAIL =
-    "Big Buck Bunny, Elephants Dream, Sintel, and Tears of Steel rotate on the external channel with sponsor pods about every 90 seconds until a contribution feed is taken live.";
+    "Sintel, Big Buck Bunny, Elephants Dream, and Tears of Steel rotate on the external channel with sponsor pods about every 90 seconds until a contribution feed is taken live.";
 export const SPONSOR_BREAK_PLAYBACK_URL = "/api/v1/demo/media/library/sponsor-break.mp4";
 export const FALLBACK_AD_BREAK_SEGMENT_SECONDS = 90;
 export const FALLBACK_AD_BREAK_DURATION_SECONDS = 15;
 export const FALLBACK_AD_CYCLE_ORIGIN_MS = Date.parse("2026-01-01T00:00:00Z");
 export const FALLBACK_HOUSE_LOOP_PROGRAMS = [
     {
+        title: "Sintel",
+        durationSeconds: 888,
+        playbackUrl: "/api/v1/demo/media/library/sintel.mp4",
+        detail: "The fantasy feature now opens the house lineup before sponsor pod A."
+    },
+    {
         title: "Big Buck Bunny",
         durationSeconds: 597,
         playbackUrl: "/api/v1/demo/media/library/big-buck-bunny.mp4",
-        detail: "Forest slapstick opens the house lineup before sponsor pod A."
+        detail: "Forest slapstick now follows the opening sponsor pod and resets the room after the fantasy lead-in."
     },
     {
         title: "Elephants Dream",
         durationSeconds: 654,
         playbackUrl: "/api/v1/demo/media/library/elephants-dream.mp4",
-        detail: "The machine-world feature follows sponsor pod A and leads into the next stitched break."
-    },
-    {
-        title: "Sintel",
-        durationSeconds: 888,
-        playbackUrl: "/api/v1/demo/media/library/sintel.mp4",
-        detail: "The longer fantasy feature carries the mid-show window before sponsor pod C."
+        detail: "The machine-world feature carries the mid-show window before sponsor pod C."
     },
     {
         title: "Tears of Steel",

@@ -84,6 +84,12 @@ spec:
               value: streaming
             - name: SPRING_DATASOURCE_PASSWORD
               value: streaming
+            - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
+              value: "4"
+            - name: SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE
+              value: "0"
+            - name: SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT
+              value: "60000"
             - name: SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA
               value: billing
             - name: SPRING_JPA_HIBERNATE_DDL_AUTO

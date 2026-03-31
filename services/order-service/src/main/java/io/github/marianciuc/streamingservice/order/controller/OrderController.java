@@ -21,21 +21,25 @@ public class OrderController {
     private final OrderService orderService;
 
     @PostMapping
+    @PreAuthorize("hasAnyAuthority('CAP_BILLING_WRITE', 'ROLE_SERVICE')")
     public ResponseEntity<OrderResponse> createOrder(@RequestBody OrderRequest orderRequest, Authentication authentication) {
         return ResponseEntity.ok(orderService.createOrder(orderRequest, authentication));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('CAP_BILLING_WRITE', 'ROLE_SERVICE')")
     public ResponseEntity<OrderResponse> updatePlan(@PathVariable UUID id, @RequestBody OrderRequest orderRequest, Authentication authentication) {
         return ResponseEntity.ok(orderService.updateOrder(id, orderRequest, authentication));
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('CAP_BILLING')")
     public ResponseEntity<OrderResponse> getOrder(@PathVariable UUID id) {
         return ResponseEntity.ok(orderService.getOrderById(id));
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('CAP_BILLING')")
     public ResponseEntity<List<OrderResponse>> getOrders(
             @RequestParam(value = "userId", required = false) UUID userId,
             Authentication authentication

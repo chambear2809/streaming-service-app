@@ -11,6 +11,7 @@ demo:
 04 Deep Dive: Trace Map Path
 05 Deep Dive: Broadcast Playback Path
 06 Deep Dive: RTP Media Quality
+07 Explain: Are Media Services Still Talking?
 
 The script reads the repo-root .env by default. Exported shell variables win.
 """
@@ -40,6 +41,8 @@ DEFAULT_NAMESPACE = "streaming-service-app"
 DEFAULT_RUM_APP = "streaming-app-frontend"
 DEFAULT_APM_ENVIRONMENT = "streaming-app"
 DEFAULT_BROADCAST_PAGE_FILTER = "*broadcast*"
+MEDIA_PATH_SOURCE_WORKLOADS = ("streaming-frontend", "media-service-demo")
+MEDIA_PATH_DEST_WORKLOADS = ("media-service-demo", "ad-service-demo")
 
 TEST_TYPE_ENDPOINTS = (
     "agent-to-server",
@@ -91,6 +94,7 @@ class ChartSpec:
     description: str
     program_text: str
     publish_label: str
+    options: Optional[Dict[str, Any]] = None
 
 
 @dataclass(frozen=True)
@@ -107,6 +111,7 @@ class MetricValidationSpec:
     metric: str
     test_name: str
     test_id: str
+    program_text: Optional[str] = None
 
 
 def load_env_file(path: Path) -> Dict[str, str]:
@@ -474,6 +479,45 @@ def chart_options(publish_label: str) -> Dict[str, Any]:
     }
 
 
+def column_chart_options(publish_label: str, value_suffix: Optional[str] = None) -> Dict[str, Any]:
+    options = chart_options(publish_label)
+    options["defaultPlotType"] = "ColumnChart"
+    if value_suffix is not None:
+        options["publishLabelOptions"][0]["valueSuffix"] = value_suffix
+    return options
+
+
+def line_chart_options(publish_label: str, value_suffix: Optional[str] = None) -> Dict[str, Any]:
+    options = chart_options(publish_label)
+    if value_suffix is not None:
+        options["publishLabelOptions"][0]["valueSuffix"] = value_suffix
+    return options
+
+
+def table_chart_options(publish_labels: List[Dict[str, str]], sort_by: str) -> Dict[str, Any]:
+    return {
+        "columnSizes": {},
+        "groupBy": ["workload"],
+        "groupBySort": "Descending",
+        "hideMissingValues": False,
+        "legendOptions": {"fields": None},
+        "maximumPrecision": None,
+        "programOptions": {
+            "disableSampling": True,
+            "maxDelay": None,
+            "minimumResolution": 0,
+            "timezone": None,
+        },
+        "publishLabelOptions": publish_labels,
+        "refreshInterval": None,
+        "sortBy": sort_by,
+        "time": {"range": 86400000, "rangeEnd": 0, "type": "relative"},
+        "timestampHidden": False,
+        "type": "TableChart",
+        "unitPrefix": "Metric",
+    }
+
+
 def upsert_chart(
     splunk_api: JsonApi,
     existing: Optional[Dict[str, Any]],
@@ -483,7 +527,7 @@ def upsert_chart(
         "name": spec.name,
         "description": spec.description,
         "programText": spec.program_text,
-        "options": chart_options(spec.publish_label),
+        "options": spec.options or chart_options(spec.publish_label),
     }
     if existing is None:
         created = splunk_api.request("POST", "/chart", payload=payload)
@@ -631,6 +675,76 @@ def te_network_triplet(
     ]
 
 
+def signalflow_value(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("'", "\\'")
+
+
+def filter_any(dimension: str, values: Iterable[str]) -> str:
+    clauses = [f"filter('{signalflow_value(dimension)}', '{signalflow_value(value)}')" for value in values]
+    if not clauses:
+        raise ValueError(f"No values were provided for dimension {dimension}.")
+    if len(clauses) == 1:
+        return clauses[0]
+    return f"({' or '.join(clauses)})"
+
+
+def filter_all(*clauses: str) -> str:
+    wrapped: List[str] = []
+    for clause in clauses:
+        stripped = clause.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("(") and stripped.endswith(")"):
+            wrapped.append(stripped)
+        else:
+            wrapped.append(f"({stripped})")
+    return " and ".join(wrapped)
+
+
+def signalflow_chart(
+    title: str,
+    description: str,
+    program_text: str,
+    publish_label: str,
+    options: Optional[Dict[str, Any]] = None,
+) -> ChartSpec:
+    return ChartSpec(
+        name=title,
+        description=description,
+        program_text=program_text,
+        publish_label=publish_label,
+        options=options,
+    )
+
+
+def media_path_hubble_filter(namespace: str) -> str:
+    return filter_all(
+        filter_any("source_namespace", (namespace,)),
+        filter_any("destination_namespace", (namespace,)),
+        filter_any("source_workload", MEDIA_PATH_SOURCE_WORKLOADS),
+        filter_any("destination_workload", MEDIA_PATH_DEST_WORKLOADS),
+    )
+
+
+def media_path_tetragon_filter() -> str:
+    return filter_all(
+        filter_any("workload", MEDIA_PATH_SOURCE_WORKLOADS),
+        filter_any("dstworkload", MEDIA_PATH_DEST_WORKLOADS),
+    )
+
+
+def media_path_tetragon_destination_filter() -> str:
+    return filter_any("dstworkload", MEDIA_PATH_DEST_WORKLOADS)
+
+
+def media_path_drop_filter(namespace: str) -> str:
+    return filter_all(
+        filter_any("destination_namespace", (namespace,)),
+        filter_any("destination_workload", MEDIA_PATH_DEST_WORKLOADS),
+        filter_any("source_workload", MEDIA_PATH_SOURCE_WORKLOADS),
+    )
+
+
 def service_filter(service_name: str, environment: str) -> str:
     return (
         f"filter('sf_environment', '{environment}') and "
@@ -725,6 +839,166 @@ def deployment_cpu_chart(title: str, description: str, namespace: str, deploymen
     )
 
 
+def isovalent_media_path_dashboard(namespace: str) -> DashboardSpec:
+    del namespace
+    tetragon_filter = media_path_tetragon_destination_filter()
+    tetragon_5xx_filter = filter_all(tetragon_filter, "filter('code', '5*')")
+    tetragon_4xx_filter = filter_all(tetragon_filter, "filter('code', '4*')")
+    tetragon_2xx_filter = filter_all(tetragon_filter, "filter('code', '2*')")
+    frontend_viewer_egress_filter = filter_all(
+        filter_any("namespace", ("streaming-service-app",)),
+        filter_any("workload", ("streaming-frontend",)),
+        filter_any("binary", ("/usr/sbin/nginx",)),
+        "not filter('dstnamespace', '*')",
+        "not filter('dstworkload', '*')",
+    )
+    media_to_frontend_filter = filter_all(
+        filter_any("namespace", ("streaming-service-app",)),
+        filter_any("workload", ("media-service-demo",)),
+        filter_any("dstworkload", ("streaming-frontend",)),
+    )
+    external_rtsp_ingest_filter = filter_all(
+        filter_any("namespace", ("streaming-service-app",)),
+        filter_any("workload", ("media-service-demo",)),
+        filter_any("binary", ("/mediamtx",)),
+        "not filter('dstnamespace', '*')",
+        "not filter('dstworkload', '*')",
+    )
+    return DashboardSpec(
+        key="isovalent_media_path",
+        aliases=("07 Explain: Are Media Services Still Talking?",),
+        name="07 Explain: Are Media Services Still Talking?",
+        description=(
+            "Use this after 03 Backend Critical Path to explain the media path in plain language: "
+            "are requests still arriving, mostly succeeding, merely slowing down, or actually failing "
+            "or getting blocked? This dashboard only populates when Isovalent Hubble and Tetragon "
+            "telemetry is flowing from the deployed cluster."
+        ),
+        charts=(
+            signalflow_chart(
+                "Are media and ad services still receiving replies?",
+                "Tetragon HTTP reply volume for the media path, grouped by destination workload.",
+                (
+                    f"A = data('tetragon_http_response_total', filter={tetragon_filter})"
+                    ".sum(by=['dstworkload'], allow_missing=True)"
+                    ".sum(over=Args.get('ui.dashboard_window', '15m'))"
+                    ".publish(label='Requests by destination')"
+                ),
+                "Requests by destination",
+                column_chart_options("Requests by destination"),
+            ),
+            signalflow_chart(
+                "Are 2xx replies still dominant?",
+                "Tetragon 2xx HTTP reply volume for the media path, grouped by destination workload.",
+                (
+                    f"A = data('tetragon_http_response_total', filter={tetragon_2xx_filter})"
+                    ".sum(by=['dstworkload'], allow_missing=True)"
+                    ".sum(over=Args.get('ui.dashboard_window', '15m'))"
+                    ".publish(label='2xx by destination')"
+                ),
+                "2xx by destination",
+                column_chart_options("2xx by destination"),
+            ),
+            signalflow_chart(
+                "Is the frontend still sending viewer traffic out?",
+                "Average transmitted megabits per second from the frontend nginx process toward external viewers over the dashboard window.",
+                (
+                    f"A = data('tetragon_socket_stats_txbytes_total', filter={frontend_viewer_egress_filter}, rollup='rate')"
+                    ".sum()"
+                    ".mean(over=Args.get('ui.dashboard_window', '15m'))"
+                    ".scale(0.000008)"
+                    ".publish(label='Viewer egress Mbps')"
+                ),
+                "Viewer egress Mbps",
+                line_chart_options("Viewer egress Mbps", value_suffix=" Mbps"),
+            ),
+            signalflow_chart(
+                "Is media-service still feeding the frontend at stream rate?",
+                "Average transmitted megabits per second from media-service-demo into streaming-frontend over the dashboard window.",
+                (
+                    f"A = data('tetragon_socket_stats_txbytes_total', filter={media_to_frontend_filter}, rollup='rate')"
+                    ".sum()"
+                    ".mean(over=Args.get('ui.dashboard_window', '15m'))"
+                    ".scale(0.000008)"
+                    ".publish(label='Media to frontend Mbps')"
+                ),
+                "Media to frontend Mbps",
+                line_chart_options("Media to frontend Mbps", value_suffix=" Mbps"),
+            ),
+            signalflow_chart(
+                "Is the external RTSP feed still arriving?",
+                "Average received megabits per second into the media-service-demo RTSP ingress over the dashboard window.",
+                (
+                    f"A = data('tetragon_socket_stats_rxbytes_total', filter={external_rtsp_ingest_filter}, rollup='rate')"
+                    ".sum()"
+                    ".mean(over=Args.get('ui.dashboard_window', '15m'))"
+                    ".scale(0.000008)"
+                    ".publish(label='External RTSP ingress Mbps')"
+                ),
+                "External RTSP ingress Mbps",
+                line_chart_options("External RTSP ingress Mbps", value_suffix=" Mbps"),
+            ),
+            signalflow_chart(
+                "Which workload pair is carrying the media path?",
+                "Tetragon workload-pair response totals for media and ad destinations over the dashboard window.",
+                (
+                    f"A = data('tetragon_http_response_total', filter={tetragon_5xx_filter})"
+                    ".sum(by=['workload', 'dstworkload'], allow_missing=True)"
+                    ".sum(over=Args.get('ui.dashboard_window', '15m')).top(count=499).publish(label='A')\n"
+                    f"B = data('tetragon_http_response_total', filter={tetragon_2xx_filter})"
+                    ".sum(by=['workload', 'dstworkload'], allow_missing=True)"
+                    ".sum(over=Args.get('ui.dashboard_window', '15m')).top(count=499).publish(label='B')\n"
+                    f"C = data('tetragon_http_response_total', filter={tetragon_4xx_filter})"
+                    ".sum(by=['workload', 'dstworkload'], allow_missing=True)"
+                    ".sum(over=Args.get('ui.dashboard_window', '15m')).top(count=499).publish(label='C')"
+                ),
+                "HTTP replies by workload pair",
+                table_chart_options(
+                    [
+                        {"displayName": "HTTP response 5xx", "label": "A", "valuePrefix": "", "valueSuffix": "", "valueUnit": None},
+                        {"displayName": "HTTP response 2xx", "label": "B", "valuePrefix": "", "valueSuffix": "", "valueUnit": None},
+                        {"displayName": "HTTP response 4xx", "label": "C", "valuePrefix": "", "valueSuffix": "", "valueUnit": None},
+                    ],
+                    "-HTTP response 2xx",
+                ),
+            ),
+            signalflow_chart(
+                "Are 5xx responses climbing for media and ad services?",
+                "Tetragon 5xx HTTP reply volume for the media path, grouped by destination workload.",
+                (
+                    f"A = data('tetragon_http_response_total', filter={tetragon_5xx_filter})"
+                    ".sum(by=['dstworkload'], allow_missing=True)"
+                    ".sum(over=Args.get('ui.dashboard_window', '15m'))"
+                    ".publish(label='5xx by destination')"
+                ),
+                "5xx by destination",
+                column_chart_options("5xx by destination"),
+            ),
+            signalflow_chart(
+                "Are 4xx responses climbing instead?",
+                "Tetragon 4xx HTTP reply volume for the media path, grouped by destination workload.",
+                (
+                    f"A = data('tetragon_http_response_total', filter={tetragon_4xx_filter})"
+                    ".sum(by=['dstworkload'], allow_missing=True)"
+                    ".sum(over=Args.get('ui.dashboard_window', '15m'))"
+                    ".publish(label='4xx by destination')"
+                ),
+                "4xx by destination",
+                column_chart_options("4xx by destination"),
+            ),
+            signalflow_chart(
+                "Is anything being blocked instead of slowed?",
+                "Hubble flow verdict mix for the cluster. Use this to separate allowed traffic from denied traffic while the media-path charts explain response behavior.",
+                (
+                    "A = data('hubble_flows_processed_total').sum(by=['verdict'])"
+                    ".publish(label='Traffic by verdict')"
+                ),
+                "Traffic by verdict",
+            ),
+        ),
+    )
+
+
 def dashboard_specs(
     resolved_tests: Dict[str, tuple[Optional[str], Optional[Dict[str, Any]]]],
     account_group_id: str,
@@ -732,6 +1006,7 @@ def dashboard_specs(
     rum_app_name: str,
     namespace: str,
     broadcast_page_filter: str,
+    include_isovalent_dashboard: bool,
 ) -> List[DashboardSpec]:
     specs: List[DashboardSpec] = []
     trace_map_name, trace_map = matched_test(resolved_tests, "trace_map")
@@ -1030,12 +1305,16 @@ def dashboard_specs(
             )
         )
 
+    if include_isovalent_dashboard:
+        specs.append(isovalent_media_path_dashboard(namespace))
+
     return specs
 
 
 def summary_description(
     resolved_tests: Dict[str, tuple[Optional[str], Optional[Dict[str, Any]]]],
     configured_slots: Dict[str, tuple[str, ...]],
+    has_isovalent_dashboard: bool,
 ) -> str:
     present: List[str] = []
     missing: List[str] = []
@@ -1047,7 +1326,13 @@ def summary_description(
             missing.append(names[0])
     demo_flow = (
         "Open the numbered troubleshooting flow in order: 01 Start Here: Network Symptoms, "
-        "02 Pivot: User Impact To Root Cause, 03 Backend Critical Path, then the protocol deep dives."
+        "02 Pivot: User Impact To Root Cause, 03 Backend Critical Path, "
+        + (
+            "then 07 Explain: Are Media Services Still Talking? for the plain-language media-path view, "
+            if has_isovalent_dashboard
+            else ""
+        )
+        + "then the protocol deep dives."
     )
     presence = f"Present ThousandEyes tests: {', '.join(present)}." if present else "No matching repo ThousandEyes tests were found."
     missing_text = f" Missing and not rendered as detail dashboards: {', '.join(missing)}." if missing else ""
@@ -1085,6 +1370,47 @@ def metric_validation_specs(
     return validations
 
 
+def isovalent_metric_validation_specs() -> List[MetricValidationSpec]:
+    return [
+        MetricValidationSpec(
+            metric="hubble_http_requests_total",
+            test_name="Isovalent Hubble HTTP telemetry",
+            test_id="cluster",
+            program_text=(
+                "A = data('hubble_http_requests_total').mean(over='1m').sum()"
+                ".publish(label='dashboard_validation')"
+            ),
+        ),
+        MetricValidationSpec(
+            metric="tetragon_http_response_total",
+            test_name="Isovalent Tetragon HTTP telemetry",
+            test_id="cluster",
+            program_text=(
+                "A = data('tetragon_http_response_total').sum()"
+                ".publish(label='dashboard_validation')"
+            ),
+        ),
+        MetricValidationSpec(
+            metric="tetragon_socket_stats_txbytes_total",
+            test_name="Isovalent Tetragon socket byte telemetry",
+            test_id="cluster",
+            program_text=(
+                "A = data('tetragon_socket_stats_txbytes_total', rollup='rate').sum()"
+                ".publish(label='dashboard_validation')"
+            ),
+        ),
+        MetricValidationSpec(
+            metric="tetragon_socket_stats_rxbytes_total",
+            test_name="Isovalent Tetragon socket receive telemetry",
+            test_id="cluster",
+            program_text=(
+                "A = data('tetragon_socket_stats_rxbytes_total', rollup='rate').sum()"
+                ".publish(label='dashboard_validation')"
+            ),
+        ),
+    ]
+
+
 def validate_metric_data(
     splunk_realm: str,
     validation_token: str,
@@ -1105,7 +1431,12 @@ def validate_metric_data(
         "accountGroupId": account_group_id,
         "validationWindowHours": validation_window_hours,
         "validations": [
-            {"metric": validation.metric, "testName": validation.test_name, "testId": validation.test_id}
+            {
+                "metric": validation.metric,
+                "testName": validation.test_name,
+                "testId": validation.test_id,
+                "program": validation.program_text,
+            }
             for validation in validations
         ],
     }
@@ -1154,7 +1485,11 @@ def fail_for_missing_metric_data(results: List[Dict[str, Any]], validation_windo
     if not missing:
         return
     missing_text = "; ".join(
-        f"{result['metric']} for {result['testName']} ({result['testId']})"
+        (
+            f"{result['metric']} for {result['testName']} ({result['testId']})"
+            if result.get("testId")
+            else f"{result['metric']} for {result['testName']}"
+        )
         for result in missing
     )
     raise SystemExit(
@@ -1226,6 +1561,41 @@ def main() -> int:
             "Create the tests first, then rerun the dashboard sync."
         )
     warn_if_missing_rtp_metric_stream(thousandeyes_api, thousandeyes_account_group_id, resolved_tests)
+    include_isovalent_dashboard = True
+    validation_results: List[Dict[str, Any]] = []
+    isovalent_validation_results: List[Dict[str, Any]] = []
+    if not args.skip_te_metric_validation:
+        validation_results = validate_metric_data(
+            splunk_realm,
+            validation_token,
+            thousandeyes_account_group_id,
+            metric_validation_specs(resolved_tests),
+            args.validation_window_hours,
+        )
+        fail_for_missing_metric_data(validation_results, args.validation_window_hours)
+        isovalent_validation_results = validate_metric_data(
+            splunk_realm,
+            validation_token,
+            thousandeyes_account_group_id,
+            isovalent_metric_validation_specs(),
+            args.validation_window_hours,
+        )
+        missing_isovalent = [result for result in isovalent_validation_results if not result["hasData"]]
+        if missing_isovalent:
+            include_isovalent_dashboard = False
+            missing_text = "; ".join(
+                f"{result['metric']} for {result['testName']} ({result['testId']})"
+                for result in missing_isovalent
+            )
+            print(
+                "Warning: skipping 07 Explain: Are Media Services Still Talking? because Splunk did not "
+                f"return core Isovalent telemetry for {missing_text} in the last "
+                f"{args.validation_window_hours}h. This usually means Isovalent is not deployed in the "
+                "target cluster yet or Splunk is not receiving the Hubble and Tetragon metrics that power "
+                "the custom dashboard.",
+                file=sys.stderr,
+            )
+
     specs = dashboard_specs(
         resolved_tests,
         thousandeyes_account_group_id,
@@ -1233,6 +1603,7 @@ def main() -> int:
         rum_app_name,
         namespace,
         broadcast_page_filter,
+        include_isovalent_dashboard=include_isovalent_dashboard,
     )
     if not specs:
         raise SystemExit("No dashboards were generated from the current ThousandEyes and Splunk configuration.")
@@ -1258,18 +1629,12 @@ def main() -> int:
         else:
             dashboards[dashboard_id] = splunk_api.request("GET", f"/dashboard/{dashboard_id}")
 
-    group_description = summary_description(resolved_tests, configured_slots)
+    group_description = summary_description(
+        resolved_tests,
+        configured_slots,
+        has_isovalent_dashboard=include_isovalent_dashboard,
+    )
     updated_group = update_group(splunk_api, group, ordered_ids, group_description)
-    validation_results: List[Dict[str, Any]] = []
-    if not args.skip_te_metric_validation:
-        validation_results = validate_metric_data(
-            splunk_realm,
-            validation_token,
-            thousandeyes_account_group_id,
-            metric_validation_specs(resolved_tests),
-            args.validation_window_hours,
-        )
-        fail_for_missing_metric_data(validation_results, args.validation_window_hours)
 
     output = {
         "group": {
@@ -1278,6 +1643,8 @@ def main() -> int:
         },
         "dashboards": dashboard_results,
         "metricValidation": validation_results,
+        "isovalentMetricValidation": isovalent_validation_results,
+        "isovalentDashboardIncluded": include_isovalent_dashboard,
         "presentTests": {
             name: test["testId"]
             for name, test in (matched_test(resolved_tests, slot) for slot in configured_slots)

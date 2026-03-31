@@ -10,7 +10,7 @@ import java.util.List;
 final class DemoBroadcastAdSchedule {
 
     static final String DEFAULT_BROADCAST_DETAIL =
-            "Big Buck Bunny, Elephants Dream, Sintel, and Tears of Steel rotate on the external channel with sponsor pods about every 90 seconds until a contribution feed is taken live.";
+            "Sintel, Big Buck Bunny, Elephants Dream, and Tears of Steel rotate on the external channel with sponsor pods about every 90 seconds until a contribution feed is taken live.";
 
     private static final int BREAK_SEGMENT_SECONDS = 90;
     private static final int BREAK_DURATION_SECONDS = 15;
@@ -18,25 +18,25 @@ final class DemoBroadcastAdSchedule {
     private static final DemoBroadcastAdSchedule DEFAULT_INSTANCE = new DemoBroadcastAdSchedule(
             List.of(
                     new HouseLoopAsset(
+                            "sintel.mp4",
+                            "Sintel",
+                            Duration.ofSeconds(888),
+                            "/api/v1/demo/media/library/sintel.mp4",
+                            "The fantasy feature now opens the house lineup before sponsor pod A."
+                    ),
+                    new HouseLoopAsset(
                             "big-buck-bunny.mp4",
                             "Big Buck Bunny",
                             Duration.ofSeconds(597),
                             "/api/v1/demo/media/library/big-buck-bunny.mp4",
-                            "Forest slapstick opens the house lineup before sponsor pod A."
+                            "Forest slapstick now follows the opening sponsor pod and resets the room after the fantasy lead-in."
                     ),
                     new HouseLoopAsset(
                             "elephants-dream.mp4",
                             "Elephants Dream",
                             Duration.ofSeconds(654),
                             "/api/v1/demo/media/library/elephants-dream.mp4",
-                            "The machine-world feature follows sponsor pod A and leads into the next stitched break."
-                    ),
-                    new HouseLoopAsset(
-                            "sintel.mp4",
-                            "Sintel",
-                            Duration.ofSeconds(888),
-                            "/api/v1/demo/media/library/sintel.mp4",
-                            "The longer fantasy feature carries the mid-show window before sponsor pod C."
+                            "The machine-world feature carries the mid-show window before sponsor pod C."
                     ),
                     new HouseLoopAsset(
                             "tears-of-steel.mp4",

@@ -34,6 +34,7 @@ public class SubscriptionController {
      * @return ResponseEntity containing a list of all SubscriptionResponse objects.
      */
     @GetMapping("/all")
+    @PreAuthorize("hasAuthority('CAP_BILLING')")
     public ResponseEntity<List<SubscriptionResponse>> getSubscriptions() {
         return ResponseEntity.ok(subscriptionService.getAllSubscriptions());
     }
@@ -45,6 +46,7 @@ public class SubscriptionController {
      * @return ResponseEntity containing the SubscriptionResponse object.
      */
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('CAP_BILLING')")
     public ResponseEntity<SubscriptionResponse> getSubscription(@PathVariable("id") UUID id) {
         return ResponseEntity.ok(subscriptionService.getSubscriptionResponse(id));
     }
@@ -62,6 +64,7 @@ public class SubscriptionController {
     }
 
     @GetMapping("/active")
+    @PreAuthorize("hasAuthority('CAP_BILLING')")
     public ResponseEntity<UserSubscriptionDto> getActiveSubscription(@RequestParam(value = "id") UUID uuid) {
         return ResponseEntity.ok(userSubscriptionService.getActiveSubscription(uuid));
     }
@@ -94,12 +97,14 @@ public class SubscriptionController {
     }
 
     @PostMapping("/cancel")
+    @PreAuthorize("hasAuthority('CAP_BILLING_WRITE')")
     public ResponseEntity<Void> cancelSubscription(@RequestParam(value = "id") UUID id) {
         userSubscriptionService.cancelSubscription(id);
         return ResponseEntity.ok().build();
     }
 
     @PostMapping("/activate-order")
+    @PreAuthorize("hasAuthority('ROLE_SERVICE')")
     public ResponseEntity<Void> activateOrder(@RequestBody OrderCreationEventKafkaDto request) {
         userSubscriptionService.subscribeUser(request);
         return ResponseEntity.ok().build();

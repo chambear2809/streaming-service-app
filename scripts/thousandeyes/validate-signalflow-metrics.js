@@ -15,10 +15,16 @@ function readInput() {
   return JSON.parse(raw);
 }
 
-function signalflowProgram(metric, accountGroupId, testId) {
+function signalflowProgram(validation, accountGroupId) {
+  if (typeof validation.program === "string" && validation.program.trim()) {
+    return validation.program;
+  }
+  if (!validation.metric || !validation.testId) {
+    throw new Error("Each validation must provide either a program or both metric and testId.");
+  }
   return (
-    `data('${metric}', filter=filter('thousandeyes.account.id', '${accountGroupId}') ` +
-    `and filter('thousandeyes.test.id', '${testId}')).publish(label='dashboard_validation')`
+    `data('${validation.metric}', filter=filter('thousandeyes.account.id', '${accountGroupId}') ` +
+    `and filter('thousandeyes.test.id', '${validation.testId}')).publish(label='dashboard_validation')`
   );
 }
 
@@ -123,7 +129,7 @@ function validateOne(token, realm, accountGroupId, validationWindowHours, valida
             JSON.stringify({
               type: "execute",
               channel: SIGNALFLOW_CHANNEL,
-              program: signalflowProgram(validation.metric, accountGroupId, validation.testId),
+              program: signalflowProgram(validation, accountGroupId),
               start: startMs,
               stop: endMs,
               resolution: SIGNALFLOW_RESOLUTION_MS,

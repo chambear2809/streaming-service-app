@@ -29,7 +29,7 @@ class DemoBroadcastAdScheduleTest {
         assertEquals(34, schedule.houseLoopSegments().size());
         assertEquals(3383, schedule.cycleDuration().getSeconds());
         assertEquals(totalAssetSeconds, totalSegmentSeconds);
-        assertEquals("Big Buck Bunny · Part 1", schedule.houseLoopSegments().getFirst().title());
+        assertEquals("Sintel · Part 1", schedule.houseLoopSegments().getFirst().title());
         assertEquals("Tears of Steel · Part 9", schedule.houseLoopSegments().getLast().title());
     }
 

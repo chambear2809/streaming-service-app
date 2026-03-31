@@ -27,6 +27,7 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.util.UUID;
 
@@ -77,13 +78,10 @@ public class CardHolderServiceImpl implements CardHolderService {
 
     @Override
     public CardHolderDto findCardHolder(UUID cardHolderId) {
-        if (cardHolderId != null) {
+        if (cardHolderId != null && this.userService.hasAdminRoles()) {
             return CardHolderDto.toDto(this.findCardHolderEntity(cardHolderId));
         }
-        if (this.userService.hasAdminRoles()) {
-            UUID idToFetch = (cardHolderId != null) ? cardHolderId : userService.extractUserIdFromAuth();
-            return CardHolderDto.toDto(this.findCardHolderEntity(idToFetch));
-        }
+
         return CardHolderDto.toDto(this.findCardHolderEntity(this.userService.extractUserIdFromAuth()));
     }
 
@@ -105,9 +103,9 @@ public class CardHolderServiceImpl implements CardHolderService {
     @Override
     public void updateCardHolder(UpdateCardHolderRequest request) {
         CardHolder cardHolder = this.findCardHolderEntity(((JWTUserPrincipal) SecurityContextHolder.getContext().getAuthentication().getPrincipal()).getUserId());
-        if (!request.cardHolderName().isEmpty()) cardHolder.setCardHolderName(request.cardHolderName());
-        if (!request.cardHolderName().isEmpty()) cardHolder.setPhoneNumber(request.phoneNumber());
-        if (!request.cardHolderName().isEmpty()) cardHolder.setEmail(request.email());
+        if (StringUtils.hasText(request.cardHolderName())) cardHolder.setCardHolderName(request.cardHolderName());
+        if (StringUtils.hasText(request.phoneNumber())) cardHolder.setPhoneNumber(request.phoneNumber());
+        if (StringUtils.hasText(request.email())) cardHolder.setEmail(request.email());
         this.repository.save(cardHolder);
     }
 }

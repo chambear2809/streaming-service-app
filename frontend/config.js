@@ -39,7 +39,7 @@ window.STREAMING_CONFIG = {
     publicBroadcastRtspUrl: "",
     defaultBroadcastChannelLabel: "Acme Network East",
     defaultBroadcastTitle: "Acme House Lineup",
-    defaultBroadcastDetail: "Big Buck Bunny, Elephants Dream, Sintel, and Tears of Steel rotate on the external channel with sponsor pods about every 90 seconds until a contribution feed is taken live.",
+    defaultBroadcastDetail: "Sintel, Big Buck Bunny, Elephants Dream, and Tears of Steel rotate on the external channel with sponsor pods about every 90 seconds until a contribution feed is taken live.",
     mediaHealthUrl: "/api/v1/demo/media/health",
     splunkRum: {
         enabled: true,

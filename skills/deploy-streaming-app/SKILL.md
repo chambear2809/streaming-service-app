@@ -26,7 +26,14 @@ Use this skill when the task is to deploy this repository's demo stack into a Ku
    - Use `skills/deploy-streaming-app/scripts/ensure-splunk-otel-collector.sh --mode reuse` when the user says the collector is already installed.
    - Use `skills/deploy-streaming-app/scripts/ensure-splunk-otel-collector.sh --mode install-if-missing` when the user says the collector is not installed or the existing install is incompatible with the repo target.
 
-3. Run the bundled deploy script.
+3. Ask explicitly whether the target cluster already has Isovalent Enterprise for Cilium, Hubble, and Tetragon deployed and sending telemetry into Splunk Observability Cloud.
+   - Make this yes or no answer explicit before you promise Isovalent-backed dashboards or demo pivots.
+   - If the answer is `yes`, tell the user the built-in Splunk groups `Hubble by Isovalent`, `Cilium by Isovalent`, and `Network explorer tetragon` should be usable once the app is deployed and generating traffic in that same cluster.
+   - If the answer is `yes`, the numbered dashboard sync can also add `07 Explain: Are Media Services Still Talking?` when recent Hubble and Tetragon media-path metrics are present.
+   - If the answer is `no`, say clearly that the Isovalent groups and the custom `07` dashboard will stay empty until Isovalent is deployed into that Kubernetes cluster and the demo workload is actually running there.
+   - Do not present Isovalent as part of the repo's base deploy flow. The checked-in deploy scripts do not install Isovalent.
+
+4. Run the bundled deploy script.
    - Entry point: `skills/deploy-streaming-app/scripts/deploy-demo.sh`
    - The script reads the repo-root `.env` by default, then validates the local repo layout, required CLIs, namespace format, and exposure settings before it touches the cluster.
    - It creates the namespace or project, stages service source archives into ConfigMaps, deploys PostgreSQL plus the demo services, builds the frontend, and exposes the UI.
@@ -35,15 +42,15 @@ Use this skill when the task is to deploy this repository's demo stack into a Ku
    - Generated ConfigMaps and Secrets are applied server-side so large staged assets do not fail on the client-side `last-applied-configuration` annotation limit.
    - It renders manifest content at apply time with escaped namespace substitution. Do not edit the checked-in YAML just to switch namespaces.
 
-4. Set frontend labels only when they help the operator surface.
+5. Set frontend labels only when they help the operator surface.
    - Supported flags: `--cluster-label`, `--environment-label`, `--region-label`, `--control-room-label`, `--public-rtsp-url`
    - `namespace` is always overridden so the frontend points at the deployed namespace instead of the hardcoded demo one.
 
-5. Set or capture the demo login credentials explicitly.
+6. Set or capture the demo login credentials explicitly.
    - Supported env vars: `DEMO_AUTH_PASSWORD`, `DEMO_AUTH_SECRET`
    - If either value is omitted, the deploy script generates it and prints the resulting demo password after rollout.
 
-6. Validate the rollout and report the access path.
+7. Validate the rollout and report the access path.
    - Check `streaming-postgres`, `content-service-demo`, `media-service-demo`, `user-service-demo`, `billing-service`, `ad-service-demo`, and `streaming-frontend`.
    - Leave rollout progress snapshots enabled unless the user explicitly wants quiet output. `skills/deploy-streaming-app/scripts/deploy-demo.sh` now prints periodic pod snapshots, restart reasons, best-effort `kubectl top` output, and `media-service-demo` init progress while it waits.
    - Use `--rollout-snapshot-interval <seconds>` or `ROLLOUT_SNAPSHOT_INTERVAL_SECONDS` to tune how often snapshots print. Use `0` only when the user wants plain `rollout status` output.
@@ -53,7 +60,7 @@ Use this skill when the task is to deploy this repository's demo stack into a Ku
    - On Kubernetes LoadBalancer services, let the script wait for an external address before giving up.
    - If RTSP is not externally exposed, say that explicitly instead of leaving the old demo URL implied.
 
-7. When the user wants PostgreSQL DB monitoring in Splunk Observability Cloud, treat it as a follow-on collector change, not as part of the base collector bootstrap itself.
+8. When the user wants PostgreSQL DB monitoring in Splunk Observability Cloud, treat it as a follow-on collector change, not as part of the base collector bootstrap itself.
    - Read `docs/postgresql-db-monitoring.md`.
    - Use `k8s/otel-splunk/postgresql-dbmon.values.yaml` as the repo's checked-in override fragment for the collector Helm release.
    - Ask explicitly whether the user wants PostgreSQL DB monitoring configured.
@@ -72,7 +79,7 @@ Use this skill when the task is to deploy this repository's demo stack into a Ku
    - After the collector Helm upgrade, validate the cluster receiver logs for PostgreSQL receiver startup or auth failures and state clearly whether query samples and top queries were enabled.
    - For repo live validation, use `skills/deploy-streaming-app/tests/postgresql-db-monitoring-live-smoke.test.sh` and override `POSTGRES_ENDPOINT` when the PostgreSQL service FQDN differs from the repo default.
 
-8. When the user wants ThousandEyes coverage, set up and validate the ThousandEyes inputs before creating tests.
+9. When the user wants ThousandEyes coverage, set up and validate the ThousandEyes inputs before creating tests.
    - Read `docs/thousandeyes-rtsp-api.md` for the supported test model and the repo scripts.
    - Ensure the repo-root `.env` exists. If it does not, create it from `example.env`.
    - Ask whether the ThousandEyes tests should target `local` cluster-private endpoints or `external` public endpoints. Make the choice explicit before you create or update any tests.
@@ -96,19 +103,21 @@ Use this skill when the task is to deploy this repository's demo stack into a Ku
    - The RTSP control-path test is agent-to-server and can run with only one Enterprise Agent. The UDP and RTP proxy tests still need a valid target agent.
    - For Demo Monkey-driven demos, prefer the `http-server` tests for `/api/v1/demo/public/trace-map` and `/api/v1/demo/public/broadcast/live/index.m3u8`. Those are the endpoints Demo Monkey actually degrades.
 
-9. Create the ThousandEyes tests from the cluster only after the relevant endpoints are reachable.
+10. Create the ThousandEyes tests from the cluster only after the relevant endpoints are reachable.
    - For `local` mode, use `scripts/thousandeyes/deploy-k8s-rtsp-tests.sh` so the job discovers the `media-service-demo-rtsp` LoadBalancer hostname, derives the in-cluster `streaming-frontend` base URL, and creates the ThousandEyes tests from inside Kubernetes.
    - For `external` mode, either export `TE_DEMO_MONKEY_FRONTEND_BASE_URL`, `TE_TRACE_MAP_TEST_URL`, `TE_BROADCAST_TEST_URL`, `TE_RTSP_SERVER`, and `TE_RTSP_PORT` before using the direct API helper, or override those values before running the Kubernetes wrapper so it does not fall back to cluster-local targets.
    - Use `K8S_DRY_RUN=true` first when the user wants manifest verification without creating the Secret, ConfigMap, and Job for real.
    - Use `THOUSANDEYES_JOB_ACTION=create-demo-monkey-http` when the user specifically wants the Demo Monkey-sensitive HTTP tests.
    - Report whether the created tests target `local` or `external` endpoints, the resolved RTSP hostname and port, the frontend base URL or explicit HTTP test URLs, and state clearly if the agent-to-agent tests are partially constrained by Cloud Agent rules.
 
-10. Build the Splunk demo dashboards only after the ThousandEyes tests are live.
+11. Build the Splunk demo dashboards only after the ThousandEyes tests are live.
    - Use `scripts/thousandeyes/create-demo-dashboards.py` so the dashboard group stays reproducible and ordered for the demo.
    - Before calling the Splunk API, check whether `.env` or the current shell already defines `SPLUNK_REALM`, `SPLUNK_ACCESS_TOKEN`, `THOUSANDEYES_BEARER_TOKEN`, and `THOUSANDEYES_ACCOUNT_GROUP_ID`. `SPLUNK_RUM_APP_NAME` and `SPLUNK_DEPLOYMENT_ENVIRONMENT` can fall back to repo defaults, but override them when the deployed demo uses different names.
    - If the user wants to update an existing dashboard group and the group ID is not already known, first consider `--group-name` or the script's automatic single-prefix match. Prompt for `SPLUNK_DEMO_DASHBOARD_GROUP_ID` only when multiple matching groups make the target ambiguous.
    - If the demo was deployed into a non-default namespace, either pass `--namespace <deployed-namespace>` to the script or persist that value in `STREAMING_K8S_NAMESPACE`.
    - If the dashboard-write token cannot read SignalFlow metric data, set `SPLUNK_VALIDATION_TOKEN` or pass `--skip-te-metric-validation` before you rerun the sync.
+   - If the user confirmed that Isovalent is deployed in the target cluster, expect the sync to add `07 Explain: Are Media Services Still Talking?` only when recent Hubble and Tetragon metrics exist for the deployed media path. Otherwise the sync should skip `07` with a warning instead of creating an empty dashboard.
+   - If the user did not confirm Isovalent deployment, say that the custom `07` dashboard and the built-in Isovalent groups will remain empty until Isovalent is deployed into the same Kubernetes cluster as the demo workload.
    - If the RTP dashboard should be populated, verify that an enabled ThousandEyes OTel metric stream includes the RTP test in `testMatch` or exports the `voice` test type. The dashboard helper now warns when the repo RTP test exists but no enabled metric stream appears to cover it.
    - When the repo ThousandEyes tests were created with non-default names or duplicate names exist, set the matching `TE_*_TEST_NAME` or `TE_*_TEST_ID` overrides before syncing dashboards.
    - If any required Splunk token or object ID is missing, stop and prompt the user for the exact variable names. Tell them they can either edit the repo-root `.env` or export the variables in their shell for the current session.

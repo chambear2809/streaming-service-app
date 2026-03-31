@@ -1,0 +1,42 @@
+{
+  "groups": [
+    {
+      "name": "Hubble by Isovalent",
+      "dashboards": [
+        "Network Overview",
+        "DNS Overview",
+        "L7 HTTP Metrics",
+        "Metrics & Monitoring"
+      ]
+    },
+    {
+      "name": "Cilium by Isovalent",
+      "dashboards": [
+        "High-Level Health",
+        "Cilium System CPU/Memory Utilization",
+        "CNI (Pod Scheduling)",
+        "Policy: L7 Proxy",
+        "Policy Verdicts",
+        "BPF Map Health",
+        "Kubernetes Events Processing",
+        "Reconciliation"
+      ]
+    },
+    {
+      "name": "Network explorer tetragon",
+      "dashboards": [
+        "TCP overview",
+        "UDP overview",
+        "DNS overview",
+        "HTTP overview",
+        "TCP - Outbound",
+        "UDP - Outbound",
+        "DNS",
+        "HTTP - Outbound",
+        "TCP",
+        "HTTP",
+        "UDP"
+      ]
+    }
+  ]
+}

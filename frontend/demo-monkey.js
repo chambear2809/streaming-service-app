@@ -289,6 +289,7 @@ const elements = {
     frontendExceptionEnabled: document.querySelector("#demo-monkey-frontend-exception-enabled"),
     slowAdEnabled: document.querySelector("#demo-monkey-slow-ad-enabled"),
     adLoadFailureEnabled: document.querySelector("#demo-monkey-ad-load-failure-enabled"),
+    unlock: document.querySelector("#demo-monkey-unlock"),
     disable: document.querySelector("#demo-monkey-disable"),
     message: document.querySelector("#demo-monkey-message")
 };
@@ -886,6 +887,8 @@ function applyWriteAccess() {
     }
 
     elements.disable.disabled = !writable || !state.current.enabled;
+    elements.unlock.hidden = writable;
+    elements.unlock.disabled = false;
 }
 
 function presentationModeActive() {
@@ -1248,6 +1251,33 @@ async function disableMonkey() {
     await updateStatus(demoMonkeyPresets.clear, "Incident simulation bypassed.");
 }
 
+async function unlockOperatorAccess() {
+    setMessage("Opening operator controls...", false);
+
+    try {
+        const endpoint = `${runtimeConfig.authPersonaUrlBase ?? "/api/v1/demo/auth/persona"}/operator`;
+        const response = await fetch(endpoint, {
+            method: "POST",
+            cache: "no-store",
+            credentials: "same-origin"
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(payload.message ?? `HTTP ${response.status}`);
+        }
+
+        await loadWriteAccess(true);
+        if (!state.canWrite) {
+            throw new Error("Operator session opened, but governance access is still unavailable.");
+        }
+
+        setMessage("Operator controls unlocked.", false);
+    } catch (error) {
+        console.warn("Unable to unlock incident-simulation controls.", error);
+        setMessage(error.message || "Unable to unlock incident-simulation controls.", true);
+    }
+}
+
 async function bootstrap() {
     render();
     await loadStatus();
@@ -1268,6 +1298,7 @@ async function bootstrap() {
 
 elements.form.addEventListener("submit", handleSubmit);
 elements.disable.addEventListener("click", disableMonkey);
+elements.unlock.addEventListener("click", unlockOperatorAccess);
 elements.presets.addEventListener("click", handlePresetClick);
 elements.presentationToggle.addEventListener("click", () => {
     togglePresentationMode();

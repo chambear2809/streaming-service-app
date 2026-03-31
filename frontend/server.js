@@ -10,6 +10,7 @@ const rumScriptPath = process.env.SPLUNK_RUM_SCRIPT_PATH ?? null;
 const namespace = process.env.K8S_NAMESPACE ?? "streaming-service-app";
 const upstreamRequestTimeoutMs = Number.parseInt(process.env.UPSTREAM_REQUEST_TIMEOUT_MS ?? "5000", 10);
 const errorLogThrottleMs = Number.parseInt(process.env.ERROR_LOG_THROTTLE_MS ?? "30000", 10);
+const internalAuthSecret = process.env.INTERNAL_AUTH_SECRET ?? "";
 const throttledErrorState = new Map();
 
 const HOP_BY_HOP_HEADERS = new Set([
@@ -396,7 +397,12 @@ async function handleApi(req, res, url) {
             return;
         }
 
-        await proxyRequest(req, res, buildProxyTarget(protectedRule, url));
+        await proxyRequest(
+            req,
+            res,
+            buildProxyTarget(protectedRule, url),
+            buildInternalProxyHeaders(authResult.role)
+        );
         return;
     }
 
@@ -455,6 +461,7 @@ async function authorize(req, requiredCapabilities = []) {
 
                         resolve({
                             authorized: true,
+                            role,
                             statusCode,
                             headers: authRes.headers,
                             body
@@ -542,7 +549,7 @@ function forwardAuthFailure(res, authResult) {
     res.end(authResult.body);
 }
 
-async function proxyRequest(req, res, target) {
+async function proxyRequest(req, res, target, extraHeaders = {}) {
     return new Promise((resolve) => {
         const targetKey = `${target.hostname}:${target.port}${target.path}`;
         const upstreamReq = http.request(
@@ -552,7 +559,8 @@ async function proxyRequest(req, res, target) {
                 path: target.path,
                 method: req.method,
                 headers: buildProxyHeaders(req, {
-                    includeBodyHeaders: true
+                    includeBodyHeaders: true,
+                    extraHeaders
                 })
             },
             (upstreamRes) => {
@@ -637,7 +645,41 @@ function buildProxyHeaders(req, options = {}) {
     headers["x-forwarded-for"] = appendForwardedFor(req.headers["x-forwarded-for"], req.socket.remoteAddress);
     headers["x-forwarded-proto"] = req.headers["x-forwarded-proto"] ?? (req.socket.encrypted ? "https" : "http");
 
+    for (const [headerName, headerValue] of Object.entries(options.extraHeaders ?? {})) {
+        if (headerValue === undefined || headerValue === null || headerValue === "") {
+            continue;
+        }
+
+        headers[headerName] = headerValue;
+    }
+
     return headers;
+}
+
+function buildInternalProxyHeaders(role) {
+    if (!internalAuthSecret) {
+        return {};
+    }
+
+    return {
+        "X-Streaming-Internal-Auth": internalAuthSecret,
+        "X-Streaming-Authorities": authoritiesForRole(role).join(",")
+    };
+}
+
+function authoritiesForRole(role) {
+    const normalizedRole = normalizeRole(role);
+    const authorities = new Set();
+
+    if (normalizedRole === "billing_admin" || normalizedRole === "platform_admin") {
+        authorities.add("ROLE_ADMIN");
+    }
+
+    for (const capability of roleCapabilities[normalizedRole] ?? roleCapabilities.staff_operator) {
+        authorities.add(`CAP_${String(capability).toUpperCase()}`);
+    }
+
+    return Array.from(authorities);
 }
 
 async function serveStatic(res, requestPath) {

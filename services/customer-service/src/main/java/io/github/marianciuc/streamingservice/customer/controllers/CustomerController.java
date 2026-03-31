@@ -27,7 +27,7 @@ public class CustomerController {
     private final CustomerServiceImpl customerServiceImpl;
 
     @GetMapping
-    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<PaginationResponse<List<CustomerDto>>> getCustomers(
             @RequestParam(value = "page", required = false, defaultValue = "1") Integer page,
             @RequestParam(value = "pageSize", required = false, defaultValue = "10") Integer pageSize,

@@ -895,6 +895,7 @@ const elements = {
     demoMonkeyMessage: document.querySelector("#demo-monkey-message"),
     demoMonkeyApply: document.querySelector("#demo-monkey-apply"),
     demoMonkeyDisable: document.querySelector("#demo-monkey-disable"),
+    demoMonkeyUnlock: document.querySelector("#demo-monkey-unlock"),
     billingPortfolioCopy: document.querySelector("#billing-portfolio-copy"),
     billingTotalOutstanding: document.querySelector("#billing-total-outstanding"),
     billingOpenCount: document.querySelector("#billing-open-count"),
@@ -3537,6 +3538,8 @@ function renderDemoMonkeyConsole() {
     setFormControlsDisabled(elements.demoMonkeyForm, !writable);
     elements.demoMonkeyApply.disabled = !writable;
     elements.demoMonkeyDisable.disabled = !writable || !state.demoMonkey.enabled;
+    elements.demoMonkeyUnlock.hidden = writable;
+    elements.demoMonkeyUnlock.disabled = false;
 
     for (const button of elements.demoMonkeyPresets.querySelectorAll("[data-preset]")) {
         button.classList.toggle("is-active", button.dataset.preset === state.demoMonkey.preset);
@@ -6478,6 +6481,7 @@ elements.rtspRefresh.addEventListener("click", () => {
 });
 elements.rtspJobs.addEventListener("click", handleRtspJobInteraction);
 elements.demoMonkeyForm.addEventListener("submit", submitDemoMonkeyConfig);
+elements.demoMonkeyForm.addEventListener("click", handleLaunchPersonaClick);
 elements.demoMonkeyDisable.addEventListener("click", disableDemoMonkey);
 elements.demoMonkeyPresets.addEventListener("click", handleDemoMonkeyPresetClick);
 elements.billingAccountFilter.addEventListener("change", handleBillingAccountFilterChange);

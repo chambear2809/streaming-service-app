@@ -22,7 +22,7 @@ test("house loop segments preserve the source runtime and split at ninety second
 
     assert.equal(FALLBACK_HOUSE_LOOP_SEGMENTS.length, 34);
     assert.equal(totalSegmentSeconds, totalProgramSeconds);
-    assert.equal(FALLBACK_HOUSE_LOOP_SEGMENTS[0].title, "Big Buck Bunny · Part 1");
+    assert.equal(FALLBACK_HOUSE_LOOP_SEGMENTS[0].title, "Sintel · Part 1");
     assert.equal(FALLBACK_HOUSE_LOOP_SEGMENTS[0].durationSeconds, 90);
     assert.equal(FALLBACK_HOUSE_LOOP_SEGMENTS.at(-1).title, "Tears of Steel · Part 9");
     assert.equal(FALLBACK_HOUSE_LOOP_SEGMENTS.at(-1).durationSeconds, 14);

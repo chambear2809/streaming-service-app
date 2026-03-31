@@ -19,6 +19,7 @@
             <p id="broadcast-detail">Loading the current public program feed.</p>
             <div class="public-broadcast-actions">
                 <a class="button button-solid" id="broadcast-direct-link" href="/api/v1/demo/public/broadcast/live/index.m3u8" target="_blank" rel="noreferrer">Open direct stream</a>
+                <a class="button button-ghost" id="broadcast-rtsp-link" href="#" target="_blank" rel="noreferrer" hidden>Open RTSP transport</a>
                 <button class="button button-ghost presentation-toggle" id="broadcast-presentation-toggle" type="button" aria-pressed="false">Presentation mode</button>
                 <a class="button button-ghost" href="/">Open master control</a>
             </div>
@@ -64,9 +65,14 @@
             <p id="broadcast-ad-mode-copy">Resolving ad decisioning state.</p>
         </article>
         <article>
-            <span>Transport URL</span>
+            <span>Browser transport</span>
             <strong id="broadcast-playback-url">Resolving</strong>
-            <p>Use this direct URL for VLC, transport validation, or an external monitoring handoff.</p>
+            <p>Use this HLS URL for browser playback, direct stream checks, or an external monitoring handoff.</p>
+        </article>
+        <article>
+            <span>VLC transport</span>
+            <strong id="broadcast-rtsp-url">Resolving</strong>
+            <p id="broadcast-rtsp-copy">Use this RTSP URL for VLC, transport validation, or direct RTSP monitoring.</p>
         </article>
         <article>
             <span>Control page</span>

@@ -19,8 +19,11 @@ const elements = {
     adModeCopy: document.querySelector("#broadcast-ad-mode-copy"),
     updated: document.querySelector("#broadcast-updated"),
     playbackUrl: document.querySelector("#broadcast-playback-url"),
+    rtspUrl: document.querySelector("#broadcast-rtsp-url"),
+    rtspCopy: document.querySelector("#broadcast-rtsp-copy"),
     pageUrl: document.querySelector("#broadcast-page-url"),
     directLink: document.querySelector("#broadcast-direct-link"),
+    rtspLink: document.querySelector("#broadcast-rtsp-link"),
     presentationToggle: document.querySelector("#broadcast-presentation-toggle"),
     player: document.querySelector("#broadcast-player")
 };
@@ -82,6 +85,42 @@ function formatStamp(dateLike) {
     });
 }
 
+function resolvePublicPlaybackUrl(value) {
+    return absoluteUrl(value || runtimeConfig.publicBroadcastPlaybackUrl || "/api/v1/demo/public/broadcast/live/index.m3u8");
+}
+
+function resolvePublicPageUrl(value) {
+    return absoluteUrl(value || runtimeConfig.publicBroadcastPageUrl || "/broadcast");
+}
+
+function resolvePublicRtspUrl(value) {
+    return String(value ?? runtimeConfig.publicBroadcastRtspUrl ?? "").trim();
+}
+
+function renderTransportMetadata({ playbackUrl, pageUrl, rtspUrl }) {
+    const resolvedPlaybackUrl = resolvePublicPlaybackUrl(playbackUrl);
+    const resolvedPageUrl = resolvePublicPageUrl(pageUrl);
+    const resolvedRtspUrl = resolvePublicRtspUrl(rtspUrl);
+    const hasRtspUrl = Boolean(resolvedRtspUrl);
+
+    elements.playbackUrl.textContent = resolvedPlaybackUrl;
+    elements.pageUrl.textContent = resolvedPageUrl;
+    elements.directLink.href = resolvedPlaybackUrl;
+
+    elements.rtspLink.hidden = !hasRtspUrl;
+    if (hasRtspUrl) {
+        elements.rtspUrl.textContent = resolvedRtspUrl;
+        elements.rtspCopy.textContent = "Use this RTSP URL for VLC, transport validation, or direct RTSP monitoring.";
+        elements.rtspLink.href = resolvedRtspUrl;
+        elements.rtspLink.setAttribute("aria-label", `Open the external RTSP feed at ${resolvedRtspUrl}`);
+    } else {
+        elements.rtspUrl.textContent = "RTSP transport unavailable";
+        elements.rtspCopy.textContent = "This environment has not published a public RTSP endpoint.";
+        elements.rtspLink.removeAttribute("href");
+        elements.rtspLink.setAttribute("aria-label", "External RTSP feed unavailable");
+    }
+}
+
 function presentationModeActive() {
     return Boolean(document.fullscreenElement) || presentationFallbackEnabled;
 }
@@ -97,6 +136,18 @@ function syncPresentationMode() {
 function markBroadcastStatusStale() {
     const hasSnapshot = Boolean(state.lastSuccessfulUpdatedLabel);
     const fallbackAd = fallbackAdStatus();
+
+    if (!hasSnapshot) {
+        elements.title.textContent = resolveBroadcastTitle(runtimeConfig.defaultBroadcastTitle);
+        elements.detail.textContent = resolveBroadcastDetail(runtimeConfig.defaultBroadcastDetail);
+        elements.channel.textContent = resolveChannelLabel(runtimeConfig.defaultBroadcastChannelLabel);
+    }
+
+    renderTransportMetadata({
+        playbackUrl: runtimeConfig.publicBroadcastPlaybackUrl,
+        pageUrl: runtimeConfig.publicBroadcastPageUrl,
+        rtspUrl: runtimeConfig.publicBroadcastRtspUrl
+    });
 
     elements.status.textContent = hasSnapshot ? "Status stale" : "Unavailable";
     elements.statusCopy.textContent = hasSnapshot
@@ -323,8 +374,8 @@ async function refreshBroadcast() {
     }
 
     const payload = await response.json();
-    const broadcastPageUrl = absoluteUrl(payload?.publicPageUrl ?? runtimeConfig.publicBroadcastPageUrl ?? "/broadcast");
     const publicPlaybackUrl = payload?.publicPlaybackUrl ?? runtimeConfig.publicBroadcastPlaybackUrl ?? "/api/v1/demo/public/broadcast/live/index.m3u8";
+    const publicRtspUrl = payload?.publicRtspUrl ?? runtimeConfig.publicBroadcastRtspUrl ?? "";
     const status = String(payload?.status ?? "DEMO_LOOP").toUpperCase();
     const statusLabel = status === "ON_AIR" ? "On air" : "House loop";
     const sourceType = status === "ON_AIR" ? "RTSP contribution" : "House lineup";
@@ -347,9 +398,11 @@ async function refreshBroadcast() {
     elements.adMode.textContent = adBreakActive ? "Sponsor break live" : "Program feed";
     elements.adModeCopy.textContent = `${adStatus?.decisioningMode ?? "Server-side stitched pod"} · ${formatStamp(adStatus?.breakStartAt)} - ${formatStamp(adStatus?.breakEndAt)}`;
     elements.updated.textContent = updatedLabel;
-    elements.playbackUrl.textContent = absoluteUrl(publicPlaybackUrl);
-    elements.pageUrl.textContent = broadcastPageUrl;
-    elements.directLink.href = absoluteUrl(publicPlaybackUrl);
+    renderTransportMetadata({
+        playbackUrl: publicPlaybackUrl,
+        pageUrl: payload?.publicPageUrl,
+        rtspUrl: publicRtspUrl
+    });
     state.lastSuccessfulUpdatedLabel = updatedLabel === "Unavailable" ? "" : updatedLabel;
     updatePlayer(publicPlaybackUrl);
 }

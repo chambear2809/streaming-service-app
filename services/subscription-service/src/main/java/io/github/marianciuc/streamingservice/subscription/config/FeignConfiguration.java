@@ -23,8 +23,10 @@
 package io.github.marianciuc.streamingservice.subscription.config;
 
 import feign.RequestInterceptor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.util.StringUtils;
 
 /**
  * Configures Feign for making requests to secured endpoints.
@@ -36,9 +38,14 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class FeignConfiguration {
     @Bean
-    public RequestInterceptor requestInterceptor() {
+    public RequestInterceptor requestInterceptor(@Value("${internal.auth.secret:}") String internalAuthSecret) {
         return requestTemplate -> {
-            // Demo mode: downstream requests do not inject service auth.
+            if (!StringUtils.hasText(internalAuthSecret)) {
+                return;
+            }
+
+            requestTemplate.header(InternalRequestAuthenticationFilter.AUTH_HEADER, internalAuthSecret);
+            requestTemplate.header(InternalRequestAuthenticationFilter.AUTHORITIES_HEADER, "ROLE_SERVICE");
         };
     }
 }

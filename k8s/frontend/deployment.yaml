@@ -37,6 +37,11 @@ spec:
               value: "8080"
             - name: K8S_NAMESPACE
               value: streaming-service-app
+            - name: INTERNAL_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: streaming-demo-auth
+                  key: DEMO_AUTH_SECRET
             - name: STATIC_ROOT
               value: /srv/frontend
             - name: SPLUNK_RUM_SCRIPT_PATH
