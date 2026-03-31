@@ -20,6 +20,15 @@ bash .cursor/skills/deploy-streaming-app/scripts/deploy-demo.sh \
   --namespace streaming-demo
 ```
 
+Install the repo-compatible Splunk OTel collector during the deploy when the cluster does not already have it:
+
+```bash
+bash .cursor/skills/deploy-streaming-app/scripts/deploy-demo.sh \
+  --platform openshift \
+  --namespace streaming-demo \
+  --splunk-otel-mode install-if-missing
+```
+
 Deploy with custom frontend labels:
 
 ```bash
@@ -52,5 +61,6 @@ bash .cursor/skills/deploy-streaming-app/scripts/deploy-demo.sh \
 
 - The script fails early if required repo files or local CLIs are missing.
 - The deploy flow rewrites Maven cache paths to `/tmp/.m2` so the in-cluster build containers are friendlier to OpenShift's random UID model.
+- The checked-in app manifests expect `otel-splunk/splunk-otel-collector` for Java and Node.js auto-instrumentation. Use `--splunk-otel-mode install-if-missing` if that repo-compatible collector is not already present.
 - If you need external RTSP on OpenShift, use a platform-specific LoadBalancer or another TCP exposure mechanism outside the default Route model.
 - If the cluster enforces image allowlists, mirror the required upstream images before deployment.

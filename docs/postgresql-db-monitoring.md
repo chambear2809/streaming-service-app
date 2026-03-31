@@ -47,7 +47,7 @@ For fresh repo deployments, [`k8s/backend-demo/postgres.yaml`](../k8s/backend-de
 
 If your PostgreSQL pod was already running before those manifest changes were applied, you still need a one-time in-place enablement or a controlled PostgreSQL restart before query samples and top queries will work.
 
-The canonical app deploy script in this repo does not install or mutate the Splunk OTel Collector. Treat PostgreSQL DB monitoring as a follow-on change to the collector Helm values you already use in the cluster.
+The canonical app deploy script in this repo can now install or reuse the base Splunk OTel Collector for app auto-instrumentation. Treat PostgreSQL DB monitoring as a separate follow-on change to that collector's Helm values.
 
 ## Collector Values Fragment
 

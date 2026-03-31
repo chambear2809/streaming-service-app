@@ -273,6 +273,8 @@ The full set lives in [`example.env`](example.env). The variables below are the 
 - `SPLUNK_REALM` selects the Splunk Observability realm
 - `SPLUNK_RUM_ACCESS_TOKEN` is used by the frontend build, [`scripts/frontend/deploy.sh`](scripts/frontend/deploy.sh), and the canonical deploy path for Browser RUM and source map upload; sourcemap upload is best-effort and warns instead of aborting the deploy when Splunk returns an error
 - `SPLUNK_ACCESS_TOKEN` is used by the dashboard sync flow
+- `SPLUNK_OTEL_CLUSTER_NAME` overrides the cluster name used by the repo-managed Splunk OTel Collector bootstrap path
+- `SPLUNK_OTEL_HELM_CHART_VERSION` pins the upstream collector Helm chart version used by the repo-managed bootstrap path
 - `SPLUNK_RUM_APP_NAME` overrides the frontend RUM application name
 - `SPLUNK_DEPLOYMENT_ENVIRONMENT` overrides the default deployment environment label
 - `SPLUNK_DEMO_DASHBOARD_GROUP_ID` pins dashboard sync to an existing group when automatic matching would be ambiguous
@@ -314,6 +316,7 @@ Choose the ThousandEyes target mode explicitly before deriving URLs:
 The main docs are:
 
 - [`docs/kubernetes-deployment-learning-guide.md`](docs/kubernetes-deployment-learning-guide.md)
+- [`docs/splunk-otel-collector-bootstrap.md`](docs/splunk-otel-collector-bootstrap.md)
 - [`docs/distributed-tracing.md`](docs/distributed-tracing.md)
 - [`docs/postgresql-db-monitoring.md`](docs/postgresql-db-monitoring.md)
 - [`docs/thousandeyes-rtsp-api.md`](docs/thousandeyes-rtsp-api.md)
@@ -324,6 +327,7 @@ The checked-in collector override for PostgreSQL DB monitoring lives at:
 
 The main scripts are:
 
+- [`skills/deploy-streaming-app/scripts/ensure-splunk-otel-collector.sh`](skills/deploy-streaming-app/scripts/ensure-splunk-otel-collector.sh) for repo-compatible collector install or reuse checks
 - [`scripts/thousandeyes/create-rtsp-tests.sh`](scripts/thousandeyes/create-rtsp-tests.sh) for direct ThousandEyes API workflows
 - [`scripts/thousandeyes/deploy-k8s-rtsp-tests.sh`](scripts/thousandeyes/deploy-k8s-rtsp-tests.sh) for the in-cluster Kubernetes Job wrapper
 - [`scripts/thousandeyes/create-demo-dashboards.py`](scripts/thousandeyes/create-demo-dashboards.py) for Splunk Observability dashboard sync
@@ -332,6 +336,8 @@ The main scripts are:
 
 Important behavior:
 
+- The repo-managed collector bootstrap path expects namespace `otel-splunk` and instrumentation name `splunk-otel-collector` because the checked-in app manifests annotate pods with that exact target.
+- Use `bash skills/deploy-streaming-app/scripts/deploy-demo.sh --splunk-otel-mode install-if-missing ...` when the cluster does not already have that repo-compatible collector install.
 - PostgreSQL DB monitoring belongs on the Splunk OTel Collector `clusterReceiver`, not the `agent` DaemonSet, so the shared database is scraped once instead of once per node.
 - The checked-in DBMON overlay uses dedicated `metrics/dbmon` and `logs/dbmon` pipelines so it can layer on top of the chart defaults without replacing the main `metrics` receiver list.
 - The current demo deploy uses one PostgreSQL database named `streaming` and multiple schemas, so the receiver `databases` list should target `streaming`, not `demo_content`, `billing`, or the other schema names.

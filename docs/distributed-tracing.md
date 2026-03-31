@@ -9,6 +9,8 @@ This repo's Kubernetes demo services use the Splunk OpenTelemetry Operator Java 
 
 For PostgreSQL database monitoring of `streaming-postgres`, use the separate guide in [`docs/postgresql-db-monitoring.md`](postgresql-db-monitoring.md). Database monitoring is a collector configuration change, not part of the app-side Java or Node.js auto-instrumentation described here.
 
+If the cluster does not already have the repo-compatible collector install, bootstrap it first with [`docs/splunk-otel-collector-bootstrap.md`](splunk-otel-collector-bootstrap.md) or run the canonical deploy flow with `--splunk-otel-mode install-if-missing`.
+
 ## Runtime Requirements
 
 The app containers must keep the following OpenTelemetry propagator order so ThousandEyes metadata is preserved in Splunk APM:
@@ -38,6 +40,8 @@ The Kubernetes frontend now runs as a small Node.js gateway service instead of a
 - `OTEL_PROPAGATORS=baggage,b3,tracecontext`
 
 This makes the frontend visible in Splunk APM as its own service while still preserving Browser RUM in the page and full trace propagation into the Java backends.
+
+Because these annotations explicitly target `otel-splunk/splunk-otel-collector`, any reused collector install must preserve that namespace and instrumentation name or the repo-managed bootstrap path should be used instead.
 
 ## Browser RUM
 

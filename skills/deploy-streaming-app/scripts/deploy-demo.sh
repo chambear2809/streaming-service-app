@@ -24,6 +24,9 @@ FRONTEND_ROUTE_NAME="${FRONTEND_ROUTE_NAME-}"
 ROLLOUT_TIMEOUT="${ROLLOUT_TIMEOUT-}"
 ROLLOUT_SNAPSHOT_INTERVAL_SECONDS="${ROLLOUT_SNAPSHOT_INTERVAL_SECONDS-}"
 EXTERNAL_URL_TIMEOUT_SECONDS="${EXTERNAL_URL_TIMEOUT_SECONDS-}"
+SPLUNK_OTEL_MODE="${SPLUNK_OTEL_MODE-}"
+SPLUNK_OTEL_CLUSTER_NAME="${SPLUNK_OTEL_CLUSTER_NAME-}"
+SPLUNK_OTEL_HELPER_SCRIPT="${SPLUNK_OTEL_HELPER_SCRIPT-}"
 DEMO_AUTH_SECRET="${DEMO_AUTH_SECRET-}"
 DEMO_AUTH_PASSWORD="${DEMO_AUTH_PASSWORD-}"
 DEMO_AUTH_SECRET_NAME="streaming-demo-auth"
@@ -50,6 +53,8 @@ Options:
   --control-room-label <label>
   --public-rtsp-url <url>
   --app-version <version>
+  --splunk-otel-mode <skip|reuse|install-if-missing>
+  --splunk-otel-cluster-name <name>
   --rollout-timeout <duration>
   --rollout-snapshot-interval <seconds>
   --external-url-timeout <seconds>
@@ -60,6 +65,8 @@ Environment variables:
   SPLUNK_REALM / SPLUNK_RUM_ACCESS_TOKEN
                                         Optional frontend sourcemap upload credentials
   SPLUNK_ACCESS_TOKEN                   Backward-compatible sourcemap token fallback
+  SPLUNK_OTEL_CLUSTER_NAME             Optional collector cluster name override
+  SPLUNK_OTEL_HELM_CHART_VERSION       Optional collector Helm chart version override
   SPLUNK_RUM_APP_NAME                  Optional frontend RUM app name
   DEMO_AUTH_PASSWORD / DEMO_AUTH_SECRET
                                         Optional demo login credentials to persist
@@ -185,6 +192,14 @@ while [[ $# -gt 0 ]]; do
       APP_VERSION="${2:?missing value for --app-version}"
       shift 2
       ;;
+    --splunk-otel-mode)
+      SPLUNK_OTEL_MODE="${2:?missing value for --splunk-otel-mode}"
+      shift 2
+      ;;
+    --splunk-otel-cluster-name)
+      SPLUNK_OTEL_CLUSTER_NAME="${2:?missing value for --splunk-otel-cluster-name}"
+      shift 2
+      ;;
     --rollout-timeout)
       ROLLOUT_TIMEOUT="${2:?missing value for --rollout-timeout}"
       shift 2
@@ -258,6 +273,7 @@ verify_repo_layout() {
   require_file "${REPO_ROOT}/k8s/backend-demo/user-service.yaml"
   require_file "${REPO_ROOT}/k8s/backend-demo/billing-service.yaml"
   require_file "${REPO_ROOT}/k8s/backend-demo/ad-service.yaml"
+  require_file "${REPO_ROOT}/skills/deploy-streaming-app/scripts/ensure-splunk-otel-collector.sh"
 }
 
 verify_tooling() {
@@ -294,6 +310,15 @@ validate_service_type() {
   esac
 }
 
+validate_splunk_otel_mode() {
+  case "$1" in
+    skip|reuse|install-if-missing) ;;
+    *)
+      fail "invalid Splunk OTel mode '$1'"
+      ;;
+  esac
+}
+
 create_namespace() {
   if [[ "${PLATFORM}" == "openshift" ]]; then
     if ! oc get project "${NAMESPACE}" >/dev/null 2>&1; then
@@ -326,6 +351,43 @@ create_or_update_secret() {
   local name="$1"
   shift
   "${KUBECLI}" -n "${NAMESPACE}" create secret generic "${name}" "$@" --dry-run=client -o yaml | "${KUBECLI}" apply --server-side -f -
+}
+
+ensure_splunk_otel_collector() {
+  local -a helper_args
+
+  if [[ "${SPLUNK_OTEL_MODE}" == "skip" ]]; then
+    return
+  fi
+
+  helper_args=(
+    "${SPLUNK_OTEL_HELPER_SCRIPT}"
+    --mode
+    "${SPLUNK_OTEL_MODE}"
+    --platform
+    "${PLATFORM}"
+    --cli
+    "${KUBECLI}"
+    --timeout
+    "${ROLLOUT_TIMEOUT}"
+    --env-file
+    "${ENV_FILE}"
+  )
+
+  if [[ -n "${SPLUNK_OTEL_CLUSTER_NAME}" ]]; then
+    helper_args+=(
+      --cluster-name
+      "${SPLUNK_OTEL_CLUSTER_NAME}"
+    )
+  fi
+
+  log "Ensuring Splunk OTel collector (${SPLUNK_OTEL_MODE})"
+  env \
+    SPLUNK_REALM="${SPLUNK_REALM:-}" \
+    SPLUNK_ACCESS_TOKEN="${SPLUNK_ACCESS_TOKEN:-}" \
+    SPLUNK_DEPLOYMENT_ENVIRONMENT="${SPLUNK_DEPLOYMENT_ENVIRONMENT:-}" \
+    SPLUNK_OTEL_HELM_CHART_VERSION="${SPLUNK_OTEL_HELM_CHART_VERSION:-}" \
+    bash "${helper_args[@]}"
 }
 
 random_alnum() {
@@ -773,6 +835,8 @@ FRONTEND_ROUTE_NAME="${FRONTEND_ROUTE_NAME:-streaming-frontend}"
 ROLLOUT_TIMEOUT="${ROLLOUT_TIMEOUT:-900s}"
 ROLLOUT_SNAPSHOT_INTERVAL_SECONDS="${ROLLOUT_SNAPSHOT_INTERVAL_SECONDS:-15}"
 EXTERNAL_URL_TIMEOUT_SECONDS="${EXTERNAL_URL_TIMEOUT_SECONDS:-60}"
+SPLUNK_OTEL_MODE="${SPLUNK_OTEL_MODE:-skip}"
+SPLUNK_OTEL_HELPER_SCRIPT="${SPLUNK_OTEL_HELPER_SCRIPT:-${SKILL_DIR}/scripts/ensure-splunk-otel-collector.sh}"
 
 validate_dns_label "${NAMESPACE}" "namespace"
 validate_dns_label "${FRONTEND_ROUTE_NAME}" "frontend route name"
@@ -816,6 +880,7 @@ fi
 
 validate_service_type "${FRONTEND_SERVICE_TYPE}"
 validate_service_type "${RTSP_SERVICE_TYPE}"
+validate_splunk_otel_mode "${SPLUNK_OTEL_MODE}"
 
 if [[ -z "${APP_VERSION}" ]]; then
   APP_VERSION="$(git -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null || true)"
@@ -824,6 +889,10 @@ fi
 
 if [[ -z "${CLUSTER_LABEL}" ]]; then
   CLUSTER_LABEL="$("${KUBECLI}" config current-context 2>/dev/null || true)"
+fi
+
+if [[ -z "${SPLUNK_OTEL_CLUSTER_NAME}" ]]; then
+  SPLUNK_OTEL_CLUSTER_NAME="${CLUSTER_LABEL}"
 fi
 
 TEMP_DIR="$(mktemp -d)"
@@ -837,12 +906,17 @@ log "CLI: ${KUBECLI}"
 log "Namespace: ${NAMESPACE}"
 log "Frontend service type: ${FRONTEND_SERVICE_TYPE}"
 log "RTSP service type: ${RTSP_SERVICE_TYPE}"
+log "Splunk OTel mode: ${SPLUNK_OTEL_MODE}"
+if [[ "${SPLUNK_OTEL_MODE}" != "skip" && -n "${SPLUNK_OTEL_CLUSTER_NAME}" ]]; then
+  log "Splunk OTel cluster name: ${SPLUNK_OTEL_CLUSTER_NAME}"
+fi
 log "Rollout snapshot interval: ${ROLLOUT_SNAPSHOT_INTERVAL_SECONDS}s"
 log "External URL timeout: ${EXTERNAL_URL_TIMEOUT_SECONDS}s"
 log "Env file: ${ENV_FILE}"
 log "Skill path: ${SKILL_DIR}"
 
 create_namespace
+ensure_splunk_otel_collector
 create_backend_sources
 ensure_demo_auth_secret
 

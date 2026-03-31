@@ -1,4 +1,4 @@
 interface:
   display_name: "Deploy Streaming App"
   short_description: "Deploy the app to Kubernetes or OpenShift"
-  default_prompt: "Use $deploy-streaming-app to deploy this repo to Kubernetes or OpenShift and set up the demo's ThousandEyes or Splunk follow-on flow."
+  default_prompt: "Use $deploy-streaming-app to deploy this repo to Kubernetes or OpenShift, install or reuse the repo-compatible Splunk OTel collector when needed, and set up the demo's ThousandEyes or Splunk follow-on flow."

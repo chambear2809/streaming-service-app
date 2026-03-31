@@ -1,0 +1,18 @@
+operatorcrds:
+  install: true
+
+operator:
+  enabled: true
+  admissionWebhooks:
+    autoGenerateCert:
+      enabled: true
+
+instrumentation:
+  enabled: true
+  installationJob:
+    enabled: true
+  spec:
+    propagators:
+      - baggage
+      - b3
+      - tracecontext
