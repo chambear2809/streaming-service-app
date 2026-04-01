@@ -304,6 +304,9 @@ The full set lives in [`example.env`](example.env). The variables below are the 
 - `TE_UDP_TARGET_AGENT_ID` optionally overrides the UDP media-path target when it should differ from the RTP target
 - `TE_RTSP_SERVER` and `TE_RTSP_PORT` are needed for the direct API flow or when the Kubernetes wrapper cannot discover RTSP automatically
 - `TE_DEMO_MONKEY_FRONTEND_BASE_URL`, `TE_TRACE_MAP_TEST_URL`, and `TE_BROADCAST_TEST_URL` control the Demo Monkey-sensitive HTTP test targets
+- `TE_ALERTS_ENABLED` defaults test payload alerts on for all five repo ThousandEyes tests, while `TE_*_ALERTS_ENABLED` env vars can override individual tests when you want a narrower booth alert posture
+- `TE_*_TEST_ID` values let the repo alert-rule sync script target existing ThousandEyes tests deterministically
+- `TE_ALERT_MINIMUM_SOURCES`, `TE_ALERT_NOTIFY_ON_CLEAR`, `THOUSANDEYES_ALERT_EMAIL_RECIPIENTS`, `THOUSANDEYES_ALERT_EMAIL_MESSAGE`, and `THOUSANDEYES_ALERT_NOTIFICATIONS_JSON` control the repo-managed custom ThousandEyes alert rules and optional routing
 - `TE_A2A_THROUGHPUT_MEASUREMENTS=false` is required when the UDP media-path test uses a Cloud Agent endpoint because ThousandEyes rejects UDP throughput measurements in that configuration
 
 Choose the ThousandEyes target mode explicitly before deriving URLs:
@@ -330,6 +333,7 @@ The main scripts are:
 - [`skills/deploy-streaming-app/scripts/ensure-splunk-otel-collector.sh`](skills/deploy-streaming-app/scripts/ensure-splunk-otel-collector.sh) for repo-compatible collector install or reuse checks
 - [`scripts/thousandeyes/create-rtsp-tests.sh`](scripts/thousandeyes/create-rtsp-tests.sh) for direct ThousandEyes API workflows
 - [`scripts/thousandeyes/deploy-k8s-rtsp-tests.sh`](scripts/thousandeyes/deploy-k8s-rtsp-tests.sh) for the in-cluster Kubernetes Job wrapper
+- [`scripts/thousandeyes/sync-demo-alert-rules.py`](scripts/thousandeyes/sync-demo-alert-rules.py) for repo-managed ThousandEyes alert rules and explicit test assignment
 - [`scripts/thousandeyes/create-demo-dashboards.py`](scripts/thousandeyes/create-demo-dashboards.py) for Splunk Observability dashboard sync
 - [`skills/deploy-streaming-app/tests/postgresql-db-monitoring-config.test.sh`](skills/deploy-streaming-app/tests/postgresql-db-monitoring-config.test.sh) for repo-side DB monitoring config validation
 - [`skills/deploy-streaming-app/tests/postgresql-db-monitoring-live-smoke.test.sh`](skills/deploy-streaming-app/tests/postgresql-db-monitoring-live-smoke.test.sh) for a live cluster smoke test of the collector and PostgreSQL path
@@ -344,6 +348,8 @@ Important behavior:
 - PostgreSQL server logs are optional and intentionally out of the default repo flow unless you also have Splunk Platform access and choose to design that path.
 - The direct ThousandEyes helper can use the token's default account group when `THOUSANDEYES_ACCOUNT_GROUP_ID` is omitted, but dashboard sync requires both `THOUSANDEYES_BEARER_TOKEN` and `THOUSANDEYES_ACCOUNT_GROUP_ID`.
 - Use `THOUSANDEYES_JOB_ACTION=create-demo-monkey-http` when you only want the two Demo Monkey-sensitive HTTP tests.
+- All five repo ThousandEyes tests now default to `alertsEnabled=true`. For the standard booth story, the HTTP playback and trace-map tests are still the primary outside-in signals, so use per-test `TE_*_ALERTS_ENABLED=false` overrides if RTSP, UDP, or RTP should stay quieter until the deep-dive portion.
+- Use `python3 scripts/thousandeyes/sync-demo-alert-rules.py plan` to preview the repo-managed alert rules and `python3 scripts/thousandeyes/sync-demo-alert-rules.py apply` to create or update them and explicitly assign them to the repo test IDs.
 - If the UDP media-path test uses a Cloud Agent endpoint, set `TE_A2A_THROUGHPUT_MEASUREMENTS=false`.
 - The RTP dashboard only populates when an enabled ThousandEyes OTel metric stream includes the RTP test through `testMatch` or exports the `voice` test type.
 - Dashboard sync supports `--skip-te-metric-validation` when you need to bypass the post-sync SignalFlow data check.

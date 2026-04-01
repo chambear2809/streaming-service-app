@@ -1,6 +1,6 @@
 # ThousandEyes Test API Setup
 
-This repo includes [`scripts/thousandeyes/create-rtsp-tests.sh`](/Users/alecchamberlain/Documents/GitHub/streaming-service-app/scripts/thousandeyes/create-rtsp-tests.sh) to create the ThousandEyes tests used by this demo and [`scripts/thousandeyes/create-demo-dashboards.py`](/Users/alecchamberlain/Documents/GitHub/streaming-service-app/scripts/thousandeyes/create-demo-dashboards.py) to sync the matching Splunk demo dashboards.
+This repo includes [`scripts/thousandeyes/create-rtsp-tests.sh`](/Users/alecchamberlain/Documents/GitHub/streaming-service-app/scripts/thousandeyes/create-rtsp-tests.sh) to create the ThousandEyes tests used by this demo, [`scripts/thousandeyes/sync-demo-alert-rules.py`](/Users/alecchamberlain/Documents/GitHub/streaming-service-app/scripts/thousandeyes/sync-demo-alert-rules.py) to create or update repo-managed alert rules for all five demo tests and explicitly assign them to the repo-managed test IDs, and [`scripts/thousandeyes/create-demo-dashboards.py`](/Users/alecchamberlain/Documents/GitHub/streaming-service-app/scripts/thousandeyes/create-demo-dashboards.py) to sync the matching Splunk demo dashboards.
 
 The test-creation script creates these demo tests:
 
@@ -218,6 +218,15 @@ Required user inputs:
 - `TE_TARGET_AGENT_ID`: set the target Enterprise Agent or Cloud Agent ID from `scripts/thousandeyes/create-rtsp-tests.sh list-agents`
 - `TE_UDP_TARGET_AGENT_ID`: optional override when the UDP media-path test should target a different agent than the RTP proxy test
 
+Optional alert posture inputs:
+
+- `TE_ALERTS_ENABLED`: shared default for `alertsEnabled` across all five repo ThousandEyes tests. The scripts now default this to `true`.
+- `TE_RTSP_TCP_ALERTS_ENABLED`, `TE_UDP_MEDIA_ALERTS_ENABLED`, `TE_RTP_STREAM_ALERTS_ENABLED`, `TE_TRACE_MAP_ALERTS_ENABLED`, and `TE_BROADCAST_ALERTS_ENABLED`: per-test overrides when the booth story should emphasize playback and trace-map first while leaving media-path tests quieter.
+- `TE_ALERT_MINIMUM_SOURCES`: default minimum affected sources for the repo-managed custom alert rules. For the common booth setup with one source agent, keep this at `1`.
+- `TE_ALERT_NOTIFY_ON_CLEAR`: defaults the repo-managed custom alert rules to send clear notifications when the demo path recovers.
+- `THOUSANDEYES_ALERT_EMAIL_RECIPIENTS` and `THOUSANDEYES_ALERT_EMAIL_MESSAGE`: optional email routing for the repo-managed custom alert rules.
+- `THOUSANDEYES_ALERT_NOTIFICATIONS_JSON`: optional raw ThousandEyes `notifications` JSON object when you need webhook or third-party routing instead of simple email recipients.
+
 Sometimes required:
 
 - `TE_RTSP_SERVER`: set this if you are running the direct API flow or if the Kubernetes wrapper cannot discover the RTSP hostname automatically
@@ -275,6 +284,8 @@ export THOUSANDEYES_ACCOUNT_GROUP_ID='1234'
 export TE_SOURCE_AGENT_IDS='111,222'
 export TE_TARGET_AGENT_ID='333'
 export TE_UDP_TARGET_AGENT_ID='3'
+export TE_ALERTS_ENABLED='true'
+export TE_ALERT_MINIMUM_SOURCES='1'
 export TE_RTSP_SERVER='rtsp.example.com'
 export TE_RTSP_PORT='8554'
 export TE_DEMO_MONKEY_FRONTEND_BASE_URL='https://demo.example.com'
@@ -309,6 +320,13 @@ scripts/thousandeyes/create-rtsp-tests.sh create-demo-monkey-broadcast
 scripts/thousandeyes/create-rtsp-tests.sh create-demo-monkey-http
 ```
 
+Then preview or apply the repo-managed custom alert rules:
+
+```bash
+python3 scripts/thousandeyes/sync-demo-alert-rules.py plan
+python3 scripts/thousandeyes/sync-demo-alert-rules.py apply
+```
+
 ## Run From Kubernetes
 
 This repo also includes an in-cluster path that creates the tests from a one-shot Kubernetes Job:
@@ -323,6 +341,7 @@ The deploy wrapper:
 - creates a Secret containing `THOUSANDEYES_BEARER_TOKEN`
 - mounts the in-cluster creator script through a ConfigMap
 - launches a one-shot Job that calls the ThousandEyes `v7` test APIs
+- uses the same `create-all` behavior as the direct script, so the default action creates RTSP, UDP, RTP, trace-map, and broadcast tests together
 
 This is the easiest path for a user who does not want to hand-build payloads or think through every endpoint variable manually.
 
@@ -693,6 +712,20 @@ Demo Monkey HTTP tests:
 - `TE_BROADCAST_TEST_URL`
 - `TE_BROADCAST_INTERVAL`
 
+Alert controls:
+
+- `TE_ALERTS_ENABLED`
+- `TE_RTSP_TCP_ALERTS_ENABLED`
+- `TE_UDP_MEDIA_ALERTS_ENABLED`
+- `TE_RTP_STREAM_ALERTS_ENABLED`
+- `TE_TRACE_MAP_ALERTS_ENABLED`
+- `TE_BROADCAST_ALERTS_ENABLED`
+- `TE_ALERT_MINIMUM_SOURCES`
+- `TE_ALERT_NOTIFY_ON_CLEAR`
+- `THOUSANDEYES_ALERT_EMAIL_RECIPIENTS`
+- `THOUSANDEYES_ALERT_EMAIL_MESSAGE`
+- `THOUSANDEYES_ALERT_NOTIFICATIONS_JSON`
+
 Target selection guidance:
 
 - Leave `TE_DEMO_MONKEY_FRONTEND_BASE_URL` on the `svc.cluster.local` default when you want `local` Enterprise-Agent reachability inside the cluster network
@@ -712,6 +745,8 @@ Splunk demo dashboard sync:
 - ThousandEyes scheduled `RTP Stream` tests are created through the `voice` test API.
 - In this cluster, the RTSP demo feed is exposed through `media-service-demo-rtsp` on port `8554`, so the Kubernetes wrapper defaults the TCP reachability test to `TCP/8554` instead of `TCP/554`.
 - Demo Monkey changes the public frontend-backed paths `/api/v1/demo/public/trace-map` and `/api/v1/demo/public/broadcast/live/index.m3u8`, so the new HTTP server tests are the ones that visibly move when Demo Monkey presets are enabled.
+- For the standard booth story, treat the playback and trace-map HTTP tests as the primary operator-facing alerts. Keep RTSP, UDP, and RTP alerts enabled when you want full-path coverage, but use the per-test `TE_*_ALERTS_ENABLED` overrides when those deeper media checks should stay quieter until the transport deep dive.
+- The repo alert-rule helper creates one custom rule per demo test and assigns it directly to the current `TE_*_TEST_ID`, so the live demo tests do not depend on ThousandEyes default rule selection or the default `minimumSources=2` behavior.
 - `throughputMeasurements` on the agent-to-agent UDP test cannot be enabled when either side is a Cloud Agent. If you set `TE_UDP_TARGET_AGENT_ID` or `TE_TARGET_AGENT_ID` to a Cloud Agent for the UDP test, set `TE_A2A_THROUGHPUT_MEASUREMENTS=false`.
 - This does not validate the RTSP verbs themselves. Use an RTSP-aware client outside ThousandEyes for `OPTIONS`, `DESCRIBE`, `SETUP`, and `PLAY`.
 - The scripts still accept `THOUSANDEYES_TOKEN` as a temporary compatibility fallback, but `THOUSANDEYES_BEARER_TOKEN` is now the primary env var.

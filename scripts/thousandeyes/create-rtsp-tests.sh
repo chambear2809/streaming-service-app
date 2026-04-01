@@ -78,6 +78,7 @@ Optional shared environment:
   THOUSANDEYES_API_BASE_URL=https://api.thousandeyes.com/v7
   THOUSANDEYES_ACCOUNT_GROUP_ID=1234
   THOUSANDEYES_DRY_RUN=true
+  TE_ALERTS_ENABLED=true
   TE_SOURCE_AGENT_IDS=111,222
   TE_TARGET_AGENT_ID=333
   TE_UDP_TARGET_AGENT_ID=3
@@ -273,7 +274,7 @@ build_rtsp_tcp_payload() {
 \"description\":\"$(json_escape "${TE_RTSP_TCP_DESCRIPTION:-RTSP control-plane reachability and path test}")\",\
 \"interval\":${TE_RTSP_TCP_INTERVAL:-${TE_INTERVAL:-60}},\
 \"enabled\":$(json_bool "${TE_RTSP_TCP_ENABLED:-true}"),\
-\"alertsEnabled\":$(json_bool "${TE_RTSP_TCP_ALERTS_ENABLED:-false}"),\
+\"alertsEnabled\":$(json_bool "${TE_RTSP_TCP_ALERTS_ENABLED:-${TE_ALERTS_ENABLED:-true}}"),\
 \"protocol\":\"tcp\",\
 \"server\":\"$(json_escape "${TE_RTSP_SERVER}")\",\
 \"port\":${TE_RTSP_PORT:-554},\
@@ -305,7 +306,7 @@ build_udp_media_payload() {
 \"description\":\"$(json_escape "${TE_UDP_MEDIA_DESCRIPTION:-Agent-to-agent UDP transport proxy for RTSP media path}")\",\
 \"interval\":${TE_UDP_MEDIA_INTERVAL:-${TE_INTERVAL:-60}},\
 \"enabled\":$(json_bool "${TE_UDP_MEDIA_ENABLED:-true}"),\
-\"alertsEnabled\":$(json_bool "${TE_UDP_MEDIA_ALERTS_ENABLED:-false}"),\
+\"alertsEnabled\":$(json_bool "${TE_UDP_MEDIA_ALERTS_ENABLED:-${TE_ALERTS_ENABLED:-true}}"),\
 \"protocol\":\"udp\",\
 \"direction\":\"$(json_escape "${TE_A2A_DIRECTION:-bidirectional}")\",\
 \"port\":${TE_A2A_PORT:-5004},\
@@ -333,7 +334,7 @@ build_rtp_stream_payload() {
 \"description\":\"$(json_escape "${TE_RTP_STREAM_DESCRIPTION:-Scheduled RTP proxy test for RTSP media quality}")\",\
 \"interval\":${TE_RTP_STREAM_INTERVAL:-${TE_INTERVAL:-60}},\
 \"enabled\":$(json_bool "${TE_RTP_STREAM_ENABLED:-true}"),\
-\"alertsEnabled\":$(json_bool "${TE_RTP_STREAM_ALERTS_ENABLED:-false}"),\
+\"alertsEnabled\":$(json_bool "${TE_RTP_STREAM_ALERTS_ENABLED:-${TE_ALERTS_ENABLED:-true}}"),\
 \"codecId\":\"$(json_escape "${TE_VOICE_CODEC_ID:-0}")\",\
 \"dscpId\":\"$(json_escape "${TE_VOICE_DSCP_ID:-${TE_DSCP_ID:-0}}")\",\
 \"duration\":${TE_VOICE_DURATION_SEC:-10},\
@@ -358,7 +359,7 @@ build_trace_map_payload() {
 \"description\":\"$(json_escape "${TE_TRACE_MAP_DESCRIPTION:-Demo Monkey-sensitive public trace map health check through the frontend gateway}")\",\
 \"interval\":${TE_TRACE_MAP_INTERVAL:-${TE_INTERVAL:-60}},\
 \"enabled\":$(json_bool "${TE_TRACE_MAP_ENABLED:-true}"),\
-\"alertsEnabled\":$(json_bool "${TE_TRACE_MAP_ALERTS_ENABLED:-false}"),\
+\"alertsEnabled\":$(json_bool "${TE_TRACE_MAP_ALERTS_ENABLED:-${TE_ALERTS_ENABLED:-true}}"),\
 \"url\":\"$(json_escape "${TE_TRACE_MAP_TEST_URL}")\",\
 \"desiredStatusCode\":\"$(json_escape "${TE_TRACE_MAP_DESIRED_STATUS_CODE:-200}")\",\
 \"httpTimeLimit\":${TE_TRACE_MAP_HTTP_TIME_LIMIT:-15},\
@@ -385,7 +386,7 @@ build_broadcast_payload() {
 \"description\":\"$(json_escape "${TE_BROADCAST_DESCRIPTION:-Demo Monkey-sensitive HLS manifest fetch through the frontend gateway}")\",\
 \"interval\":${TE_BROADCAST_INTERVAL:-${TE_INTERVAL:-60}},\
 \"enabled\":$(json_bool "${TE_BROADCAST_ENABLED:-true}"),\
-\"alertsEnabled\":$(json_bool "${TE_BROADCAST_ALERTS_ENABLED:-false}"),\
+\"alertsEnabled\":$(json_bool "${TE_BROADCAST_ALERTS_ENABLED:-${TE_ALERTS_ENABLED:-true}}"),\
 \"url\":\"$(json_escape "${TE_BROADCAST_TEST_URL}")\",\
 \"desiredStatusCode\":\"$(json_escape "${TE_BROADCAST_DESIRED_STATUS_CODE:-200}")\",\
 \"contentRegex\":\"$(json_escape "${TE_BROADCAST_CONTENT_REGEX:-#EXTM3U}")\",\

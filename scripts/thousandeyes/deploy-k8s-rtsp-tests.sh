@@ -200,6 +200,8 @@ spec:
               value: "${THOUSANDEYES_API_BASE_URL}"
             - name: THOUSANDEYES_ACCOUNT_GROUP_ID
               value: "${THOUSANDEYES_ACCOUNT_GROUP_ID:-}"
+            - name: TE_ALERTS_ENABLED
+              value: "${TE_ALERTS_ENABLED:-true}"
             - name: TE_SOURCE_AGENT_IDS
               value: "${TE_SOURCE_AGENT_IDS}"
             - name: TE_TARGET_AGENT_ID
@@ -216,6 +218,8 @@ spec:
               value: "${TE_RTSP_TCP_TEST_NAME:-RTSP-TCP-${TE_RTSP_PORT}}"
             - name: TE_RTSP_TCP_INTERVAL
               value: "${TE_RTSP_TCP_INTERVAL:-60}"
+            - name: TE_RTSP_TCP_ALERTS_ENABLED
+              value: "${TE_RTSP_TCP_ALERTS_ENABLED:-}"
             - name: TE_DEMO_MONKEY_FRONTEND_BASE_URL
               value: "${TE_DEMO_MONKEY_FRONTEND_BASE_URL}"
             - name: TE_TRACE_MAP_TEST_NAME
@@ -224,6 +228,8 @@ spec:
               value: "${TE_TRACE_MAP_TEST_URL}"
             - name: TE_TRACE_MAP_INTERVAL
               value: "${TE_TRACE_MAP_INTERVAL:-60}"
+            - name: TE_TRACE_MAP_ALERTS_ENABLED
+              value: "${TE_TRACE_MAP_ALERTS_ENABLED:-}"
             - name: TE_TRACE_MAP_NETWORK_MEASUREMENTS
               value: "${TE_TRACE_MAP_NETWORK_MEASUREMENTS:-true}"
             - name: TE_BROADCAST_TEST_NAME
@@ -232,12 +238,16 @@ spec:
               value: "${TE_BROADCAST_TEST_URL}"
             - name: TE_BROADCAST_INTERVAL
               value: "${TE_BROADCAST_INTERVAL:-60}"
+            - name: TE_BROADCAST_ALERTS_ENABLED
+              value: "${TE_BROADCAST_ALERTS_ENABLED:-}"
             - name: TE_BROADCAST_NETWORK_MEASUREMENTS
               value: "${TE_BROADCAST_NETWORK_MEASUREMENTS:-true}"
             - name: TE_UDP_MEDIA_TEST_NAME
               value: "${TE_UDP_MEDIA_TEST_NAME:-UDP-Media-Path}"
             - name: TE_UDP_MEDIA_INTERVAL
               value: "${TE_UDP_MEDIA_INTERVAL:-60}"
+            - name: TE_UDP_MEDIA_ALERTS_ENABLED
+              value: "${TE_UDP_MEDIA_ALERTS_ENABLED:-}"
             - name: TE_A2A_PORT
               value: "${TE_A2A_PORT:-5004}"
             - name: TE_A2A_THROUGHPUT_MEASUREMENTS
@@ -250,6 +260,8 @@ spec:
               value: "${TE_RTP_STREAM_TEST_NAME:-RTP-Stream-Proxy}"
             - name: TE_RTP_STREAM_INTERVAL
               value: "${TE_RTP_STREAM_INTERVAL:-60}"
+            - name: TE_RTP_STREAM_ALERTS_ENABLED
+              value: "${TE_RTP_STREAM_ALERTS_ENABLED:-}"
             - name: TE_VOICE_PORT
               value: "${TE_VOICE_PORT:-49152}"
             - name: TE_VOICE_CODEC_ID
