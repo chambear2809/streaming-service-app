@@ -281,7 +281,7 @@ The full set lives in [`example.env`](example.env). The variables below are the 
 - `SPLUNK_VALIDATION_TOKEN` is only needed when the dashboard-write token cannot read SignalFlow metric data
 - `STREAMING_K8S_NAMESPACE` keeps dashboard CPU and infra charts aligned with the deployed namespace
 - `STREAMING_PUBLIC_RTSP_URL` overrides the public RTSP URL baked into static frontend builds when you are not letting the deploy script discover it automatically
-- `DEMO_AUTH_PASSWORD` pins the demo login password instead of letting the canonical deploy generate one
+- `DEMO_AUTH_PASSWORD` pins the demo login password; when omitted or blank the canonical deploy now defaults it to `password123`
 - `DEMO_AUTH_SECRET` pins the user-service demo signing secret instead of letting the canonical deploy generate one
 
 ### PostgreSQL DB Monitoring

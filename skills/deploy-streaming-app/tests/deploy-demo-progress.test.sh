@@ -118,6 +118,19 @@ YAML
   exit 0
 fi
 
+if [[ "${1-}" == "get" && "${2-}" == "secret" && "${4-}" == "-o" ]]; then
+  case "${5-}" in
+    jsonpath={.data.DEMO_AUTH_SECRET})
+      printf 'ZGVtby1zZWNyZXQ=\n'
+      exit 0
+      ;;
+    jsonpath={.data.DEMO_AUTH_PASSWORD})
+      printf 'ZGVtby1wYXNzd29yZA==\n'
+      exit 0
+      ;;
+  esac
+fi
+
 if [[ "${1-}" == "apply" ]]; then
   cat >/dev/null
   exit 0
@@ -274,6 +287,7 @@ run_deploy() {
   local mode="$1"
   local output_file="$2"
   local temp_dir="$3"
+  local auth_password="${4-demo-password}"
   local stub_dir="${temp_dir}/bin"
 
   mkdir -p "${stub_dir}"
@@ -287,7 +301,7 @@ run_deploy() {
   env \
     PATH="${stub_dir}:${PATH}" \
     ENV_FILE="${temp_dir}/test.env" \
-    DEMO_AUTH_PASSWORD='demo-password' \
+    DEMO_AUTH_PASSWORD="${auth_password}" \
     DEMO_AUTH_SECRET='demo-secret' \
     DEPLOY_TEST_MODE="${mode}" \
     FRONTEND_SERVICE_TYPE='ClusterIP' \
@@ -337,7 +351,20 @@ test_progress_snapshot_surfaces_restart_reasons_without_metrics() {
   fi
 }
 
+test_default_demo_password_is_reported_when_blank() {
+  local temp_dir
+  local output
+
+  temp_dir="$(mktemp -d)"
+  trap 'rm -rf "${temp_dir}"' RETURN
+  run_deploy progress "${temp_dir}/output.log" "${temp_dir}" ""
+  output="$(cat "${temp_dir}/output.log")"
+
+  assert_contains "${output}" 'Demo login password (default): password123'
+}
+
 test_progress_snapshot_includes_media_details
 test_progress_snapshot_surfaces_restart_reasons_without_metrics
+test_default_demo_password_is_reported_when_blank
 
 printf 'PASS: deploy-demo progress snapshots\n'

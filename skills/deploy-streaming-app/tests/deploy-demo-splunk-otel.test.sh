@@ -127,6 +127,19 @@ YAML
   exit 0
 fi
 
+if [[ "${1-}" == "get" && "${2-}" == "secret" && "${4-}" == "-o" ]]; then
+  case "${5-}" in
+    jsonpath={.data.DEMO_AUTH_SECRET})
+      printf 'ZGVtby1zZWNyZXQ=\n'
+      exit 0
+      ;;
+    jsonpath={.data.DEMO_AUTH_PASSWORD})
+      printf 'ZGVtby1wYXNzd29yZA==\n'
+      exit 0
+      ;;
+  esac
+fi
+
 if [[ "${1-}" == "apply" ]]; then
   cat >/dev/null
   exit 0

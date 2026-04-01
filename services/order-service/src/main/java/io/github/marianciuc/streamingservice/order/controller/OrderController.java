@@ -54,7 +54,7 @@ public class OrderController {
     }
 
     @PutMapping("/{id}/status")
-    @PreAuthorize("hasAnyAuthority('ROLE_SERVICE')")
+    @PreAuthorize("hasAnyAuthority('CAP_BILLING_WRITE', 'ROLE_SERVICE')")
     public ResponseEntity<Void> updateOrderStatus(@PathVariable UUID id, @RequestBody Order order) {
         orderService.updateOrderStatus(id, order.getOrderStatus());
         return ResponseEntity.ok().build();

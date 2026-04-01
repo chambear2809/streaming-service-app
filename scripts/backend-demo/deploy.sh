@@ -52,6 +52,7 @@ load_env_file "${ENV_FILE}"
 NAMESPACE="${NAMESPACE:-streaming-service-app}"
 DEMO_AUTH_SECRET="${DEMO_AUTH_SECRET:-}"
 DEMO_AUTH_PASSWORD="${DEMO_AUTH_PASSWORD:-}"
+DEMO_AUTH_PASSWORD_DEFAULT="password123"
 TEMP_DIR="$(mktemp -d)"
 CONTENT_ARCHIVE_PATH="${TEMP_DIR}/content-service-source.tgz"
 MEDIA_ARCHIVE_PATH="${TEMP_DIR}/media-service-source.tgz"
@@ -70,6 +71,12 @@ trap cleanup EXIT
 
 apply_generated_resource() {
   kubectl apply --server-side -f -
+}
+
+secret_field_b64() {
+  local name="$1"
+  local key="$2"
+  kubectl -n "${NAMESPACE}" get secret "${name}" -o "jsonpath={.data.${key}}" 2>/dev/null || true
 }
 
 random_alnum() {
@@ -106,18 +113,23 @@ package_service_source() {
 }
 
 ensure_demo_auth_secret() {
-  if [[ -z "${DEMO_AUTH_SECRET}" ]]; then
+  if [[ -z "${DEMO_AUTH_SECRET//[[:space:]]/}" ]]; then
     DEMO_AUTH_SECRET="$(random_alnum 48)"
   fi
 
-  if [[ -z "${DEMO_AUTH_PASSWORD}" ]]; then
-    DEMO_AUTH_PASSWORD="$(random_alnum 20)"
+  if [[ -z "${DEMO_AUTH_PASSWORD//[[:space:]]/}" ]]; then
+    DEMO_AUTH_PASSWORD="${DEMO_AUTH_PASSWORD_DEFAULT}"
   fi
 
   kubectl -n "${NAMESPACE}" create secret generic "${DEMO_AUTH_SECRET_NAME}" \
     --from-literal=DEMO_AUTH_SECRET="${DEMO_AUTH_SECRET}" \
     --from-literal=DEMO_AUTH_PASSWORD="${DEMO_AUTH_PASSWORD}" \
     --dry-run=client -o yaml | apply_generated_resource
+
+  [[ -n "$(secret_field_b64 "${DEMO_AUTH_SECRET_NAME}" DEMO_AUTH_SECRET)" ]] \
+    || fail "deployed secret ${DEMO_AUTH_SECRET_NAME} is missing DEMO_AUTH_SECRET"
+  [[ -n "$(secret_field_b64 "${DEMO_AUTH_SECRET_NAME}" DEMO_AUTH_PASSWORD)" ]] \
+    || fail "deployed secret ${DEMO_AUTH_SECRET_NAME} is missing DEMO_AUTH_PASSWORD"
 }
 
 kubectl apply -f "${ROOT_DIR}/k8s/frontend/namespace.yaml"

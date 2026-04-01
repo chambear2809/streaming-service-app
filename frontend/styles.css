@@ -1,29 +1,43 @@
 :root {
-    --night-950: #07111a;
-    --night-900: #0d1b26;
+    --night-950: #041019;
+    --night-900: #091724;
+    --night-860: #102131;
     --night-850: #152735;
+    --night-820: #162b3e;
     --night-800: #203747;
-    --fog-100: #edf3f7;
-    --fog-200: #cbd8e2;
-    --fog-300: #8b9aa7;
+    --fog-100: #f4f7fb;
+    --fog-200: #d8e1ea;
+    --fog-300: #a0b2c2;
     --ember-500: #bf6b4e;
     --ember-400: #d58d74;
-    --gold-400: #d5b06b;
-    --teal-400: #5ba3a7;
-    --sky-400: #82a8d9;
+    --gold-400: #e6c17d;
+    --gold-300: #f1d69d;
+    --teal-400: #66b7b2;
+    --sky-400: #7fb1ff;
+    --sky-500: #4d91ff;
     --signal-green: #86d6bc;
     --signal-amber: #f0c776;
     --signal-red: #ef9c79;
     --code-font: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
-    --line: rgba(173, 196, 219, 0.16);
-    --panel: rgba(11, 23, 33, 0.82);
-    --panel-strong: rgba(12, 24, 34, 0.94);
-    --shadow-xl: 0 24px 72px rgba(0, 0, 0, 0.24);
-    --shadow-lg: 0 18px 38px rgba(0, 0, 0, 0.2);
-    --radius-xl: 18px;
-    --radius-lg: 14px;
-    --radius-md: 12px;
-    --radius-sm: 8px;
+    --line: rgba(164, 184, 206, 0.16);
+    --line-strong: rgba(164, 184, 206, 0.24);
+    --panel: linear-gradient(180deg, rgba(10, 20, 31, 0.94), rgba(8, 16, 25, 0.88));
+    --panel-strong: linear-gradient(180deg, rgba(9, 18, 29, 0.98), rgba(7, 14, 23, 0.94));
+    --panel-soft: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018));
+    --surface-raised: rgba(10, 21, 32, 0.72);
+    --shadow-xl: 0 28px 72px rgba(0, 0, 0, 0.34);
+    --shadow-lg: 0 14px 40px rgba(0, 0, 0, 0.26);
+    --shadow-md: 0 8px 26px rgba(0, 0, 0, 0.18);
+    --radius-xl: 24px;
+    --radius-lg: 18px;
+    --radius-md: 14px;
+    --radius-sm: 10px;
+    --motion-fast: 160ms;
+    --motion-mid: 260ms;
+    --motion-slow: 420ms;
+    --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+    --selection-nav: rgba(127, 177, 255, 0.28);
+    --selection-content: rgba(226, 191, 102, 0.54);
 }
 
 * {
@@ -62,6 +76,25 @@ body::before {
     opacity: 0.52;
 }
 
+.skip-link {
+    position: fixed;
+    top: -100%;
+    left: 16px;
+    z-index: 100;
+    padding: 12px 20px;
+    border-radius: var(--radius-md);
+    background: linear-gradient(135deg, var(--sky-400), var(--gold-300));
+    color: #06101a;
+    font-weight: 700;
+    text-decoration: none;
+    box-shadow: var(--shadow-lg);
+    transition: top var(--motion-fast, 160ms) ease;
+}
+
+.skip-link:focus {
+    top: 16px;
+}
+
 .app-shell {
     width: min(1360px, calc(100vw - 28px));
     margin: 0 auto;
@@ -90,6 +123,10 @@ body::before {
 
 .page-section[hidden] {
     display: none !important;
+}
+
+.page-section {
+    scroll-margin-top: 100px;
 }
 
 .topbar {
@@ -680,6 +717,10 @@ h3 {
     padding: 18px;
 }
 
+.channel-card[data-state] {
+    transition: box-shadow var(--motion-mid, 260ms) ease;
+}
+
 .channel-card[data-state="ready"] {
     box-shadow: inset 0 0 0 1px rgba(134, 214, 188, 0.14);
 }
@@ -803,6 +844,10 @@ h3 {
     display: grid;
     gap: 14px;
     align-content: start;
+}
+
+.service-card[data-state] {
+    transition: border-color var(--motion-mid, 260ms) ease;
 }
 
 .service-card[data-state="ready"] {
@@ -1020,7 +1065,7 @@ h3 {
 }
 
 .invoice-card.is-selected {
-    border-color: rgba(226, 191, 102, 0.54);
+    border-color: var(--selection-content);
     box-shadow: 0 0 0 1px rgba(226, 191, 102, 0.18), var(--shadow-lg);
 }
 
@@ -1595,7 +1640,7 @@ h3 {
 }
 
 .media-card.is-selected .media-art {
-    border-color: rgba(226, 191, 102, 0.56);
+    border-color: var(--selection-content);
     box-shadow: 0 0 0 1px rgba(226, 191, 102, 0.2), var(--shadow-lg);
 }
 
@@ -2057,38 +2102,6 @@ body.is-presentation-mode[data-page="billing"] .billing-workspace {
 
 /* UI refresh overrides */
 
-:root {
-    --night-950: #041019;
-    --night-900: #091724;
-    --night-860: #102131;
-    --night-820: #162b3e;
-    --fog-100: #f4f7fb;
-    --fog-200: #d8e1ea;
-    --fog-300: #93a5b7;
-    --sky-400: #7fb1ff;
-    --sky-500: #4d91ff;
-    --gold-400: #e6c17d;
-    --gold-300: #f1d69d;
-    --teal-400: #66b7b2;
-    --line: rgba(164, 184, 206, 0.16);
-    --line-strong: rgba(164, 184, 206, 0.24);
-    --panel: linear-gradient(180deg, rgba(10, 20, 31, 0.94), rgba(8, 16, 25, 0.88));
-    --panel-strong: linear-gradient(180deg, rgba(9, 18, 29, 0.98), rgba(7, 14, 23, 0.94));
-    --panel-soft: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018));
-    --surface-raised: rgba(10, 21, 32, 0.72);
-    --shadow-xl: 0 28px 72px rgba(0, 0, 0, 0.34);
-    --shadow-lg: 0 14px 40px rgba(0, 0, 0, 0.26);
-    --shadow-md: 0 8px 26px rgba(0, 0, 0, 0.18);
-    --radius-xl: 24px;
-    --radius-lg: 18px;
-    --radius-md: 14px;
-    --radius-sm: 10px;
-    --motion-fast: 160ms;
-    --motion-mid: 260ms;
-    --motion-slow: 420ms;
-    --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
-}
-
 html {
     scrollbar-color: rgba(147, 165, 183, 0.34) transparent;
 }
@@ -2257,7 +2270,7 @@ body::after {
 
 .nav a.is-active {
     color: var(--fog-100);
-    border-color: rgba(127, 177, 255, 0.28);
+    border-color: var(--selection-nav);
     background: linear-gradient(180deg, rgba(127, 177, 255, 0.18), rgba(127, 177, 255, 0.08));
 }
 
@@ -2297,6 +2310,11 @@ body::after {
 .button:hover {
     transform: translateY(-1px);
     box-shadow: var(--shadow-md);
+}
+
+.button:active {
+    transform: translateY(0);
+    box-shadow: none;
 }
 
 .button-solid,
@@ -2523,6 +2541,17 @@ body::after {
 .surface-disclosure:hover {
     transform: translateY(-2px);
     border-color: rgba(127, 177, 255, 0.24);
+}
+
+.invoice-card:focus-visible,
+.compact-item:focus-visible,
+.channel-card:focus-visible,
+.service-card:focus-visible,
+.chip-row button:focus-visible,
+.media-button:focus-visible,
+.nav a:focus-visible {
+    outline: 2px solid rgba(127, 177, 255, 0.5);
+    outline-offset: 2px;
 }
 
 .library-layout {
@@ -3039,6 +3068,15 @@ body::after {
     .invoice-summary-grid,
     .line-item {
         grid-template-columns: 1fr;
+    }
+
+    .footer {
+        flex-direction: column;
+    }
+
+    .chip-row button {
+        min-height: 36px;
+        padding: 0 14px;
     }
 
     .surface-disclosure-summary {

@@ -4,13 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Acme Broadcasting Operations Suite</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'><stop offset='0%25' stop-color='%237fb1ff'/><stop offset='100%25' stop-color='%23e6c17d'/></linearGradient></defs><rect width='12' height='32' x='10' rx='4' fill='url(%23g)'/></svg>">
     <link rel="stylesheet" href="./styles.css">
     <script src="./config.js"></script>
     <script type="module" src="./splunk-instrumentation.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js"
+            integrity="sha384-V5ruNBgmYcC3SJRUQeNykAAAgde5gOFq/Hu0CZj7bygDP0yRIhkvX8+w0u/7mRvr"
+            crossorigin="anonymous"></script>
     <script type="module" src="./app.js"></script>
 </head>
 <body>
+<a class="skip-link" href="#home">Skip to content</a>
 <div class="app-shell">
     <header class="topbar">
         <a class="brand" href="#home">
@@ -137,7 +141,7 @@
                     </div>
                 </section>
 
-                <p class="auth-message auth-launch-message" id="launch-message"></p>
+                <p class="auth-message auth-launch-message" id="launch-message" role="alert" aria-live="polite"></p>
 
                 <form class="auth-form" id="auth-form">
                     <div class="auth-form-heading">
@@ -148,16 +152,16 @@
 
                     <label>
                         Company email
-                        <input id="auth-email" type="email" placeholder="name@acmebroadcasting.com" autocomplete="email">
+                        <input id="auth-email" type="email" placeholder="name@acmebroadcasting.com" autocomplete="email" required>
                     </label>
 
                     <label>
                         Password
-                        <input id="auth-password" type="password" placeholder="Enter your password" autocomplete="current-password">
+                        <input id="auth-password" type="password" placeholder="Enter your password" autocomplete="current-password" required>
                     </label>
 
                     <button class="button button-solid" type="submit">Sign in</button>
-                    <p class="auth-message" id="auth-message"></p>
+                    <p class="auth-message" id="auth-message" role="alert" aria-live="assertive"></p>
                 </form>
             </div>
         </div>
@@ -278,7 +282,7 @@
                         <h3>Playback state</h3>
                         <span class="status-pill status-pill-ready" id="player-status-badge">Ready</span>
                     </header>
-                    <p id="player-status-text"></p>
+                    <p id="player-status-text" aria-live="polite"></p>
                 </div>
 
                 <div class="progress-card">
@@ -501,7 +505,7 @@
                                     <button class="button button-ghost" id="rtsp-refresh" type="button">Refresh register</button>
                                 </div>
 
-                                <p class="auth-message" id="rtsp-form-message"></p>
+                                <p class="auth-message" id="rtsp-form-message" role="alert" aria-live="polite"></p>
                             </form>
                         </section>
 
@@ -577,7 +581,7 @@
                                 <button class="button button-ghost" id="ad-issue-clear" type="button">Clear override</button>
                             </div>
 
-                            <p class="auth-message" id="ad-issue-message"></p>
+                            <p class="auth-message" id="ad-issue-message" role="alert" aria-live="polite"></p>
                         </form>
                     </section>
                 </div>
@@ -765,7 +769,7 @@
                                     <button class="button button-ghost" id="demo-monkey-unlock" type="button" data-launch-persona="operator" data-launch-page="operations" hidden>Unlock as operator</button>
                                 </div>
 
-                                <p class="auth-message" id="demo-monkey-message"></p>
+                                <p class="auth-message" id="demo-monkey-message" role="alert" aria-live="polite"></p>
                             </form>
                         </div>
                     </section>
@@ -944,7 +948,7 @@
                                         <button class="button button-solid" id="billing-create-submit" type="submit">Record event</button>
                                     </div>
 
-                                    <p class="auth-message" id="billing-form-message"></p>
+                                    <p class="auth-message" id="billing-form-message" role="alert" aria-live="polite"></p>
                                 </form>
                             </div>
                         </div>
@@ -1241,7 +1245,7 @@
                                 </div>
 
                                 <div class="billing-detail" id="commerce-detail"></div>
-                                <p class="auth-message" id="commerce-message"></p>
+                                <p class="auth-message" id="commerce-message" role="alert" aria-live="polite"></p>
                             </div>
                         </div>
                     </details>

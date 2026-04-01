@@ -89,6 +89,20 @@ class OrderControllerSecurityTest {
     }
 
     @Test
+    void updateOrderStatusAllowsBillingWriteCapability() throws Exception {
+        mockMvc.perform(put("/api/v1/orders/{id}/status", UUID.randomUUID())
+                        .header(AUTH_HEADER, "test-secret")
+                        .header(AUTHORITIES_HEADER, "CAP_BILLING_WRITE")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "orderStatus": "PAID"
+                                }
+                                """))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void updateOrderStatusAllowsTrustedServiceRequests() throws Exception {
         mockMvc.perform(put("/api/v1/orders/{id}/status", UUID.randomUUID())
                         .header(AUTH_HEADER, "test-secret")

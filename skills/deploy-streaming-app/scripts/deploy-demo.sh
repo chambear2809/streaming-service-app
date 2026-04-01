@@ -30,6 +30,7 @@ SPLUNK_OTEL_HELPER_SCRIPT="${SPLUNK_OTEL_HELPER_SCRIPT-}"
 DEMO_AUTH_SECRET="${DEMO_AUTH_SECRET-}"
 DEMO_AUTH_PASSWORD="${DEMO_AUTH_PASSWORD-}"
 DEMO_AUTH_SECRET_NAME="streaming-demo-auth"
+DEMO_AUTH_PASSWORD_DEFAULT="password123"
 DEMO_AUTH_PASSWORD_SOURCE="provided"
 TEMP_DIR=""
 RENDERED_NAMESPACE=""
@@ -353,6 +354,12 @@ create_or_update_secret() {
   "${KUBECLI}" -n "${NAMESPACE}" create secret generic "${name}" "$@" --dry-run=client -o yaml | "${KUBECLI}" apply --server-side -f -
 }
 
+secret_field_b64() {
+  local name="$1"
+  local key="$2"
+  "${KUBECLI}" -n "${NAMESPACE}" get secret "${name}" -o "jsonpath={.data.${key}}" 2>/dev/null || true
+}
+
 ensure_splunk_otel_collector() {
   local -a helper_args
 
@@ -425,18 +432,23 @@ package_service_source() {
 }
 
 ensure_demo_auth_secret() {
-  if [[ -z "${DEMO_AUTH_SECRET}" ]]; then
+  if [[ -z "${DEMO_AUTH_SECRET//[[:space:]]/}" ]]; then
     DEMO_AUTH_SECRET="$(random_alnum 48)"
   fi
 
-  if [[ -z "${DEMO_AUTH_PASSWORD}" ]]; then
-    DEMO_AUTH_PASSWORD="$(random_alnum 20)"
-    DEMO_AUTH_PASSWORD_SOURCE="generated"
+  if [[ -z "${DEMO_AUTH_PASSWORD//[[:space:]]/}" ]]; then
+    DEMO_AUTH_PASSWORD="${DEMO_AUTH_PASSWORD_DEFAULT}"
+    DEMO_AUTH_PASSWORD_SOURCE="default"
   fi
 
   create_or_update_secret "${DEMO_AUTH_SECRET_NAME}" \
     --from-literal=DEMO_AUTH_SECRET="${DEMO_AUTH_SECRET}" \
     --from-literal=DEMO_AUTH_PASSWORD="${DEMO_AUTH_PASSWORD}"
+
+  [[ -n "$(secret_field_b64 "${DEMO_AUTH_SECRET_NAME}" DEMO_AUTH_SECRET)" ]] \
+    || fail "deployed secret ${DEMO_AUTH_SECRET_NAME} is missing DEMO_AUTH_SECRET"
+  [[ -n "$(secret_field_b64 "${DEMO_AUTH_SECRET_NAME}" DEMO_AUTH_PASSWORD)" ]] \
+    || fail "deployed secret ${DEMO_AUTH_SECRET_NAME} is missing DEMO_AUTH_PASSWORD"
 }
 
 restart_and_wait() {
