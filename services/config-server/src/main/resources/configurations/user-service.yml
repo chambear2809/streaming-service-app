@@ -18,6 +18,8 @@ spring:
     password: ${spring.datasource.password}
   kafka:
     bootstrap-servers: localhost:9092
+    template:
+      observation-enabled: true
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
@@ -31,6 +33,11 @@ spring:
         spring.json.trusted.packages: "io.github.marianciuc.streamingservice.users.dto"
 server:
   port: 8050
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
 jwt:
   private-key: ${USER_SERVICE_JWT_PRIVATE_KEY}
   public-key: ${USER_SERVICE_JWT_PUBLIC_KEY}

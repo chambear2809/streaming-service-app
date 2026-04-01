@@ -48,7 +48,7 @@ APM services to look for:
 5. In ThousandEyes, confirm the playback and trace-map HTTP tests are reporting.
 6. In Splunk, confirm the numbered demo dashboard group exists and traces are arriving for `streaming-frontend` and `media-service-demo`.
 
-If ThousandEyes tests or dashboards are missing, use `docs/thousandeyes-rtsp-api.md` and `docs/distributed-tracing.md` before the booth cycle starts.
+If ThousandEyes tests or dashboards are missing, use `docs/06-thousandeyes-rtsp-api.md` and `docs/03-distributed-tracing.md` before the booth cycle starts.
 
 ## Warm The Environment
 

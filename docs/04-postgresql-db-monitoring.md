@@ -1,4 +1,4 @@
-# PostgreSQL DB Monitoring
+# 04. PostgreSQL DB Monitoring
 
 This repo's canonical cluster demo deploys PostgreSQL as the `streaming-postgres` service. The existing Java and Node.js auto-instrumentation in this repo covers APM and RUM, but it does not add PostgreSQL infrastructure or query-level database monitoring by itself. Configure the Splunk OpenTelemetry Collector separately when you want PostgreSQL DB monitoring in Splunk Observability Cloud.
 

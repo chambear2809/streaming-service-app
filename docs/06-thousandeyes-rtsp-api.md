@@ -1,4 +1,4 @@
-# ThousandEyes Test API Setup
+# 06. ThousandEyes Test API Setup
 
 This repo includes [`scripts/thousandeyes/create-rtsp-tests.sh`](/Users/alecchamberlain/Documents/GitHub/streaming-service-app/scripts/thousandeyes/create-rtsp-tests.sh) to create the ThousandEyes tests used by this demo, [`scripts/thousandeyes/sync-demo-alert-rules.py`](/Users/alecchamberlain/Documents/GitHub/streaming-service-app/scripts/thousandeyes/sync-demo-alert-rules.py) to create or update repo-managed alert rules for all five demo tests and explicitly assign them to the repo-managed test IDs, and [`scripts/thousandeyes/create-demo-dashboards.py`](/Users/alecchamberlain/Documents/GitHub/streaming-service-app/scripts/thousandeyes/create-demo-dashboards.py) to sync the matching Splunk demo dashboards.
 

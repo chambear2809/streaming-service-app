@@ -4,6 +4,7 @@ import io.github.marianciuc.streamingservice.subscription.entity.SubscriptionSta
 import io.github.marianciuc.streamingservice.subscription.entity.UserSubscriptions;
 import io.github.marianciuc.streamingservice.subscription.service.impl.UserSubscriptionServiceImpl;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.quartz.Job;
 import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
@@ -16,6 +17,7 @@ import java.util.List;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class FetchActiveSubscriptionsJob implements Job {
 
     private final UserSubscriptionServiceImpl service;
@@ -23,14 +25,38 @@ public class FetchActiveSubscriptionsJob implements Job {
     @Override
     public void execute(JobExecutionContext jobExecutionContext) throws JobExecutionException {
         LocalDate now = LocalDate.now();
-        List<UserSubscriptions> cancelledSubscriptions = service.getAllUserSubscriptionsByStatusAndEndDate(SubscriptionStatus.ACTIVE, now);
+        JobExecutionException failure = null;
 
-        for (UserSubscriptions subscription : cancelledSubscriptions) {
+        List<UserSubscriptions> renewalsReadyToFinalize = service.getRenewalsReadyToFinalize();
+        for (UserSubscriptions subscription : renewalsReadyToFinalize) {
             try {
                 service.extendSubscription(subscription);
-            } catch (IOException | OperationNotSupportedException e) {
-                throw new RuntimeException(e);
+            } catch (IOException | OperationNotSupportedException | RuntimeException exception) {
+                log.error("Failed to finalize renewal for subscription {}", subscription.getId(), exception);
+                if (failure == null) {
+                    failure = new JobExecutionException("Failed to extend one or more subscriptions", exception);
+                } else {
+                    failure.addSuppressed(exception);
+                }
             }
+        }
+
+        List<UserSubscriptions> activeSubscriptions = service.getAllUserSubscriptionsByStatusEndingOnOrBefore(SubscriptionStatus.ACTIVE, now);
+        for (UserSubscriptions subscription : activeSubscriptions) {
+            try {
+                service.extendSubscription(subscription);
+            } catch (IOException | OperationNotSupportedException | RuntimeException exception) {
+                log.error("Failed to extend subscription {}", subscription.getId(), exception);
+                if (failure == null) {
+                    failure = new JobExecutionException("Failed to extend one or more subscriptions", exception);
+                } else {
+                    failure.addSuppressed(exception);
+                }
+            }
+        }
+
+        if (failure != null) {
+            throw failure;
         }
     }
 }

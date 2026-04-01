@@ -1,4 +1,4 @@
-# Splunk OTel Collector Bootstrap
+# 02. Splunk OTel Collector Bootstrap
 
 This repo's Kubernetes manifests already assume a Splunk OpenTelemetry Operator and `Instrumentation` object exist at `otel-splunk/splunk-otel-collector`.
 
@@ -92,7 +92,7 @@ This bootstrap flow installs or verifies the base collector only. PostgreSQL Dat
 
 - Start with the base collector bootstrap described here.
 - Then layer [`k8s/otel-splunk/postgresql-dbmon.values.yaml`](../k8s/otel-splunk/postgresql-dbmon.values.yaml) onto the same Helm release.
-- Follow [`docs/postgresql-db-monitoring.md`](postgresql-db-monitoring.md) for the DBMON-specific secret, endpoint, and validation steps.
+- Follow [`docs/04-postgresql-db-monitoring.md`](04-postgresql-db-monitoring.md) for the DBMON-specific secret, endpoint, and validation steps.
 
 ## Operational Notes
 

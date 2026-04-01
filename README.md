@@ -136,7 +136,7 @@ Diagram notes:
 
 ## Start Here
 
-If your immediate goal is to get the demo running in Kubernetes, start with the walkthrough in [`docs/kubernetes-deployment-learning-guide.md`](docs/kubernetes-deployment-learning-guide.md). It is the most explanatory operator-facing guide in this repo for the canonical cluster deployment path.
+If your immediate goal is to get the demo running in Kubernetes, start with the walkthrough in [`docs/01-kubernetes-deployment-learning-guide.md`](docs/01-kubernetes-deployment-learning-guide.md). It is the most explanatory operator-facing guide in this repo for the canonical cluster deployment path.
 
 Create a repo-root `.env` first:
 
@@ -224,7 +224,7 @@ Use `--platform openshift` when you want the frontend exposed through an OpenShi
 
 This namespace-safe deploy flow is the current full-demo entry point. It renders manifests at apply time instead of forcing you to edit checked-in YAML just to change namespaces.
 
-For a step-by-step Kubernetes learning path around this command, including rollout interpretation, access methods, smoke checks, and common failure modes, read [`docs/kubernetes-deployment-learning-guide.md`](docs/kubernetes-deployment-learning-guide.md).
+For a step-by-step Kubernetes learning path around this command, including rollout interpretation, access methods, smoke checks, and common failure modes, read [`docs/01-kubernetes-deployment-learning-guide.md`](docs/01-kubernetes-deployment-learning-guide.md).
 
 The current demo manifests still compile the Java services inside the cluster.
 That means the cluster needs outbound access to Maven repositories, or an
@@ -316,13 +316,16 @@ Choose the ThousandEyes target mode explicitly before deriving URLs:
 
 ## Observability And Synthetic Tests
 
-The main docs are:
+The ordered guide list lives in [`docs/README.md`](docs/README.md). Read the main docs in this sequence:
 
-- [`docs/kubernetes-deployment-learning-guide.md`](docs/kubernetes-deployment-learning-guide.md)
-- [`docs/splunk-otel-collector-bootstrap.md`](docs/splunk-otel-collector-bootstrap.md)
-- [`docs/distributed-tracing.md`](docs/distributed-tracing.md)
-- [`docs/postgresql-db-monitoring.md`](docs/postgresql-db-monitoring.md)
-- [`docs/thousandeyes-rtsp-api.md`](docs/thousandeyes-rtsp-api.md)
+- [`docs/01-kubernetes-deployment-learning-guide.md`](docs/01-kubernetes-deployment-learning-guide.md)
+- [`docs/02-splunk-otel-collector-bootstrap.md`](docs/02-splunk-otel-collector-bootstrap.md)
+- [`docs/03-distributed-tracing.md`](docs/03-distributed-tracing.md)
+- [`docs/04-postgresql-db-monitoring.md`](docs/04-postgresql-db-monitoring.md)
+- [`docs/05-kafka-observability.md`](docs/05-kafka-observability.md)
+- [`docs/06-thousandeyes-rtsp-api.md`](docs/06-thousandeyes-rtsp-api.md)
+- [`docs/07-broadcast-loadgen.md`](docs/07-broadcast-loadgen.md)
+- [`docs/08-operator-billing-loadgen.md`](docs/08-operator-billing-loadgen.md)
 
 The checked-in collector override for PostgreSQL DB monitoring lives at:
 
@@ -366,7 +369,7 @@ python3 scripts/thousandeyes/create-demo-dashboards.py
 
 - Script: [`scripts/loadgen/broadcast-loadgen.mjs`](scripts/loadgen/broadcast-loadgen.mjs)
 - Kubernetes wrapper: [`scripts/loadgen/deploy-k8s-broadcast-loadgen.sh`](scripts/loadgen/deploy-k8s-broadcast-loadgen.sh)
-- Docs: [`docs/broadcast-loadgen.md`](docs/broadcast-loadgen.md)
+- Docs: [`docs/07-broadcast-loadgen.md`](docs/07-broadcast-loadgen.md)
 
 This workload targets the public broadcast page, status API, HLS manifests, segments, and optional trace-map pivots. It supports one-shot `Job` mode and recurring `CronJob` mode in Kubernetes.
 
@@ -374,7 +377,7 @@ This workload targets the public broadcast page, status API, HLS manifests, segm
 
 - Script: [`scripts/loadgen/operator-billing-loadgen.mjs`](scripts/loadgen/operator-billing-loadgen.mjs)
 - Kubernetes wrapper: [`scripts/loadgen/deploy-k8s-operator-billing-loadgen.sh`](scripts/loadgen/deploy-k8s-operator-billing-loadgen.sh)
-- Docs: [`docs/operator-billing-loadgen.md`](docs/operator-billing-loadgen.md)
+- Docs: [`docs/08-operator-billing-loadgen.md`](docs/08-operator-billing-loadgen.md)
 
 This workload expects the broader protected service set to be reachable through the frontend, including `customer-service`, `payment-service`, `subscription-service`, and `order-service`.
 

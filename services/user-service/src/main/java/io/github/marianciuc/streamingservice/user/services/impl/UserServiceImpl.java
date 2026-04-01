@@ -19,15 +19,16 @@ import io.github.marianciuc.streamingservice.user.enums.Role;
 import io.github.marianciuc.streamingservice.user.exceptions.IllegalArgumentException;
 import io.github.marianciuc.streamingservice.user.exceptions.NotFoundException;
 import io.github.marianciuc.streamingservice.user.exceptions.SecurityBadCredentialsException;
-import io.github.marianciuc.streamingservice.user.kafka.KafkaUserProducer;
 import io.github.marianciuc.streamingservice.user.repositories.UserRepository;
 import io.github.marianciuc.streamingservice.user.security.utils.SecurityUtils;
 import io.github.marianciuc.streamingservice.user.services.UserService;
+import io.github.marianciuc.streamingservice.user.outbox.UserOutboxService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
@@ -45,8 +46,9 @@ public class UserServiceImpl implements UserService {
 
     private final UserRepository repository;
     private final PasswordEncoder passwordEncoder;
-    private final KafkaUserProducer kafkaUserProducer;
+    private final UserOutboxService userOutboxService;
 
+    @Transactional
     public void createUser(RegistrationRequest request) {
         if (repository.existsByEmailOrUsername(request.email(), request.username())) {
             throw new IllegalArgumentException("User with this email or username already exists");
@@ -60,7 +62,7 @@ public class UserServiceImpl implements UserService {
                 .role(request.role())
                 .build();
         User newUser = repository.save(user);
-        kafkaUserProducer.sendUserCreatedMessage(new CreateUserMessage(newUser.getId(), newUser.getEmail(), newUser.getUsername()));
+        userOutboxService.enqueueUserCreated(new CreateUserMessage(newUser.getId(), newUser.getEmail(), newUser.getUsername()));
     }
 
     public void banUser(UUID userId) {

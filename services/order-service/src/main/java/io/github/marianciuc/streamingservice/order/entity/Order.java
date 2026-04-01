@@ -79,4 +79,10 @@ public class Order {
      */
     @Column(name = "scheduled_time")
     private LocalDate scheduledTime;
+
+    /**
+     * Date and time when the subscription activation triggered by this order was confirmed.
+     */
+    @Column(name = "subscription_activated_at")
+    private LocalDateTime subscriptionActivatedAt;
 }

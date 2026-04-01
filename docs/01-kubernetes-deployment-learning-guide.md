@@ -1,4 +1,4 @@
-# Kubernetes Deployment Learning Guide
+# 01. Kubernetes Deployment Learning Guide
 
 This guide is for someone who already has `kubectl` access to a Kubernetes cluster and wants to get the canonical `streaming-service-app` demo deployed from this repo.
 
@@ -408,7 +408,7 @@ Use these follow-on docs:
 
 ### PostgreSQL DB Monitoring
 
-Read [`docs/postgresql-db-monitoring.md`](postgresql-db-monitoring.md).
+Read [`docs/04-postgresql-db-monitoring.md`](04-postgresql-db-monitoring.md).
 
 Use this when the base app is already deployed and you want Splunk Observability Cloud to collect PostgreSQL infrastructure metrics, query samples, and top-query events from `streaming-postgres`.
 
@@ -416,13 +416,13 @@ This is a follow-on OpenTelemetry Collector change. It is not part of the base a
 
 ### Distributed Tracing And Browser Telemetry
 
-Read [`docs/distributed-tracing.md`](distributed-tracing.md).
+Read [`docs/03-distributed-tracing.md`](03-distributed-tracing.md).
 
 Use this when you want to understand how the repo wires Java, Node.js, and browser telemetry into Splunk Observability Cloud.
 
 ### ThousandEyes Test Setup
 
-Read [`docs/thousandeyes-rtsp-api.md`](thousandeyes-rtsp-api.md).
+Read [`docs/06-thousandeyes-rtsp-api.md`](06-thousandeyes-rtsp-api.md).
 
 Use this when the app is already reachable and you want to create the demo's RTSP, UDP, RTP, and HTTP synthetic tests.
 
@@ -448,7 +448,7 @@ For a first pass, start with the Kubernetes wrapper and the HTTP tests before yo
 
 ### Splunk Dashboard Sync
 
-After ThousandEyes tests are live, use the dashboard sync guidance and script described in [`docs/thousandeyes-rtsp-api.md`](thousandeyes-rtsp-api.md).
+After ThousandEyes tests are live, use the dashboard sync guidance and script described in [`docs/06-thousandeyes-rtsp-api.md`](06-thousandeyes-rtsp-api.md).
 
 That is the path for creating the matching Splunk demo dashboards once the tests already exist.
 

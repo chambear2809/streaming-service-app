@@ -1,4 +1,4 @@
-# Distributed Tracing
+# 03. Distributed Tracing
 
 This repo's Kubernetes demo services use the Splunk OpenTelemetry Operator Java auto-instrumentation path:
 
@@ -7,9 +7,9 @@ This repo's Kubernetes demo services use the Splunk OpenTelemetry Operator Java 
 - `k8s/backend-demo/user-service.yaml`
 - `k8s/backend-demo/billing-service.yaml`
 
-For PostgreSQL database monitoring of `streaming-postgres`, use the separate guide in [`docs/postgresql-db-monitoring.md`](postgresql-db-monitoring.md). Database monitoring is a collector configuration change, not part of the app-side Java or Node.js auto-instrumentation described here.
+For PostgreSQL database monitoring of `streaming-postgres`, use the separate guide in [`docs/04-postgresql-db-monitoring.md`](04-postgresql-db-monitoring.md). Database monitoring is a collector configuration change, not part of the app-side Java or Node.js auto-instrumentation described here.
 
-If the cluster does not already have the repo-compatible collector install, bootstrap it first with [`docs/splunk-otel-collector-bootstrap.md`](splunk-otel-collector-bootstrap.md) or run the canonical deploy flow with `--splunk-otel-mode install-if-missing`.
+If the cluster does not already have the repo-compatible collector install, bootstrap it first with [`docs/02-splunk-otel-collector-bootstrap.md`](02-splunk-otel-collector-bootstrap.md) or run the canonical deploy flow with `--splunk-otel-mode install-if-missing`.
 
 ## Runtime Requirements
 

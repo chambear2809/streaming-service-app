@@ -10,13 +10,13 @@ import io.github.marianciuc.streamingservice.media.services.RtspIngestService;
 import io.github.marianciuc.streamingservice.media.services.VideoProcessingService;
 import io.github.marianciuc.streamingservice.media.services.VideoService;
 import io.github.marianciuc.streamingservice.media.services.VideoStorageService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.bytedeco.ffmpeg.global.avcodec;
 import org.bytedeco.ffmpeg.global.avutil;
 import org.bytedeco.javacv.FFmpegFrameGrabber;
 import org.bytedeco.javacv.FFmpegFrameRecorder;
 import org.bytedeco.javacv.Frame;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.InputStream;
@@ -33,7 +33,6 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class RtspIngestServiceImpl implements RtspIngestService {
 
@@ -44,9 +43,29 @@ public class RtspIngestServiceImpl implements RtspIngestService {
     private final VideoService videoService;
     private final VideoStorageService videoStorageService;
     private final VideoProcessingService videoProcessingService;
-
     private final Map<UUID, CompletableFuture<Void>> activeIngests = new ConcurrentHashMap<>();
-    private final ExecutorService executor = Executors.newCachedThreadPool(new RtspThreadFactory());
+    private final ExecutorService executor;
+
+    @Autowired
+    public RtspIngestServiceImpl(
+            VideoService videoService,
+            VideoStorageService videoStorageService,
+            VideoProcessingService videoProcessingService
+    ) {
+        this(videoService, videoStorageService, videoProcessingService, Executors.newCachedThreadPool(new RtspThreadFactory()));
+    }
+
+    RtspIngestServiceImpl(
+            VideoService videoService,
+            VideoStorageService videoStorageService,
+            VideoProcessingService videoProcessingService,
+            ExecutorService executor
+    ) {
+        this.videoService = videoService;
+        this.videoStorageService = videoStorageService;
+        this.videoProcessingService = videoProcessingService;
+        this.executor = executor;
+    }
 
     @Override
     public RtspIngestStatusDto startIngest(RtspIngestRequestDto request) {
@@ -59,11 +78,25 @@ public class RtspIngestServiceImpl implements RtspIngestService {
                 false
         );
 
-        CompletableFuture<Void> ingestTask = CompletableFuture
-                .runAsync(() -> ingestRtspSource(video.id(), request), executor)
-                .whenComplete((unused, throwable) -> activeIngests.remove(video.id()));
-
+        CompletableFuture<Void> ingestTask = new CompletableFuture<>();
         activeIngests.put(video.id(), ingestTask);
+
+        try {
+            executor.execute(() -> {
+                try {
+                    ingestRtspSource(video.id(), request);
+                    ingestTask.complete(null);
+                } catch (Throwable throwable) {
+                    ingestTask.completeExceptionally(throwable);
+                } finally {
+                    activeIngests.remove(video.id(), ingestTask);
+                }
+            });
+        } catch (RuntimeException exception) {
+            activeIngests.remove(video.id(), ingestTask);
+            ingestTask.completeExceptionally(exception);
+            throw exception;
+        }
 
         return RtspIngestStatusDto.fromVideo(video, true);
     }
@@ -74,7 +107,7 @@ public class RtspIngestServiceImpl implements RtspIngestService {
         return RtspIngestStatusDto.fromVideo(video, activeIngests.containsKey(videoId));
     }
 
-    private void ingestRtspSource(UUID videoId, RtspIngestRequestDto request) {
+    void ingestRtspSource(UUID videoId, RtspIngestRequestDto request) {
         Path tempFile = null;
         try {
             videoService.updateVideoStatus(videoId, VideoStatues.PREPARING);

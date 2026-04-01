@@ -46,7 +46,7 @@ Use this skill when the task is to deploy this repository's demo stack into a Ku
    - If RTSP is not externally exposed, say that explicitly instead of leaving the old demo URL implied.
 
 6. When the user wants PostgreSQL DB monitoring in Splunk Observability Cloud, treat it as a follow-on collector change instead of part of the base collector bootstrap.
-   - Read `docs/postgresql-db-monitoring.md`.
+   - Read `docs/04-postgresql-db-monitoring.md`.
    - Use `k8s/otel-splunk/postgresql-dbmon.values.yaml` as the repo's checked-in override fragment for the collector Helm release.
    - Ask explicitly whether the user wants PostgreSQL DB monitoring configured.
    - Ask explicitly whether the user also wants PostgreSQL server logs forwarded to Splunk Platform, whether Splunk Cloud Platform or Splunk Enterprise.
@@ -65,7 +65,7 @@ Use this skill when the task is to deploy this repository's demo stack into a Ku
    - For repo live validation, use `skills/deploy-streaming-app/tests/postgresql-db-monitoring-live-smoke.test.sh` and override `POSTGRES_ENDPOINT` when the PostgreSQL service FQDN differs from the repo default.
 
 7. When the user wants ThousandEyes coverage, set up and validate the ThousandEyes inputs before creating tests.
-   - Read `docs/thousandeyes-rtsp-api.md` for the supported test model and the repo scripts.
+   - Read `docs/06-thousandeyes-rtsp-api.md` for the supported test model and the repo scripts.
    - Ensure the repo-root `.env` exists. If it does not, create it from `example.env`.
    - Ask whether the ThousandEyes tests should target `local` cluster-private endpoints or `external` public endpoints. Make the choice explicit before you create or update any tests.
    - For `local` mode, prefer the in-cluster or private-service addresses that Enterprise Agents on the same network can reach, such as `streaming-frontend.<namespace>.svc.cluster.local` and the cluster-reachable RTSP endpoint.

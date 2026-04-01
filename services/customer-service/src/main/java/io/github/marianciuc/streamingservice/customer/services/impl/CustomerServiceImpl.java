@@ -19,6 +19,10 @@ import io.github.marianciuc.streamingservice.customer.services.CustomerService;
 import io.github.marianciuc.streamingservice.customer.services.EmailVerificationService;
 import io.github.marianciuc.streamingservice.customer.security.services.UserService;
 import io.github.marianciuc.streamingservice.customer.specifications.CustomerSpecification;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -53,25 +57,56 @@ public class CustomerServiceImpl implements CustomerService {
     private final CustomerRepository repository;
     private final EmailVerificationService emailVerificationService;
     private final UserService userService;
+    private final MeterRegistry meterRegistry;
+    private final ObservationRegistry observationRegistry;
 
     @Override
     public void createCustomer(CreateUserMessage message) {
-        Customer newCustomer = Customer.builder()
-                .id(message.id())
-                .email(message.email())
-                .theme(Defaults.THEME)
-                .preferredLanguage(Defaults.LANGUAGE)
-                .profilePicture("")
-                .country("")
-                .birthDate(LocalDate.now())
-                .profileIsCompleted(Defaults.PROFILE_IS_COMPLETED)
-                .isEmailVerified(Defaults.EMAIL_VERIFIED)
-                .receiveNewsletter(Defaults.RECEIVE_NEWSLETTER)
-                .enableNotifications(Defaults.ENABLE_NOTIFICATIONS)
-                .username(message.username())
-                .build();
-        log.info("Creating new customer {}", newCustomer);
-        this.repository.save(newCustomer);
+        Observation observation = Observation.createNotStarted("customer.provisioning", observationRegistry)
+                .contextualName("provision customer from user-created event")
+                .lowCardinalityKeyValue("source", "user-created-topic");
+        Timer.Sample sample = Timer.start(meterRegistry);
+        String outcome = "failure";
+
+        observation.start();
+        try (Observation.Scope scope = observation.openScope()) {
+            if (repository.existsById(message.id())) {
+                outcome = "duplicate";
+                meterRegistry.counter("streaming.customer.provisioning.total", "outcome", "duplicate").increment();
+                meterRegistry.counter("streaming.customer.provisioning.duplicates.total").increment();
+                log.debug("Customer {} already exists, skipping duplicate provisioning event.", message.id());
+                return;
+            }
+
+            Customer newCustomer = Customer.builder()
+                    .id(message.id())
+                    .email(message.email())
+                    .theme(Defaults.THEME)
+                    .preferredLanguage(Defaults.LANGUAGE)
+                    .profilePicture("")
+                    .country("")
+                    .birthDate(LocalDate.now())
+                    .profileIsCompleted(Defaults.PROFILE_IS_COMPLETED)
+                    .isEmailVerified(Defaults.EMAIL_VERIFIED)
+                    .receiveNewsletter(Defaults.RECEIVE_NEWSLETTER)
+                    .enableNotifications(Defaults.ENABLE_NOTIFICATIONS)
+                    .username(message.username())
+                    .build();
+            log.info("Creating new customer {}", newCustomer);
+            this.repository.save(newCustomer);
+            outcome = "created";
+            meterRegistry.counter("streaming.customer.provisioning.total", "outcome", "created").increment();
+        } catch (RuntimeException exception) {
+            observation.error(exception);
+            meterRegistry.counter("streaming.customer.provisioning.total", "outcome", "failure").increment();
+            throw exception;
+        } finally {
+            sample.stop(Timer.builder("streaming.customer.provisioning.duration")
+                    .description("Latency of provisioning customer records from Kafka events.")
+                    .tag("outcome", outcome)
+                    .register(meterRegistry));
+            observation.stop();
+        }
     }
 
     public void startEmailVerification() {

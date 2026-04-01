@@ -1,4 +1,4 @@
-# Operator, Billing, and Commerce Load Generator
+# 08. Operator, Billing, and Commerce Load Generator
 
 The protected load generator simulates authenticated booth traffic against the
 demo frontend instead of calling backend services directly.

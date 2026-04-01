@@ -17,6 +17,7 @@ import io.github.marianciuc.streamingservice.order.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionOperations;
 
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
@@ -33,6 +34,15 @@ public class OrderServiceImpl implements OrderService {
 
     private final OrderRepository repository;
     private final SubscriptionClient subscriptionClient;
+    private final TransactionOperations transactionOperations;
+
+    private record StagedOrderStatusUpdate(
+            UUID orderId,
+            UUID userId,
+            UUID subscriptionId,
+            boolean activationRequired
+    ) {
+    }
 
     /**
      * Creates a new order based on the provided order request and authentication details.
@@ -168,6 +178,7 @@ public class OrderServiceImpl implements OrderService {
     public OrderResponse updateOrder(UUID orderId, OrderRequest orderRequest, Authentication authentication) {
         validateOrderRequest(orderRequest);
         Order order = getOrder(orderId);
+        ensureOrderDetailsEditable(order);
 
         order.setUserId(resolveUserId(authentication, orderRequest));
         order.setSubscriptionId(orderRequest.subscriptionId());
@@ -213,34 +224,69 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public void updateOrderStatus(UUID orderId, OrderStatus orderStatus) {
-        Order order = getOrder(orderId);
-        OrderStatus previousStatus = order.getOrderStatus();
-        boolean activatesSubscription = entersSettledState(previousStatus, orderStatus);
+        StagedOrderStatusUpdate stagedUpdate = transactionOperations.execute(status -> {
+            if (orderStatus == null) {
+                throw new IllegalArgumentException("Order status is required");
+            }
 
-        if (activatesSubscription) {
+            Order order = getOrder(orderId);
+            boolean activationRequired = requiresSubscriptionActivation(order, orderStatus);
+
+            order.setOrderStatus(orderStatus);
+            if (isSettled(orderStatus)) {
+                if (order.getOrderCompletedDate() == null) {
+                    order.setOrderCompletedDate(LocalDateTime.now());
+                }
+            }
+            repository.saveAndFlush(order);
+
+            return new StagedOrderStatusUpdate(
+                    order.getId(),
+                    order.getUserId(),
+                    order.getSubscriptionId(),
+                    activationRequired
+            );
+        });
+
+        if (stagedUpdate == null) {
+            throw new IllegalStateException("Unable to stage the order status update");
+        }
+
+        if (stagedUpdate.activationRequired()) {
             try {
                 subscriptionClient.activateOrder(new OrderActivationRequest(
-                        order.getId(),
-                        order.getUserId(),
-                        order.getSubscriptionId()
+                        stagedUpdate.orderId(),
+                        stagedUpdate.userId(),
+                        stagedUpdate.subscriptionId()
                 ));
+                markSubscriptionActivated(stagedUpdate.orderId());
             } catch (RuntimeException exception) {
                 throw new IllegalStateException("Unable to activate the subscription for this order", exception);
             }
         }
-
-        order.setOrderStatus(orderStatus);
-        if (orderStatus == OrderStatus.PAID || orderStatus == OrderStatus.COMPLETED) {
-            if (order.getOrderCompletedDate() == null) {
-                order.setOrderCompletedDate(LocalDateTime.now());
-            }
-        }
-        repository.save(order);
     }
 
-    private boolean entersSettledState(OrderStatus previousStatus, OrderStatus nextStatus) {
-        boolean nextSettled = nextStatus == OrderStatus.PAID || nextStatus == OrderStatus.COMPLETED;
-        boolean previousSettled = previousStatus == OrderStatus.PAID || previousStatus == OrderStatus.COMPLETED;
-        return nextSettled && !previousSettled;
+    private void markSubscriptionActivated(UUID orderId) {
+        transactionOperations.executeWithoutResult(status -> {
+            Order order = getOrder(orderId);
+            if (order.getSubscriptionActivatedAt() == null) {
+                order.setSubscriptionActivatedAt(LocalDateTime.now());
+                repository.saveAndFlush(order);
+            }
+        });
+    }
+
+    private boolean requiresSubscriptionActivation(Order order, OrderStatus nextStatus) {
+        return isSettled(nextStatus) && order.getSubscriptionActivatedAt() == null;
+    }
+
+    private boolean isSettled(OrderStatus orderStatus) {
+        return orderStatus == OrderStatus.PAID || orderStatus == OrderStatus.COMPLETED;
+    }
+
+    private void ensureOrderDetailsEditable(Order order) {
+        if (isSettled(order.getOrderStatus())) {
+            throw new IllegalArgumentException("Order details cannot be changed after settlement");
+        }
     }
 }

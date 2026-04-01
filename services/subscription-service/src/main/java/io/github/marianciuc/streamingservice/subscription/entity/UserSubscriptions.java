@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
@@ -68,4 +69,10 @@ public class UserSubscriptions {
     @Column(name = "status")
     @Enumerated(EnumType.STRING)
     private SubscriptionStatus status;
+
+    @Column(name = "renewal_claimed_at")
+    private LocalDateTime renewalClaimedAt;
+
+    @Column(name = "renewal_order_id")
+    private UUID renewalOrderId;
 }

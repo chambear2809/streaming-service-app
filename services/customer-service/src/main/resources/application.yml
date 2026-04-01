@@ -29,6 +29,10 @@ spring:
     default-schema: public
   kafka:
     bootstrap-servers: localhost:9092
+    template:
+      observation-enabled: true
+    listener:
+      observation-enabled: true
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
@@ -38,3 +42,8 @@ spring:
       group-id: customer-service-group
       properties:
         spring.json.type.mapping: createUserMessage:io.github.marianciuc.streamingservice.customer.kafka.messages.CreateUserMessage
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics

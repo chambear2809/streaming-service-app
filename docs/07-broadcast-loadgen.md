@@ -1,4 +1,4 @@
-# Broadcast Load Generator
+# 07. Broadcast Load Generator
 
 The broadcast load generator simulates viewer sessions against the public demo surface instead of hammering one URL.
 
