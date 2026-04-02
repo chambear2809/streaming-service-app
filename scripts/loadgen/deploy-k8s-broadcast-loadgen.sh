@@ -11,8 +11,8 @@ LOADGEN_PROFILE="${LOADGEN_PROFILE:-booth}"
 LOADGEN_K8S_MODE="${LOADGEN_K8S_MODE:-job}"
 LOADGEN_K8S_ACTION="${LOADGEN_K8S_ACTION:-apply}"
 LOADGEN_CRONJOB_NAME="${LOADGEN_CRONJOB_NAME:-broadcast-loadgen-recurring}"
-LOADGEN_CRON_SCHEDULE="${LOADGEN_CRON_SCHEDULE:-*/15 * * * *}"
-LOADGEN_CRON_CONCURRENCY_POLICY="${LOADGEN_CRON_CONCURRENCY_POLICY:-Forbid}"
+LOADGEN_CRON_SCHEDULE="${LOADGEN_CRON_SCHEDULE-}"
+LOADGEN_CRON_CONCURRENCY_POLICY="${LOADGEN_CRON_CONCURRENCY_POLICY-}"
 LOADGEN_CRON_SUSPEND="${LOADGEN_CRON_SUSPEND:-false}"
 LOADGEN_CRON_SUCCESS_HISTORY="${LOADGEN_CRON_SUCCESS_HISTORY:-0}"
 LOADGEN_CRON_FAILED_HISTORY="${LOADGEN_CRON_FAILED_HISTORY:-1}"
@@ -118,6 +118,31 @@ apply_profile_defaults() {
 
 apply_profile_defaults
 
+apply_cron_defaults() {
+  if [[ -z "${LOADGEN_CRON_SCHEDULE}" ]]; then
+    case "${LOADGEN_PROFILE}" in
+      warmup)
+        LOADGEN_CRON_SCHEDULE="*/6 * * * *"
+        ;;
+      booth)
+        LOADGEN_CRON_SCHEDULE="*/10 * * * *"
+        ;;
+      stress)
+        LOADGEN_CRON_SCHEDULE="*/12 * * * *"
+        ;;
+      custom)
+        LOADGEN_CRON_SCHEDULE="*/15 * * * *"
+        ;;
+    esac
+  fi
+
+  if [[ -z "${LOADGEN_CRON_CONCURRENCY_POLICY}" ]]; then
+    LOADGEN_CRON_CONCURRENCY_POLICY="Allow"
+  fi
+}
+
+apply_cron_defaults
+
 validate_mode() {
   case "${LOADGEN_K8S_MODE}" in
     job|cronjob) ;;
@@ -199,13 +224,23 @@ delete_completed_job() {
 }
 
 wait_and_stream_logs() {
+  local wait_status=0
+
   if [[ "${K8S_DRY_RUN}" == "true" ]]; then
     return 0
   fi
 
-  kubectl -n "${NAMESPACE}" wait --for=condition=complete "job/${LOADGEN_JOB_NAME}" --timeout=7200s
+  kubectl -n "${NAMESPACE}" wait --for=condition=complete "job/${LOADGEN_JOB_NAME}" --timeout=7200s || wait_status=$?
+
   echo
-  kubectl -n "${NAMESPACE}" logs "job/${LOADGEN_JOB_NAME}"
+  kubectl -n "${NAMESPACE}" get job "${LOADGEN_JOB_NAME}" -o wide 2>/dev/null || true
+  kubectl -n "${NAMESPACE}" get pod -l app.kubernetes.io/name="${LOADGEN_JOB_NAME}" -o wide 2>/dev/null || true
+  kubectl -n "${NAMESPACE}" logs "job/${LOADGEN_JOB_NAME}" --all-containers=true 2>/dev/null || true
+
+  if (( wait_status != 0 )); then
+    return "${wait_status}"
+  fi
+
   delete_completed_job
 }
 

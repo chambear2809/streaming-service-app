@@ -92,6 +92,13 @@ spec:
               value: demo_ad
             - name: SPRING_FLYWAY_TABLE
               value: demo_ad_flyway_schema_history
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 36
           readinessProbe:
             httpGet:
               path: /healthz

@@ -127,24 +127,34 @@ spec:
               materialize_library_asset /opt/demo/source/sintel-source.mkv /opt/demo/library/sintel.mp4 "Sintel"
               materialize_library_asset /opt/demo/source/tears-of-steel-source.mov /opt/demo/library/tears-of-steel.mp4 "Tears of Steel"
               cp /opt/demo/library/big-buck-bunny.mp4 /opt/demo/demo.mp4
-              log_step "Source downloads complete; preparing 90-second house-loop segments"
+              log_step "Source downloads complete; preparing 90-second house-loop clips"
 
-              segment_house_asset() {
-                SEGMENT_PREFIX="$1"
+              build_house_loop_clip() {
+                CLIP_PREFIX="$1"
                 INPUT_FILE="$2"
+                OUTPUT_FILE="/opt/demo/house-loop-segments/${CLIP_PREFIX}-000.mp4"
 
-                log_step "Starting segment build for ${SEGMENT_PREFIX}"
+                log_step "Preparing house-loop clip for ${CLIP_PREFIX}"
+                if ffmpeg -hide_banner -loglevel warning -y -i "${INPUT_FILE}" \
+                  -map 0:v:0 -map 0:a:0 \
+                  -t 90 \
+                  -c copy -movflags +faststart \
+                  "${OUTPUT_FILE}"; then
+                  return 0
+                fi
+
+                rm -f "${OUTPUT_FILE}"
+                log_step "Stream copy was not compatible for ${CLIP_PREFIX}; transcoding 90-second clip"
                 ffmpeg -hide_banner -loglevel warning -y -i "${INPUT_FILE}" \
                   -map 0:v:0 -map 0:a:0 \
+                  -t 90 \
                   -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" \
-                  -c:v libx264 -preset superfast -threads 2 -pix_fmt yuv420p -r 24 -g 48 -keyint_min 48 -sc_threshold 0 \
-                  -force_key_frames "expr:gte(t,n_forced*90)" \
-                  -c:a aac -ar 44100 -b:a 128k \
-                  -f segment -segment_time 90 -reset_timestamps 1 \
-                  "/opt/demo/house-loop-segments/${SEGMENT_PREFIX}-%03d.mp4"
+                  -c:v libx264 -preset ultrafast -threads 2 -pix_fmt yuv420p -r 24 -g 48 -keyint_min 48 -sc_threshold 0 \
+                  -c:a aac -ar 44100 -b:a 128k -movflags +faststart \
+                  "${OUTPUT_FILE}"
               }
 
-              wait_for_segment_job() {
+              wait_for_clip_job() {
                 JOB_PID="$1"
                 JOB_LABEL="$2"
 
@@ -153,33 +163,33 @@ spec:
                 fi
 
                 if wait "${JOB_PID}"; then
-                  log_step "Finished segment build for ${JOB_LABEL}"
+                  log_step "Finished house-loop clip for ${JOB_LABEL}"
                   return 0
                 fi
 
-                log_step "Segment build failed for ${JOB_LABEL}"
+                log_step "House-loop clip failed for ${JOB_LABEL}"
                 return 1
               }
 
-              run_segment_batch() {
+              run_clip_batch() {
                 FIRST_LABEL="$1"
                 FIRST_INPUT="$2"
                 SECOND_LABEL="$3"
                 SECOND_INPUT="$4"
                 BATCH_FAILED=0
 
-                segment_house_asset "${FIRST_LABEL}" "${FIRST_INPUT}" &
+                build_house_loop_clip "${FIRST_LABEL}" "${FIRST_INPUT}" &
                 FIRST_PID="$!"
                 SECOND_PID=""
                 if [ -n "${SECOND_LABEL}" ] && [ -n "${SECOND_INPUT}" ]; then
-                  segment_house_asset "${SECOND_LABEL}" "${SECOND_INPUT}" &
+                  build_house_loop_clip "${SECOND_LABEL}" "${SECOND_INPUT}" &
                   SECOND_PID="$!"
                 fi
 
-                if ! wait_for_segment_job "${FIRST_PID}" "${FIRST_LABEL}"; then
+                if ! wait_for_clip_job "${FIRST_PID}" "${FIRST_LABEL}"; then
                   BATCH_FAILED=1
                 fi
-                if ! wait_for_segment_job "${SECOND_PID}" "${SECOND_LABEL}"; then
+                if ! wait_for_clip_job "${SECOND_PID}" "${SECOND_LABEL}"; then
                   BATCH_FAILED=1
                 fi
 
@@ -188,10 +198,10 @@ spec:
                 fi
               }
 
-              run_segment_batch "010-sintel" "/opt/demo/library/sintel.mp4" "020-big-buck-bunny" "/opt/demo/library/big-buck-bunny.mp4"
-              run_segment_batch "030-elephants-dream" "/opt/demo/library/elephants-dream.mp4" "040-tears-of-steel" "/opt/demo/library/tears-of-steel.mp4"
-              SEGMENT_COUNT="$(find /opt/demo/house-loop-segments -maxdepth 1 -type f -name '*.mp4' | wc -l | tr -d ' ')"
-              log_step "House-loop segment preparation complete with ${SEGMENT_COUNT} segment files"
+              run_clip_batch "010-sintel" "/opt/demo/library/sintel.mp4" "020-big-buck-bunny" "/opt/demo/library/big-buck-bunny.mp4"
+              run_clip_batch "030-elephants-dream" "/opt/demo/library/elephants-dream.mp4" "040-tears-of-steel" "/opt/demo/library/tears-of-steel.mp4"
+              CLIP_COUNT="$(find /opt/demo/house-loop-segments -maxdepth 1 -type f -name '*.mp4' | wc -l | tr -d ' ')"
+              log_step "House-loop clip preparation complete with ${CLIP_COUNT} clip files"
           volumeMounts:
             - name: demo-media
               mountPath: /opt/demo

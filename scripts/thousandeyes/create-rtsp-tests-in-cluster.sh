@@ -213,6 +213,7 @@ build_trace_map_payload() {
 \"networkMeasurements\":$(json_bool "${TE_TRACE_MAP_NETWORK_MEASUREMENTS:-true}"),\
 \"numPathTraces\":${TE_TRACE_MAP_NUM_PATH_TRACES:-3},\
 \"randomizedStartTime\":$(json_bool "${TE_TRACE_MAP_RANDOMIZED_START_TIME:-false}"),\
+\"distributedTracing\":$(json_bool "${TE_TRACE_MAP_DISTRIBUTED_TRACING:-true}"),\
 \"protocol\":\"tcp\",\
 \"dscpId\":\"$(json_escape "${TE_TRACE_MAP_DSCP_ID:-${TE_DSCP_ID:-0}}")\",\
 \"agents\":${agents_json}\

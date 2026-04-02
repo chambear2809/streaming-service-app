@@ -221,7 +221,7 @@ Talk track:
 Explain that the environment is under realistic traffic:
 
 - The broadcast load generator hits `/broadcast`, `/api/v1/demo/public/broadcast/current`, the live HLS manifests and segments, and a smaller amount of `/api/v1/demo/public/trace-map`.
-- The protected load generator signs in through the persona shortcut and warms Accounts, Payments, Commerce, billing events, RTSP job creation, and order lifecycle activity.
+- The protected load generator signs in through the persona shortcut and always warms billing events, RTSP job creation, and the public broadcast pivots. When the optional `customer-service`, `payment-service`, `subscription-service`, and `order-service` backends are deployed, it also warms live Accounts, Payments, and Commerce activity; otherwise those protected pages remain seeded preview views.
 - For the standard sponsor-break walkthrough, keep `LOADGEN_OPERATOR_TAKE_LIVE_RATIO=0` so the warm-up traffic does not unexpectedly switch the public channel to a contribution feed.
 
 Talk track:

@@ -234,7 +234,8 @@ python3 scripts/thousandeyes/create-demo-dashboards.py \
 - The canonical deploy flow can install or reuse the base Splunk OTel Collector when `--splunk-otel-mode` is set, but PostgreSQL DB monitoring remains a separate Helm values overlay after the base collector is ready.
 - For OpenShift, the script rewrites Maven cache paths to `/tmp/.m2` so in-cluster builds are less dependent on root-owned paths.
 - The frontend build picks up deployment-specific labels at build time through environment overrides in `frontend/scripts/build.mjs`.
-- Splunk RUM sourcemap upload is best-effort. If the Splunk API returns an error after the frontend build completes, the deploy scripts warn and continue with the rollout.
+- Splunk RUM sourcemap upload now retries with bounded backoff. If the Splunk API still returns an error after those retries, the deploy scripts warn and continue with the rollout.
+- Browser RUM and sourcemap uploads do not use the same token. Keep `SPLUNK_RUM_ACCESS_TOKEN` for the browser agent and use `SPLUNK_ACCESS_TOKEN` for sourcemap upload unless the user explicitly provides `SPLUNK_SOURCEMAP_UPLOAD_TOKEN`.
 - `media-service-demo` rollout can legitimately spend several minutes in `stage-demo-movie` while it downloads the sample source MP4s and prebuilds 90-second loop segments. Use the rollout snapshots before deciding the pod is stuck.
 - When the cluster exposes the Metrics API, the deploy script includes best-effort `kubectl top pod --containers` output in rollout snapshots. If metrics are unavailable, it skips that section and keeps waiting.
 - `namespace` and `FRONTEND_ROUTE_NAME` must be lowercase RFC 1123 labels.

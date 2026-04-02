@@ -132,7 +132,7 @@ bash skills/deploy-streaming-app/scripts/deploy-demo.sh \
 
 `bash skills/deploy-streaming-app/scripts/deploy-demo.sh`
 
-- this is the repo's canonical full-demo deployment entry point
+- this is the repo's canonical demo deployment entry point
 - it is the path the repo documentation and deploy skill treat as the current default
 
 `--platform kubernetes`
@@ -376,7 +376,7 @@ The repo deliberately warns that `media-service-demo` can spend a long time in `
 
 These are non-blocking for the base deployment.
 
-If Splunk RUM settings are missing or the source map upload fails, the deploy flow warns and continues. That should not stop you from getting the app up and reachable.
+If `SPLUNK_REALM` or the sourcemap upload token (`SPLUNK_ACCESS_TOKEN` by default, or `SPLUNK_SOURCEMAP_UPLOAD_TOKEN` when overridden) is missing, the deploy flow skips source map upload. If the upload hits a transient error, the deploy flow retries with bounded backoff before it warns and continues. That should not stop you from getting the app up and reachable.
 
 ## Recommended First-Day Command Set
 

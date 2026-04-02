@@ -22,13 +22,14 @@ The frontend build and `scripts/frontend/deploy.sh` both read that repo-root `.e
 ```bash
 STREAMING_ENVIRONMENT_LABEL=Primary Operations
 SPLUNK_REALM=us1
+SPLUNK_ACCESS_TOKEN=<observability-api-token>
 SPLUNK_RUM_ACCESS_TOKEN=<browser-rum-access-token>
 SPLUNK_RUM_APP_NAME=streaming-app-frontend
 SPLUNK_DEPLOYMENT_ENVIRONMENT=streaming-app
 STREAMING_PUBLIC_RTSP_URL=rtsp://demo.example.com:8554/live
 ```
 
-`SPLUNK_REALM`, `SPLUNK_RUM_ACCESS_TOKEN`, and `SPLUNK_RUM_APP_NAME` are also reused for source map upload during deploy. Keep `SPLUNK_ACCESS_TOKEN` separate for Splunk API or dashboard automation.
+`SPLUNK_RUM_ACCESS_TOKEN` is for runtime browser instrumentation. Source map upload during deploy uses `SPLUNK_ACCESS_TOKEN` by default, or `SPLUNK_SOURCEMAP_UPLOAD_TOKEN` if you need an explicit override.
 
 `STREAMING_PUBLIC_RTSP_URL` is optional. Leave it blank when the frontend should
 hide the public RTSP chip, or set it when you want the static build to show a
@@ -57,4 +58,6 @@ From the repository root:
 zsh scripts/frontend/deploy.sh
 ```
 
-This creates a namespace, installs frontend dependencies if needed, builds `dist/`, injects Splunk source map IDs into the production bundles, uploads source maps when `SPLUNK_REALM` and `SPLUNK_RUM_ACCESS_TOKEN` are set, deploys the frontend gateway, and exposes the frontend through a Kubernetes `LoadBalancer` service. The gateway serves the static broadcast console, proxies the demo auth, catalog, media, billing, and public health endpoints, and is auto-instrumented as its own Node.js APM service.
+This creates a namespace, installs frontend dependencies if needed, builds `dist/`, injects Splunk source map IDs into the production bundles, uploads source maps when `SPLUNK_REALM` and `SPLUNK_ACCESS_TOKEN` are set, retries transient upload failures with bounded backoff, deploys the frontend gateway, and exposes the frontend through a Kubernetes `LoadBalancer` service. The gateway serves the static broadcast console, proxies the demo auth, catalog, media, billing, and public health endpoints, and is auto-instrumented as its own Node.js APM service.
+
+If Splunk RUM is temporarily unavailable after a successful build, rerun `bash scripts/frontend/upload-sourcemaps.sh` from the repository root. The helper reuses the repo-root `.env` when present.

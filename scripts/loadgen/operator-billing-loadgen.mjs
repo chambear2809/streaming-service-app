@@ -4,15 +4,15 @@ import { randomUUID } from "node:crypto";
 import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
 
-const HELP_TEXT = `Operator, billing, and commerce demo load generator
+const HELP_TEXT = `Operator, billing, and optional commerce demo load generator
 
 Usage:
   node scripts/loadgen/operator-billing-loadgen.mjs [options]
 
 This script simulates protected operator activity against the demo frontend.
 It signs in through the persona shortcut, reads the live catalog and RTSP desk,
-exercises the Accounts, Payments, and Commerce APIs behind the protected suite,
-records billing business events, and can create and settle orders.
+records billing business events, and, when the optional protected commerce
+services are reachable, exercises the Accounts, Payments, and Commerce APIs.
 
 Options:
   --base-url <url>                 Frontend base URL.
@@ -30,7 +30,7 @@ Options:
   --order-settle-ratio <ratio>     Fraction of cycles that move an order to PAID. Default: 0.35
   --order-complete-ratio <ratio>   Fraction of cycles that move a PAID order to COMPLETED. Default: 0.15
   --rtsp-job-ratio <ratio>         Fraction of cycles that create an RTSP job. Default: 0.35
-  --take-live-ratio <ratio>        Fraction of cycles that take a job live if one is ready. Default: 0.20
+  --take-live-ratio <ratio>        Fraction of cycles that take a job live if one is ready. Default: 0.00
   --restore-house-loop <bool>      Reset the public channel to the house loop after the run. Default: true
   --help                           Show this help text.
 
@@ -63,6 +63,11 @@ const ACTIVE_ORDER_STATUSES = new Set(["CREATED", "SCHEDULED"]);
 const COMPLETABLE_ORDER_STATUSES = new Set(["PAID"]);
 const ACTIVE_SUBSCRIPTION_STATUS = "ACTIVE";
 const RTSP_SOURCE_URL = "rtsp://demo.acmebroadcasting.local/live";
+const OPTIONAL_SERVICE_STATUS_UNKNOWN = "unknown";
+const OPTIONAL_SERVICE_STATUS_LIVE = "live";
+const OPTIONAL_SERVICE_STATUS_UNAVAILABLE = "unavailable";
+const OPTIONAL_UPSTREAM_ERROR = "upstream_unavailable";
+const optionalServiceNotices = new Set();
 
 async function main() {
     const config = parseArgs(process.argv.slice(2), process.env);
@@ -123,6 +128,11 @@ function createMetrics() {
         subscriptionActivationsVerified: 0,
         subscriptionCompletionsVerified: 0,
         failures: 0,
+        optionalServiceStatus: {
+            accounts: OPTIONAL_SERVICE_STATUS_UNKNOWN,
+            payments: OPTIONAL_SERVICE_STATUS_UNKNOWN,
+            commerce: OPTIONAL_SERVICE_STATUS_UNKNOWN
+        },
         requestStats: {}
     };
 }
@@ -189,21 +199,19 @@ async function runCycle(workerId, config, metrics, cookie) {
             cookie,
             metricLabel: "billing.invoices"
         }),
-        fetchCustomerDirectory(config.baseUrl, cookie, config, metrics)
+        fetchAccountsWorkspaceIfAvailable(config.baseUrl, cookie, config, metrics)
     ]);
 
-    metrics.customerReads += 1;
     const catalog = normalizeArray(catalogResponse.payload);
     const rtspJobs = normalizeArray(rtspJobsResponse.payload);
     const invoices = normalizeArray(invoicesResponse.payload);
+    const knownAccountIds = collectKnownAccountIds(customers, invoices);
 
     const customer = pickRandom(customers);
-    if (!customer?.id) {
-        throw new Error("Customer directory returned no usable customers.");
-    }
+    const customerId = customer?.id ?? pickRandom(knownAccountIds);
 
-    if (shouldRun(config.billingEventRatio)) {
-        await createBillingEvent(config.baseUrl, cookie, customer.id, catalog, config, metrics);
+    if (shouldRun(config.billingEventRatio) && customerId) {
+        await createBillingEvent(config.baseUrl, cookie, customerId, catalog, config, metrics);
         metrics.billingEvents += 1;
     }
 
@@ -216,9 +224,8 @@ async function runCycle(workerId, config, metrics, cookie) {
         }
     }
 
-    if (decisions.paymentRead) {
-        await readPaymentWorkspace(config.baseUrl, cookie, customer.id, config, metrics);
-        metrics.paymentWorkspaceReads += 1;
+    if (decisions.paymentRead && customerId) {
+        await readPaymentWorkspaceIfAvailable(config.baseUrl, cookie, customerId, config, metrics);
     }
 
     let commerceState = {
@@ -226,9 +233,8 @@ async function runCycle(workerId, config, metrics, cookie) {
         activeSubscription: null,
         orders: []
     };
-    if (needsCommerce) {
-        commerceState = await readCommerceWorkspace(config.baseUrl, cookie, customer.id, config, metrics);
-        metrics.commerceWorkspaceReads += 1;
+    if (needsCommerce && customerId) {
+        commerceState = await readCommerceWorkspaceIfAvailable(config.baseUrl, cookie, customerId, config, metrics);
     }
 
     if (shouldRun(config.rtspJobRatio) && catalog.length) {
@@ -260,7 +266,7 @@ async function runCycle(workerId, config, metrics, cookie) {
     if (decisions.createOrder) {
         const selectedPlan = pickSubscriptionPlan(commerceState.plans, commerceState.activeSubscription);
         if (selectedPlan?.id) {
-            createdOrder = await createOrder(config.baseUrl, cookie, customer.id, selectedPlan, config, metrics);
+            createdOrder = await createOrder(config.baseUrl, cookie, customerId, selectedPlan, config, metrics);
             metrics.ordersCreated += 1;
             commerceState.orders = createdOrder
                 ? [createdOrder, ...commerceState.orders.filter((order) => order?.id !== createdOrder.id)]
@@ -275,7 +281,7 @@ async function runCycle(workerId, config, metrics, cookie) {
         await updateOrderStatus(config.baseUrl, cookie, orderToSettle.id, "PAID", config, metrics);
         metrics.ordersSettled += 1;
         commerceState.orders = updateOrderState(commerceState.orders, orderToSettle.id, "PAID");
-        commerceState.activeSubscription = await fetchActiveSubscription(config.baseUrl, cookie, customer.id, config, metrics);
+        commerceState.activeSubscription = await fetchActiveSubscription(config.baseUrl, cookie, customerId, config, metrics);
         if (commerceState.activeSubscription?.orderId === orderToSettle.id) {
             metrics.subscriptionActivationsVerified += 1;
         }
@@ -287,12 +293,12 @@ async function runCycle(workerId, config, metrics, cookie) {
     if (orderToComplete?.id) {
         const beforeCompletion = commerceState.activeSubscription?.orderId === orderToComplete.id
             ? commerceState.activeSubscription
-            : await fetchActiveSubscription(config.baseUrl, cookie, customer.id, config, metrics);
+            : await fetchActiveSubscription(config.baseUrl, cookie, customerId, config, metrics);
 
         await updateOrderStatus(config.baseUrl, cookie, orderToComplete.id, "COMPLETED", config, metrics);
         metrics.ordersCompleted += 1;
         commerceState.orders = updateOrderState(commerceState.orders, orderToComplete.id, "COMPLETED");
-        const afterCompletion = await fetchActiveSubscription(config.baseUrl, cookie, customer.id, config, metrics);
+        const afterCompletion = await fetchActiveSubscription(config.baseUrl, cookie, customerId, config, metrics);
 
         if (sameSubscriptionWindow(beforeCompletion, afterCompletion, orderToComplete.id)) {
             metrics.subscriptionCompletionsVerified += 1;
@@ -383,6 +389,30 @@ async function fetchCustomerDirectory(baseUrl, cookie, config, metrics) {
     return Array.isArray(response.payload?.data) ? response.payload.data : [];
 }
 
+async function fetchAccountsWorkspaceIfAvailable(baseUrl, cookie, config, metrics) {
+    if (metrics.optionalServiceStatus.accounts === OPTIONAL_SERVICE_STATUS_UNAVAILABLE) {
+        return [];
+    }
+
+    try {
+        const customers = await fetchCustomerDirectory(baseUrl, cookie, config, metrics);
+        metrics.customerReads += 1;
+        markOptionalServiceStatus(metrics, "accounts", OPTIONAL_SERVICE_STATUS_LIVE, "Accounts workspace is live.");
+        return customers;
+    } catch (error) {
+        if (isOptionalServiceUnavailableError(error)) {
+            markOptionalServiceStatus(
+                metrics,
+                "accounts",
+                OPTIONAL_SERVICE_STATUS_UNAVAILABLE,
+                "Accounts workspace is unavailable; falling back to billing-derived account IDs."
+            );
+            return [];
+        }
+        throw error;
+    }
+}
+
 async function readPaymentWorkspace(baseUrl, cookie, userId, config, metrics) {
     const [cardHolderResponse, transactionsResponse] = await Promise.all([
         requestJson(
@@ -414,6 +444,30 @@ async function readPaymentWorkspace(baseUrl, cookie, userId, config, metrics) {
     };
 }
 
+async function readPaymentWorkspaceIfAvailable(baseUrl, cookie, userId, config, metrics) {
+    if (metrics.optionalServiceStatus.payments === OPTIONAL_SERVICE_STATUS_UNAVAILABLE) {
+        return null;
+    }
+
+    try {
+        const workspace = await readPaymentWorkspace(baseUrl, cookie, userId, config, metrics);
+        metrics.paymentWorkspaceReads += 1;
+        markOptionalServiceStatus(metrics, "payments", OPTIONAL_SERVICE_STATUS_LIVE, "Payments workspace is live.");
+        return workspace;
+    } catch (error) {
+        if (isOptionalServiceUnavailableError(error)) {
+            markOptionalServiceStatus(
+                metrics,
+                "payments",
+                OPTIONAL_SERVICE_STATUS_UNAVAILABLE,
+                "Payments workspace is unavailable; skipping optional payment reads."
+            );
+            return null;
+        }
+        throw error;
+    }
+}
+
 async function readCommerceWorkspace(baseUrl, cookie, userId, config, metrics) {
     const [plansResponse, activeSubscription, ordersResponse] = await Promise.all([
         requestJson(baseUrl, "/api/v1/subscription/all", config, metrics, {
@@ -438,6 +492,38 @@ async function readCommerceWorkspace(baseUrl, cookie, userId, config, metrics) {
         activeSubscription,
         orders: normalizeArray(ordersResponse.payload)
     };
+}
+
+async function readCommerceWorkspaceIfAvailable(baseUrl, cookie, userId, config, metrics) {
+    if (metrics.optionalServiceStatus.commerce === OPTIONAL_SERVICE_STATUS_UNAVAILABLE) {
+        return {
+            plans: [],
+            activeSubscription: null,
+            orders: []
+        };
+    }
+
+    try {
+        const workspace = await readCommerceWorkspace(baseUrl, cookie, userId, config, metrics);
+        metrics.commerceWorkspaceReads += 1;
+        markOptionalServiceStatus(metrics, "commerce", OPTIONAL_SERVICE_STATUS_LIVE, "Commerce workspace is live.");
+        return workspace;
+    } catch (error) {
+        if (isOptionalServiceUnavailableError(error)) {
+            markOptionalServiceStatus(
+                metrics,
+                "commerce",
+                OPTIONAL_SERVICE_STATUS_UNAVAILABLE,
+                "Commerce workspace is unavailable; skipping optional order and subscription flows."
+            );
+            return {
+                plans: [],
+                activeSubscription: null,
+                orders: []
+            };
+        }
+        throw error;
+    }
 }
 
 async function fetchActiveSubscription(baseUrl, cookie, userId, config, metrics) {
@@ -629,7 +715,11 @@ async function requestJson(baseUrl, path, config, metrics, options = {}) {
     recordRequest(metrics, label, Date.now() - startedAt, response.status, successfulStatus);
 
     if (!successfulStatus) {
-        throw new Error(`${label} returned HTTP ${response.status}: ${truncateText(text, 280)}`);
+        const requestError = new Error(`${label} returned HTTP ${response.status}: ${truncateText(text, 280)}`);
+        requestError.status = response.status;
+        requestError.responseText = text;
+        requestError.metricLabel = label;
+        throw requestError;
     }
 
     return {
@@ -733,8 +823,19 @@ function pickRandom(items) {
     return normalizedItems[Math.floor(Math.random() * normalizedItems.length)];
 }
 
+function collectKnownAccountIds(customers, invoices) {
+    return uniqueValues([
+        ...normalizeArray(customers).map((customer) => customer?.id),
+        ...normalizeArray(invoices).map((invoice) => invoice?.userId)
+    ]);
+}
+
 function normalizeArray(value) {
     return Array.isArray(value) ? value : [];
+}
+
+function uniqueValues(values) {
+    return [...new Set(normalizeArray(values).filter(Boolean))];
 }
 
 function shouldRun(ratio) {
@@ -760,6 +861,40 @@ function truncateText(text, limit) {
     return `${normalized.slice(0, Math.max(0, limit - 3))}...`;
 }
 
+function markOptionalServiceStatus(metrics, serviceKey, status, message) {
+    const previousStatus = metrics.optionalServiceStatus?.[serviceKey] ?? OPTIONAL_SERVICE_STATUS_UNKNOWN;
+    metrics.optionalServiceStatus[serviceKey] = status;
+
+    if (previousStatus === status || !message) {
+        return;
+    }
+
+    const noticeKey = `${serviceKey}:${status}`;
+    if (optionalServiceNotices.has(noticeKey)) {
+        return;
+    }
+
+    optionalServiceNotices.add(noticeKey);
+    console.log(`[optional:${serviceKey}] ${message}`);
+}
+
+function isOptionalServiceUnavailableError(error) {
+    if (!error || error.status !== 502) {
+        return false;
+    }
+
+    const responseText = String(error.responseText ?? "");
+    if (responseText.includes(`"${OPTIONAL_UPSTREAM_ERROR}"`)) {
+        return true;
+    }
+
+    try {
+        return JSON.parse(responseText)?.error === OPTIONAL_UPSTREAM_ERROR;
+    } catch {
+        return false;
+    }
+}
+
 function parseArgs(argv, env) {
     const config = {
         baseUrl: env.LOADGEN_OPERATOR_BASE_URL ?? env.LOADGEN_BASE_URL ?? "",
@@ -777,7 +912,7 @@ function parseArgs(argv, env) {
         orderSettleRatio: Number.parseFloat(env.LOADGEN_OPERATOR_ORDER_SETTLE_RATIO ?? "0.35"),
         orderCompleteRatio: Number.parseFloat(env.LOADGEN_OPERATOR_ORDER_COMPLETE_RATIO ?? "0.15"),
         rtspJobRatio: Number.parseFloat(env.LOADGEN_OPERATOR_RTSP_JOB_RATIO ?? "0.35"),
-        takeLiveRatio: Number.parseFloat(env.LOADGEN_OPERATOR_TAKE_LIVE_RATIO ?? "0.20"),
+        takeLiveRatio: Number.parseFloat(env.LOADGEN_OPERATOR_TAKE_LIVE_RATIO ?? "0.00"),
         restoreHouseLoop: parseBoolean(env.LOADGEN_OPERATOR_RESTORE_HOUSE_LOOP ?? "true", "LOADGEN_OPERATOR_RESTORE_HOUSE_LOOP"),
         helpRequested: false
     };

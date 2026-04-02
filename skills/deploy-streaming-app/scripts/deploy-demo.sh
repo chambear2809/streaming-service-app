@@ -63,9 +63,9 @@ Options:
 
 Environment variables:
   ENV_FILE                              Optional path to a repo-style env file
-  SPLUNK_REALM / SPLUNK_RUM_ACCESS_TOKEN
+  SPLUNK_REALM / SPLUNK_ACCESS_TOKEN
                                         Optional frontend sourcemap upload credentials
-  SPLUNK_ACCESS_TOKEN                   Backward-compatible sourcemap token fallback
+  SPLUNK_SOURCEMAP_UPLOAD_TOKEN         Optional explicit sourcemap upload token override
   SPLUNK_OTEL_CLUSTER_NAME             Optional collector cluster name override
   SPLUNK_OTEL_HELM_CHART_VERSION       Optional collector Helm chart version override
   SPLUNK_RUM_APP_NAME                  Optional frontend RUM app name
@@ -724,7 +724,7 @@ ensure_frontend_deps() {
 
 build_frontend() {
   local -a build_env
-  local splunk_upload_token="${SPLUNK_RUM_ACCESS_TOKEN:-${SPLUNK_ACCESS_TOKEN:-}}"
+  local splunk_upload_token="${SPLUNK_SOURCEMAP_UPLOAD_TOKEN:-${SPLUNK_ACCESS_TOKEN:-}}"
 
   build_env=(
     "APP_VERSION=${APP_VERSION}"
@@ -751,21 +751,20 @@ build_frontend() {
     env "${build_env[@]}" npm run build:production
   )
 
-  if [[ -n "${SPLUNK_REALM:-}" && -n "${splunk_upload_token}" ]]; then
-    log "Uploading frontend sourcemaps to Splunk RUM"
-    if ! (
-      cd "${FRONTEND_DIR}"
-      env APP_VERSION="${APP_VERSION}" ./node_modules/.bin/splunk-rum sourcemaps upload \
-        --app-name "${SPLUNK_RUM_APP_NAME}" \
-        --app-version "${APP_VERSION}" \
-        --path dist \
-        --realm "${SPLUNK_REALM}" \
-        --token "${splunk_upload_token}"
-    ); then
-      warn "Splunk sourcemap upload failed; continuing deploy because the frontend rollout does not depend on it"
+  if [[ -n "${SPLUNK_REALM:-}" && -z "${splunk_upload_token}" && -n "${SPLUNK_RUM_ACCESS_TOKEN:-}" ]]; then
+    warn "SPLUNK_RUM_ACCESS_TOKEN is set, but sourcemap upload needs SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN. Browser RUM will still work; sourcemap upload is being skipped."
+  elif [[ -n "${SPLUNK_REALM:-}" && -n "${splunk_upload_token}" ]]; then
+    if ! LOG_PREFIX="[deploy-streaming-app]" \
+      FRONTEND_DIR="${FRONTEND_DIR}" \
+      APP_VERSION="${APP_VERSION}" \
+      SPLUNK_RUM_APP_NAME="${SPLUNK_RUM_APP_NAME}" \
+      SPLUNK_REALM="${SPLUNK_REALM}" \
+      SPLUNK_SOURCEMAP_UPLOAD_TOKEN="${splunk_upload_token}" \
+      bash "${REPO_ROOT}/scripts/frontend/upload-sourcemaps.sh"; then
+      warn "Splunk sourcemap upload still failed after retries; continuing deploy because the frontend rollout does not depend on it"
     fi
   else
-    log "Skipping Splunk sourcemap upload because SPLUNK_REALM and/or a sourcemap token are unset"
+    log "Skipping Splunk sourcemap upload because SPLUNK_REALM and/or SPLUNK_ACCESS_TOKEN are unset"
   fi
 }
 

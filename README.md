@@ -271,8 +271,9 @@ The full set lives in [`example.env`](example.env). The variables below are the 
 
 - `STREAMING_ENVIRONMENT_LABEL` controls the operator-facing label shown in the broadcast suite
 - `SPLUNK_REALM` selects the Splunk Observability realm
-- `SPLUNK_RUM_ACCESS_TOKEN` is used by the frontend build, [`scripts/frontend/deploy.sh`](scripts/frontend/deploy.sh), and the canonical deploy path for Browser RUM and source map upload; sourcemap upload is best-effort and warns instead of aborting the deploy when Splunk returns an error
-- `SPLUNK_ACCESS_TOKEN` is used by the dashboard sync flow
+- `SPLUNK_RUM_ACCESS_TOKEN` is used by the frontend build and runtime Browser RUM
+- `SPLUNK_ACCESS_TOKEN` is used by dashboard sync, [`scripts/frontend/upload-sourcemaps.sh`](scripts/frontend/upload-sourcemaps.sh), [`scripts/frontend/deploy.sh`](scripts/frontend/deploy.sh), and the canonical deploy path for sourcemap upload; uploads now retry transient failures with bounded backoff before they warn and let the deploy continue
+- `SPLUNK_SOURCEMAP_UPLOAD_TOKEN` optionally overrides `SPLUNK_ACCESS_TOKEN` just for sourcemap upload when you need a separate token
 - `SPLUNK_OTEL_CLUSTER_NAME` overrides the cluster name used by the repo-managed Splunk OTel Collector bootstrap path
 - `SPLUNK_OTEL_HELM_CHART_VERSION` pins the upstream collector Helm chart version used by the repo-managed bootstrap path
 - `SPLUNK_RUM_APP_NAME` overrides the frontend RUM application name
@@ -373,15 +374,15 @@ python3 scripts/thousandeyes/create-demo-dashboards.py
 
 This workload targets the public broadcast page, status API, HLS manifests, segments, and optional trace-map pivots. It supports one-shot `Job` mode and recurring `CronJob` mode in Kubernetes.
 
-### Protected Operator, Billing, And Commerce Load
+### Protected Operator, Billing, And Optional Commerce Load
 
 - Script: [`scripts/loadgen/operator-billing-loadgen.mjs`](scripts/loadgen/operator-billing-loadgen.mjs)
 - Kubernetes wrapper: [`scripts/loadgen/deploy-k8s-operator-billing-loadgen.sh`](scripts/loadgen/deploy-k8s-operator-billing-loadgen.sh)
 - Docs: [`docs/08-operator-billing-loadgen.md`](docs/08-operator-billing-loadgen.md)
 
-This workload expects the broader protected service set to be reachable through the frontend, including `customer-service`, `payment-service`, `subscription-service`, and `order-service`.
+This workload always exercises the authenticated catalog, RTSP control, billing, and public broadcast pivots. When the broader protected service set is reachable through the frontend, it also exercises `customer-service`, `payment-service`, `subscription-service`, and `order-service`.
 
-The canonical skill deploy path does not deploy those services today. If you want the full protected commerce workload, use the legacy backend demo deploy path or otherwise make those upstream services reachable in the namespace behind `streaming-frontend`.
+The canonical skill deploy path does not deploy those services today. The load generator now marks those optional workspaces unavailable after the first frontend `upstream_unavailable` response and keeps the rest of the operator traffic running. If you want the full protected commerce workload, use the legacy backend demo deploy path or otherwise make those upstream services reachable in the namespace behind `streaming-frontend`.
 
 ## Diagrams And Demo Material
 

@@ -24,18 +24,6 @@ const HOP_BY_HOP_HEADERS = new Set([
     "upgrade"
 ]);
 
-const TRACE_HEADERS = new Set([
-    "traceparent",
-    "tracestate",
-    "baggage",
-    "b3",
-    "x-b3-traceid",
-    "x-b3-spanid",
-    "x-b3-parentspanid",
-    "x-b3-sampled",
-    "x-b3-flags"
-]);
-
 const CONTENT_TYPES = {
     ".css": "text/css; charset=utf-8",
     ".html": "text/html; charset=utf-8",
@@ -376,10 +364,6 @@ const server = http.createServer(async (req, res) => {
     }
 });
 
-server.listen(port, host, () => {
-    console.log(`streaming-frontend gateway listening on ${host}:${port}`);
-});
-
 async function handleApi(req, res, url) {
     const pathname = url.pathname;
 
@@ -630,7 +614,6 @@ function buildProxyHeaders(req, options = {}) {
         if (
             headerValue === undefined
             || HOP_BY_HOP_HEADERS.has(normalized)
-            || TRACE_HEADERS.has(normalized)
         ) {
             continue;
         }
@@ -855,3 +838,18 @@ function summarizeError(error) {
 
     return parts.join(" ") || String(error);
 }
+
+function startServer() {
+    return server.listen(port, host, () => {
+        console.log(`streaming-frontend gateway listening on ${host}:${port}`);
+    });
+}
+
+if (require.main === module) {
+    startServer();
+}
+
+module.exports = {
+    buildProxyHeaders,
+    startServer
+};

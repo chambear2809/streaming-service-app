@@ -9,6 +9,6 @@ Follow the top-level guides in this order when you want the canonical operator p
 5. [`05-kafka-observability.md`](05-kafka-observability.md) for Kafka client telemetry and service-side messaging metrics.
 6. [`06-thousandeyes-rtsp-api.md`](06-thousandeyes-rtsp-api.md) for ThousandEyes tests, alert rules, and dashboard sync.
 7. [`07-broadcast-loadgen.md`](07-broadcast-loadgen.md) for public viewer traffic generation.
-8. [`08-operator-billing-loadgen.md`](08-operator-billing-loadgen.md) for protected operator, billing, and commerce traffic generation.
+8. [`08-operator-billing-loadgen.md`](08-operator-billing-loadgen.md) for protected operator, billing, and optional commerce traffic generation.
 
 Supporting material that does not fit the main numbered flow stays under [`docs/isovalent/`](isovalent/README.md).

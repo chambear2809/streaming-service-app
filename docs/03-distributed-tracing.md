@@ -63,6 +63,7 @@ Override them in the repo-root `.env` instead of editing `frontend/config.js` di
 - `STREAMING_ENVIRONMENT_LABEL`
 - `STREAMING_PUBLIC_RTSP_URL`
 - `SPLUNK_REALM`
+- `SPLUNK_ACCESS_TOKEN`
 - `SPLUNK_RUM_ACCESS_TOKEN`
 - `SPLUNK_RUM_APP_NAME`
 - `SPLUNK_DEPLOYMENT_ENVIRONMENT`
@@ -72,7 +73,7 @@ The frontend build stamps the current app version into the RUM config and then r
 - `splunk-rum sourcemaps inject --path dist`
 - `splunk-rum sourcemaps upload --app-name streaming-app-frontend --app-version <version> --path dist`
 
-`scripts/frontend/deploy.sh` will skip upload unless both `SPLUNK_REALM` and `SPLUNK_RUM_ACCESS_TOKEN` are set. When the upload endpoint returns an error, the deploy scripts warn and continue instead of aborting the rollout.
+`scripts/frontend/deploy.sh` will skip upload unless both `SPLUNK_REALM` and `SPLUNK_ACCESS_TOKEN` are set, unless you explicitly override the upload token with `SPLUNK_SOURCEMAP_UPLOAD_TOKEN`. When the upload endpoint returns an error, the deploy scripts now retry with bounded backoff before they warn and continue instead of aborting the rollout. You can also rerun `scripts/frontend/upload-sourcemaps.sh` against the current `frontend/dist`; it reuses the repo-root `.env` when present.
 
 Session replay is enabled for the Kubernetes frontend. It uses the same Splunk realm and RUM access token as browser RUM.
 

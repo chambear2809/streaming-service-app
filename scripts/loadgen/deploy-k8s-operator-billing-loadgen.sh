@@ -11,8 +11,8 @@ LOADGEN_OPERATOR_PROFILE="${LOADGEN_OPERATOR_PROFILE:-booth}"
 LOADGEN_OPERATOR_K8S_MODE="${LOADGEN_OPERATOR_K8S_MODE:-job}"
 LOADGEN_OPERATOR_K8S_ACTION="${LOADGEN_OPERATOR_K8S_ACTION:-apply}"
 LOADGEN_OPERATOR_CRONJOB_NAME="${LOADGEN_OPERATOR_CRONJOB_NAME:-operator-billing-loadgen-recurring}"
-LOADGEN_OPERATOR_CRON_SCHEDULE="${LOADGEN_OPERATOR_CRON_SCHEDULE:-*/20 * * * *}"
-LOADGEN_OPERATOR_CRON_CONCURRENCY_POLICY="${LOADGEN_OPERATOR_CRON_CONCURRENCY_POLICY:-Forbid}"
+LOADGEN_OPERATOR_CRON_SCHEDULE="${LOADGEN_OPERATOR_CRON_SCHEDULE-}"
+LOADGEN_OPERATOR_CRON_CONCURRENCY_POLICY="${LOADGEN_OPERATOR_CRON_CONCURRENCY_POLICY-}"
 LOADGEN_OPERATOR_CRON_SUSPEND="${LOADGEN_OPERATOR_CRON_SUSPEND:-false}"
 LOADGEN_OPERATOR_CRON_SUCCESS_HISTORY="${LOADGEN_OPERATOR_CRON_SUCCESS_HISTORY:-0}"
 LOADGEN_OPERATOR_CRON_FAILED_HISTORY="${LOADGEN_OPERATOR_CRON_FAILED_HISTORY:-1}"
@@ -98,7 +98,7 @@ apply_profile_defaults() {
       set_env_default LOADGEN_OPERATOR_ORDER_SETTLE_RATIO "0.15"
       set_env_default LOADGEN_OPERATOR_ORDER_COMPLETE_RATIO "0.05"
       set_env_default LOADGEN_OPERATOR_RTSP_JOB_RATIO "0.20"
-      set_env_default LOADGEN_OPERATOR_TAKE_LIVE_RATIO "0.10"
+      set_env_default LOADGEN_OPERATOR_TAKE_LIVE_RATIO "0.00"
       ;;
     booth)
       set_env_default LOADGEN_OPERATOR_DURATION "8m"
@@ -114,7 +114,7 @@ apply_profile_defaults() {
       set_env_default LOADGEN_OPERATOR_ORDER_SETTLE_RATIO "0.35"
       set_env_default LOADGEN_OPERATOR_ORDER_COMPLETE_RATIO "0.15"
       set_env_default LOADGEN_OPERATOR_RTSP_JOB_RATIO "0.35"
-      set_env_default LOADGEN_OPERATOR_TAKE_LIVE_RATIO "0.20"
+      set_env_default LOADGEN_OPERATOR_TAKE_LIVE_RATIO "0.00"
       ;;
     stress)
       set_env_default LOADGEN_OPERATOR_DURATION "10m"
@@ -141,6 +141,31 @@ apply_profile_defaults() {
 }
 
 apply_profile_defaults
+
+apply_cron_defaults() {
+  if [[ -z "${LOADGEN_OPERATOR_CRON_SCHEDULE}" ]]; then
+    case "${LOADGEN_OPERATOR_PROFILE}" in
+      warmup)
+        LOADGEN_OPERATOR_CRON_SCHEDULE="*/5 * * * *"
+        ;;
+      booth)
+        LOADGEN_OPERATOR_CRON_SCHEDULE="*/8 * * * *"
+        ;;
+      stress)
+        LOADGEN_OPERATOR_CRON_SCHEDULE="*/10 * * * *"
+        ;;
+      custom)
+        LOADGEN_OPERATOR_CRON_SCHEDULE="*/20 * * * *"
+        ;;
+    esac
+  fi
+
+  if [[ -z "${LOADGEN_OPERATOR_CRON_CONCURRENCY_POLICY}" ]]; then
+    LOADGEN_OPERATOR_CRON_CONCURRENCY_POLICY="Allow"
+  fi
+}
+
+apply_cron_defaults
 
 validate_mode() {
   case "${LOADGEN_OPERATOR_K8S_MODE}" in
@@ -223,13 +248,23 @@ delete_completed_job() {
 }
 
 wait_and_stream_logs() {
+  local wait_status=0
+
   if [[ "${K8S_DRY_RUN}" == "true" ]]; then
     return 0
   fi
 
-  kubectl -n "${NAMESPACE}" wait --for=condition=complete "job/${LOADGEN_OPERATOR_JOB_NAME}" --timeout=7200s
+  kubectl -n "${NAMESPACE}" wait --for=condition=complete "job/${LOADGEN_OPERATOR_JOB_NAME}" --timeout=7200s || wait_status=$?
+
   echo
-  kubectl -n "${NAMESPACE}" logs "job/${LOADGEN_OPERATOR_JOB_NAME}"
+  kubectl -n "${NAMESPACE}" get job "${LOADGEN_OPERATOR_JOB_NAME}" -o wide 2>/dev/null || true
+  kubectl -n "${NAMESPACE}" get pod -l app.kubernetes.io/name="${LOADGEN_OPERATOR_JOB_NAME}" -o wide 2>/dev/null || true
+  kubectl -n "${NAMESPACE}" logs "job/${LOADGEN_OPERATOR_JOB_NAME}" --all-containers=true 2>/dev/null || true
+
+  if (( wait_status != 0 )); then
+    return "${wait_status}"
+  fi
+
   delete_completed_job
 }
 
@@ -322,7 +357,7 @@ spec:
             - name: LOADGEN_OPERATOR_RTSP_JOB_RATIO
               value: "${LOADGEN_OPERATOR_RTSP_JOB_RATIO:-0.35}"
             - name: LOADGEN_OPERATOR_TAKE_LIVE_RATIO
-              value: "${LOADGEN_OPERATOR_TAKE_LIVE_RATIO:-0.20}"
+              value: "${LOADGEN_OPERATOR_TAKE_LIVE_RATIO:-0.00}"
             - name: LOADGEN_OPERATOR_RESTORE_HOUSE_LOOP
               value: "${LOADGEN_OPERATOR_RESTORE_HOUSE_LOOP:-true}"
           resources:
@@ -414,7 +449,7 @@ spec:
                 - name: LOADGEN_OPERATOR_RTSP_JOB_RATIO
                   value: "${LOADGEN_OPERATOR_RTSP_JOB_RATIO:-0.35}"
                 - name: LOADGEN_OPERATOR_TAKE_LIVE_RATIO
-                  value: "${LOADGEN_OPERATOR_TAKE_LIVE_RATIO:-0.20}"
+                  value: "${LOADGEN_OPERATOR_TAKE_LIVE_RATIO:-0.00}"
                 - name: LOADGEN_OPERATOR_RESTORE_HOUSE_LOOP
                   value: "${LOADGEN_OPERATOR_RESTORE_HOUSE_LOOP:-true}"
               resources:

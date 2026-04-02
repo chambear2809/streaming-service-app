@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 ENV_FILE="${ENV_FILE:-${ROOT_DIR}/.env}"
 DEMO_AUTH_SECRET_NAME="streaming-demo-auth"
+RENDERED_NAMESPACE=""
 
 load_env_file() {
   local env_file="$1"
@@ -64,6 +65,11 @@ PAYMENT_ARCHIVE_PATH="${TEMP_DIR}/payment-service-source.tgz"
 SUBSCRIPTION_ARCHIVE_PATH="${TEMP_DIR}/subscription-service-source.tgz"
 ORDER_ARCHIVE_PATH="${TEMP_DIR}/order-service-source.tgz"
 
+fail() {
+  print -u2 -r -- "[backend-demo-deploy] ERROR: $*"
+  exit 1
+}
+
 cleanup() {
   rm -rf "${TEMP_DIR}"
 }
@@ -72,6 +78,24 @@ trap cleanup EXIT
 apply_generated_resource() {
   kubectl apply --server-side -f -
 }
+
+escape_sed_replacement() {
+  printf '%s' "$1" | sed -e 's/[\/&]/\\&/g'
+}
+
+render_manifest() {
+  sed -e "s/streaming-service-app/${RENDERED_NAMESPACE}/g" "$1"
+}
+
+apply_manifest() {
+  render_manifest "$1" | kubectl apply -f -
+}
+
+create_namespace() {
+  kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+}
+
+RENDERED_NAMESPACE="$(escape_sed_replacement "${NAMESPACE}")"
 
 secret_field_b64() {
   local name="$1"
@@ -95,6 +119,7 @@ package_service_source() {
   local archive_path="$2"
   shift 2
   local -a excludes
+  local -a archive_paths
   local extra_path
 
   excludes=(
@@ -109,7 +134,8 @@ package_service_source() {
     excludes+=("--exclude=${service_dir}/${extra_path}")
   done
 
-  tar -C "${ROOT_DIR}" "${excludes[@]}" -czf "${archive_path}" "${service_dir}"
+  archive_paths=("pom.xml" "${service_dir}")
+  tar -C "${ROOT_DIR}" "${excludes[@]}" -czf "${archive_path}" "${archive_paths[@]}"
 }
 
 ensure_demo_auth_secret() {
@@ -132,7 +158,7 @@ ensure_demo_auth_secret() {
     || fail "deployed secret ${DEMO_AUTH_SECRET_NAME} is missing DEMO_AUTH_PASSWORD"
 }
 
-kubectl apply -f "${ROOT_DIR}/k8s/frontend/namespace.yaml"
+create_namespace
 
 package_service_source services/content-service "${CONTENT_ARCHIVE_PATH}" src/test
 package_service_source services/media-service "${MEDIA_ARCHIVE_PATH}" src/test
@@ -182,16 +208,16 @@ kubectl -n "${NAMESPACE}" create configmap order-service-source \
 
 ensure_demo_auth_secret
 
-kubectl apply -f "${ROOT_DIR}/k8s/backend-demo/postgres.yaml"
-kubectl apply -f "${ROOT_DIR}/k8s/backend-demo/content-service.yaml"
-kubectl apply -f "${ROOT_DIR}/k8s/backend-demo/media-service.yaml"
-kubectl apply -f "${ROOT_DIR}/k8s/backend-demo/user-service.yaml"
-kubectl apply -f "${ROOT_DIR}/k8s/backend-demo/billing-service.yaml"
-kubectl apply -f "${ROOT_DIR}/k8s/backend-demo/ad-service.yaml"
-kubectl apply -f "${ROOT_DIR}/k8s/backend-demo/customer-service.yaml"
-kubectl apply -f "${ROOT_DIR}/k8s/backend-demo/payment-service.yaml"
-kubectl apply -f "${ROOT_DIR}/k8s/backend-demo/subscription-service.yaml"
-kubectl apply -f "${ROOT_DIR}/k8s/backend-demo/order-service.yaml"
+apply_manifest "${ROOT_DIR}/k8s/backend-demo/postgres.yaml"
+apply_manifest "${ROOT_DIR}/k8s/backend-demo/content-service.yaml"
+apply_manifest "${ROOT_DIR}/k8s/backend-demo/media-service.yaml"
+apply_manifest "${ROOT_DIR}/k8s/backend-demo/user-service.yaml"
+apply_manifest "${ROOT_DIR}/k8s/backend-demo/billing-service.yaml"
+apply_manifest "${ROOT_DIR}/k8s/backend-demo/ad-service.yaml"
+apply_manifest "${ROOT_DIR}/k8s/backend-demo/customer-service.yaml"
+apply_manifest "${ROOT_DIR}/k8s/backend-demo/payment-service.yaml"
+apply_manifest "${ROOT_DIR}/k8s/backend-demo/subscription-service.yaml"
+apply_manifest "${ROOT_DIR}/k8s/backend-demo/order-service.yaml"
 
 kubectl -n "${NAMESPACE}" rollout restart deployment/content-service-demo
 kubectl -n "${NAMESPACE}" rollout restart deployment/media-service-demo
@@ -214,7 +240,7 @@ kubectl -n "${NAMESPACE}" rollout status deployment/payment-service-demo --timeo
 kubectl -n "${NAMESPACE}" rollout status deployment/subscription-service-demo --timeout=900s
 kubectl -n "${NAMESPACE}" rollout status deployment/order-service-demo --timeout=900s
 
-zsh "${ROOT_DIR}/scripts/frontend/deploy.sh"
+NAMESPACE="${NAMESPACE}" zsh "${ROOT_DIR}/scripts/frontend/deploy.sh"
 
 echo
 kubectl -n "${NAMESPACE}" get svc ad-service-demo billing-service content-service-demo customer-service-demo media-service-demo media-service-demo-rtsp order-service-demo payment-service-demo streaming-frontend streaming-postgres subscription-service-demo user-service-demo

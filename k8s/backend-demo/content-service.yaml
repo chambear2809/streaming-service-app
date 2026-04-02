@@ -94,6 +94,13 @@ spec:
               value: demo_content
             - name: SPRING_FLYWAY_TABLE
               value: demo_content_flyway_schema_history
+          startupProbe:
+            httpGet:
+              path: /api/v1/demo/content
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 36
           readinessProbe:
             httpGet:
               path: /api/v1/demo/content

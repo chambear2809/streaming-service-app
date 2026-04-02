@@ -118,6 +118,13 @@ spec:
               value: health,info
             - name: SERVER_PORT
               value: "8070"
+          startupProbe:
+            httpGet:
+              path: /api/v1/billing/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 36
           readinessProbe:
             httpGet:
               path: /api/v1/billing/health

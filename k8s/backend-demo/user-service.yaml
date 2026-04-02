@@ -84,6 +84,13 @@ spec:
                   key: DEMO_AUTH_PASSWORD
             - name: SERVER_PORT
               value: "8080"
+          startupProbe:
+            httpGet:
+              path: /api/v1/demo/auth/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 36
           readinessProbe:
             httpGet:
               path: /api/v1/demo/auth/health

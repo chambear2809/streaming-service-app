@@ -71,6 +71,10 @@ assert_contains "${direct_output}" "\"testName\":\"RTP-Stream-Proxy\""
 assert_contains "${direct_output}" "\"testName\":\"aleccham-broadcast-trace-map\""
 assert_contains "${direct_output}" "\"testName\":\"aleccham-broadcast-playback\""
 assert_equals \
+  "$(count_fixed_occurrences "${direct_output}" "\"distributedTracing\":true")" \
+  "1" \
+  "direct create-all should enable distributed tracing only on the trace-map HTTP test"
+assert_equals \
   "$(count_fixed_occurrences "${direct_output}" "\"alertsEnabled\":true")" \
   "5" \
   "direct create-all should enable alerts for all five tests by default"
@@ -156,6 +160,10 @@ assert_equals "${payload_count}" "5" "in-cluster create-all should submit all fi
 combined_payloads="$(cat "${capture_dir}"/payload-*.json)"
 assert_contains "${combined_payloads}" "\"testName\":\"aleccham-broadcast-trace-map\""
 assert_contains "${combined_payloads}" "\"testName\":\"aleccham-broadcast-playback\""
+assert_equals \
+  "$(count_fixed_occurrences "${combined_payloads}" "\"distributedTracing\":true")" \
+  "1" \
+  "in-cluster payloads should enable distributed tracing only on the trace-map HTTP test"
 assert_equals \
   "$(count_fixed_occurrences "${combined_payloads}" "\"alertsEnabled\":true")" \
   "5" \

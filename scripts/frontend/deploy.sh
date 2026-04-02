@@ -61,8 +61,34 @@ APP_VERSION="${APP_VERSION:-$(git -C "${ROOT_DIR}" rev-parse --short HEAD)}"
 RUM_CONFIGMAP_NAME="${RUM_CONFIGMAP_NAME:-streaming-frontend-rum-assets}"
 SPLUNK_RUM_APP_NAME="${SPLUNK_RUM_APP_NAME:-streaming-app-frontend}"
 SPLUNK_RUM_ACCESS_TOKEN="${SPLUNK_RUM_ACCESS_TOKEN:-}"
+SPLUNK_ACCESS_TOKEN="${SPLUNK_ACCESS_TOKEN:-}"
+SPLUNK_SOURCEMAP_UPLOAD_TOKEN="${SPLUNK_SOURCEMAP_UPLOAD_TOKEN:-${SPLUNK_ACCESS_TOKEN:-}}"
+RENDERED_NAMESPACE=""
 
-kubectl apply -f "${ROOT_DIR}/k8s/frontend/namespace.yaml"
+fail() {
+  print -u2 -r -- "[frontend-deploy] ERROR: $*"
+  exit 1
+}
+
+escape_sed_replacement() {
+  printf '%s' "$1" | sed -e 's/[\/&]/\\&/g'
+}
+
+render_manifest() {
+  sed -e "s/streaming-service-app/${RENDERED_NAMESPACE}/g" "$1"
+}
+
+apply_manifest() {
+  render_manifest "$1" | kubectl apply -f -
+}
+
+create_namespace() {
+  kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+}
+
+RENDERED_NAMESPACE="$(escape_sed_replacement "${NAMESPACE}")"
+
+create_namespace
 
 if [[ ! -d "${FRONTEND_DIR}/node_modules" ]]; then
   log "Installing frontend dependencies"
@@ -75,24 +101,26 @@ fi
 log "Building frontend assets"
 (
   cd "${FRONTEND_DIR}"
-  APP_VERSION="${APP_VERSION}" npm run build:production
+  APP_VERSION="${APP_VERSION}" \
+  STREAMING_NAMESPACE="${NAMESPACE}" \
+  npm run build:production
 )
 
-if [[ -n "${SPLUNK_REALM:-}" && -n "${SPLUNK_RUM_ACCESS_TOKEN:-}" ]]; then
-  log "Uploading frontend sourcemaps to Splunk RUM"
-  if ! (
-    cd "${FRONTEND_DIR}"
-    APP_VERSION="${APP_VERSION}" ./node_modules/.bin/splunk-rum sourcemaps upload \
-      --app-name "${SPLUNK_RUM_APP_NAME}" \
-      --app-version "${APP_VERSION}" \
-      --path dist \
-      --realm "${SPLUNK_REALM}" \
-      --token "${SPLUNK_RUM_ACCESS_TOKEN}"
-  ); then
-    warn "Splunk source map upload failed; continuing deploy because the frontend rollout does not depend on it."
+if [[ -n "${SPLUNK_REALM:-}" && -z "${SPLUNK_SOURCEMAP_UPLOAD_TOKEN:-}" && -n "${SPLUNK_RUM_ACCESS_TOKEN:-}" ]]; then
+  warn "SPLUNK_RUM_ACCESS_TOKEN is set, but sourcemap upload needs SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN. Browser RUM will still work; sourcemap upload is being skipped."
+elif [[ -n "${SPLUNK_REALM:-}" && -n "${SPLUNK_SOURCEMAP_UPLOAD_TOKEN:-}" ]]; then
+  if ! LOG_PREFIX="[frontend-deploy]" \
+    FRONTEND_DIR="${FRONTEND_DIR}" \
+    DIST_DIR="${DIST_DIR}" \
+    APP_VERSION="${APP_VERSION}" \
+    SPLUNK_RUM_APP_NAME="${SPLUNK_RUM_APP_NAME}" \
+    SPLUNK_REALM="${SPLUNK_REALM}" \
+    SPLUNK_SOURCEMAP_UPLOAD_TOKEN="${SPLUNK_SOURCEMAP_UPLOAD_TOKEN}" \
+    bash "${ROOT_DIR}/scripts/frontend/upload-sourcemaps.sh"; then
+    warn "Splunk source map upload still failed after retries; continuing deploy because the frontend rollout does not depend on it."
   fi
 else
-  log "Skipping Splunk source map upload because SPLUNK_REALM and/or SPLUNK_RUM_ACCESS_TOKEN are not set."
+  log "Skipping Splunk source map upload because SPLUNK_REALM and/or SPLUNK_ACCESS_TOKEN are not set."
 fi
 
 kubectl -n "${NAMESPACE}" create configmap "${CONFIGMAP_NAME}" \
@@ -111,8 +139,8 @@ kubectl -n "${NAMESPACE}" create configmap "${RUM_CONFIGMAP_NAME}" \
   --from-file=splunk-instrumentation.js="${DIST_DIR}/splunk-instrumentation.js" \
   --dry-run=client -o yaml | kubectl apply --server-side -f -
 
-kubectl apply -f "${ROOT_DIR}/k8s/frontend/deployment.yaml"
-kubectl apply -f "${ROOT_DIR}/k8s/frontend/service.yaml"
+apply_manifest "${ROOT_DIR}/k8s/frontend/deployment.yaml"
+apply_manifest "${ROOT_DIR}/k8s/frontend/service.yaml"
 kubectl -n "${NAMESPACE}" rollout restart deployment/"${APP_NAME}"
 kubectl -n "${NAMESPACE}" rollout status deployment/"${APP_NAME}" --timeout=180s
 

@@ -74,6 +74,17 @@ EOF
   chmod +x "${path}"
 }
 
+write_splunk_rum_stub() {
+  local path="$1"
+
+  cat > "${path}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${path}"
+}
+
 write_helper_stub() {
   local path="$1"
 
@@ -188,6 +199,7 @@ run_deploy() {
   write_tar_stub "${stub_dir}/tar"
   write_npm_stub "${stub_dir}/npm"
   write_kubectl_stub "${stub_dir}/kubectl"
+  write_splunk_rum_stub "${temp_dir}/splunk-rum"
   write_helper_stub "${temp_dir}/helper.sh"
   : > "${temp_dir}/helper.log"
   : > "${temp_dir}/test.env"
@@ -203,6 +215,7 @@ run_deploy() {
     ROLLOUT_SNAPSHOT_INTERVAL_SECONDS='0' \
     DEPLOY_HELPER_LOG="${temp_dir}/helper.log" \
     SPLUNK_OTEL_HELPER_SCRIPT="${temp_dir}/helper.sh" \
+    SPLUNK_RUM_CLI="${temp_dir}/splunk-rum" \
     SPLUNK_REALM='us1' \
     SPLUNK_ACCESS_TOKEN='collector-token' \
     SPLUNK_DEPLOYMENT_ENVIRONMENT='streaming-app' \

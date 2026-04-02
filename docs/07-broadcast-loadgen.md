@@ -31,11 +31,17 @@ To keep the load generator running on a regular cadence inside the cluster, depl
 
 ```bash
 LOADGEN_K8S_MODE=cronjob \
-LOADGEN_CRON_SCHEDULE='*/15 * * * *' \
 zsh scripts/loadgen/deploy-k8s-broadcast-loadgen.sh
 ```
 
-The recurring mode defaults to `Forbid` concurrency so a new run does not overlap an older one when the booth profile is still active.
+In recurring mode, the wrapper now defaults to a profile-matched cadence with `Allow` concurrency so booth traffic stays continuous in APM:
+
+- `warmup`: every `6` minutes
+- `booth`: every `10` minutes
+- `stress`: every `12` minutes
+- `custom`: falls back to `*/15 * * * *` unless you set `LOADGEN_CRON_SCHEDULE`
+
+Set `LOADGEN_CRON_CONCURRENCY_POLICY=Forbid` if you prefer strict non-overlap and accept visible gaps between runs.
 
 ## Recommended Profiles
 
@@ -105,7 +111,6 @@ Recurring booth-default example:
 ```bash
 LOADGEN_PROFILE=booth \
 LOADGEN_K8S_MODE=cronjob \
-LOADGEN_CRON_SCHEDULE='*/15 * * * *' \
 zsh scripts/loadgen/deploy-k8s-broadcast-loadgen.sh
 ```
 

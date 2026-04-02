@@ -1,4 +1,4 @@
-# 08. Operator, Billing, and Commerce Load Generator
+# 08. Operator, Billing, and Optional Commerce Load Generator
 
 The protected load generator simulates authenticated booth traffic against the
 demo frontend instead of calling backend services directly.
@@ -8,11 +8,15 @@ It exercises:
 - `/api/v1/demo/auth/persona/{persona}` and `/api/v1/demo/auth/session`
 - `/api/v1/demo/content` and selected RTSP control endpoints
 - `/api/v1/billing/invoices` and `/api/v1/billing/events`
+- `/api/v1/demo/public/broadcast/current` and `/api/v1/demo/public/trace-map`
+
+When the broader protected commerce services are present behind
+`streaming-frontend`, it also exercises:
+
 - `/api/v1/customers`
 - `/api/v1/payments/card-holder` and `/api/v1/payments/transactions`
 - `/api/v1/subscription/all` and `/api/v1/subscription/active`
 - `/api/v1/orders` plus `/api/v1/orders/{id}/status`
-- `/api/v1/demo/public/broadcast/current` and `/api/v1/demo/public/trace-map`
 
 ## Local Run
 
@@ -32,20 +36,34 @@ zsh scripts/loadgen/deploy-k8s-operator-billing-loadgen.sh
 The deploy helper mounts the Node script into a `node:22-alpine` job pod and
 points it at `streaming-frontend.<namespace>.svc.cluster.local` by default.
 
+If the canonical demo deploy is running without `customer-service`,
+`payment-service`, `subscription-service`, or `order-service`, the load
+generator now marks those optional workspaces unavailable after the first
+frontend `upstream_unavailable` response and continues with authenticated
+catalog, RTSP, billing, and public-path traffic.
+
 To keep the protected load generator running on a regular cadence inside the
 cluster, deploy it as a `CronJob` instead of a one-shot `Job`:
 
 ```bash
 LOADGEN_OPERATOR_K8S_MODE=cronjob \
-LOADGEN_OPERATOR_CRON_SCHEDULE='*/20 * * * *' \
 zsh scripts/loadgen/deploy-k8s-operator-billing-loadgen.sh
 ```
 
+In recurring mode, the wrapper now defaults to a profile-matched cadence with `Allow` concurrency so the protected services keep emitting traffic without long idle windows in APM:
+
+- `warmup`: every `5` minutes
+- `booth`: every `8` minutes
+- `stress`: every `10` minutes
+- `custom`: falls back to `*/20 * * * *` unless you set `LOADGEN_OPERATOR_CRON_SCHEDULE`
+
+Set `LOADGEN_OPERATOR_CRON_CONCURRENCY_POLICY=Forbid` if you prefer strict non-overlap and accept visible gaps between runs.
+
 ## Recommended Profiles
 
-- `Warm-up`: `1` worker, `5m` duration, `6s` pause. Use this before a demo starts when you want a low-risk authenticated trickle.
-- `Booth default`: `3` workers, `8m` duration, `4s` pause. This is the default profile for keeping the protected suite warm during live demos.
-- `Stress`: `5` workers, `10m` duration, `3s` pause. Use this when you want more aggressive Accounts, Payments, Commerce, and media-control traffic.
+- `Warm-up`: `1` worker, `5m` duration, `6s` pause, `0%` auto-take-live. Use this before a demo starts when you want a low-risk authenticated trickle.
+- `Booth default`: `3` workers, `8m` duration, `4s` pause, `0%` auto-take-live. This is the default profile for keeping the protected suite warm during live demos without switching the public channel to a contribution feed.
+- `Stress`: `5` workers, `10m` duration, `3s` pause. Use this when you want more aggressive billing and media-control traffic, plus heavier Accounts, Payments, and Commerce activity when those optional backends are deployed.
 
 The deploy helper defaults to `LOADGEN_OPERATOR_PROFILE=booth`. Set
 `LOADGEN_OPERATOR_PROFILE=warmup`, `booth`, `stress`, or `custom` depending on
@@ -113,7 +131,6 @@ Recurring booth-default example:
 ```bash
 LOADGEN_OPERATOR_PROFILE=booth \
 LOADGEN_OPERATOR_K8S_MODE=cronjob \
-LOADGEN_OPERATOR_CRON_SCHEDULE='*/20 * * * *' \
 zsh scripts/loadgen/deploy-k8s-operator-billing-loadgen.sh
 ```
 
@@ -154,4 +171,5 @@ The script prints rolling worker-cycle summaries and a final JSON document with:
 - billing events, invoice captures, RTSP jobs, and broadcast activations
 - order creation and settlement counts
 - subscription activation and completion verification counts
+- optional workspace availability for `accounts`, `payments`, and `commerce`
 - per-endpoint request counts, failures, status codes, and latency summaries
