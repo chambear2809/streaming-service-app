@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Acme Broadcasting Operations Suite</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'><stop offset='0%25' stop-color='%237fb1ff'/><stop offset='100%25' stop-color='%23e6c17d'/></linearGradient></defs><rect width='12' height='32' x='10' rx='4' fill='url(%23g)'/></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="./styles.css">
     <script src="./config.js"></script>
     <script type="module" src="./splunk-instrumentation.js"></script>
@@ -295,19 +298,28 @@
                     </div>
                 </div>
 
-                <details class="advanced-panel">
-                    <summary class="advanced-summary">Operator source override</summary>
-                    <form class="source-form" id="player-form">
-                        <label>
-                            Source URL
-                            <input id="player-url" type="url" placeholder="https://.../movie.mp4">
-                        </label>
-
-                        <div class="form-actions">
-                            <button class="button button-solid" type="submit">Load source</button>
-                            <button class="button button-ghost" id="load-demo" type="button">Use selected asset</button>
+                <details class="surface-disclosure">
+                    <summary class="surface-disclosure-summary">
+                        <div class="surface-disclosure-summary-copy">
+                            <span>Source control</span>
+                            <strong>Operator source override</strong>
+                            <p>Load a custom playback URL or switch to the currently selected catalog asset.</p>
                         </div>
-                    </form>
+                        <span class="surface-disclosure-indicator" aria-hidden="true"></span>
+                    </summary>
+                    <div class="surface-disclosure-body">
+                        <form class="source-form" id="player-form">
+                            <label>
+                                Source URL
+                                <input id="player-url" type="url" placeholder="https://.../movie.mp4">
+                            </label>
+
+                            <div class="form-actions">
+                                <button class="button button-solid" type="submit">Load source</button>
+                                <button class="button button-ghost" id="load-demo" type="button">Use selected asset</button>
+                            </div>
+                        </form>
+                    </div>
                 </details>
             </aside>
         </section>
@@ -643,125 +655,125 @@
                                 </label>
 
                                 <div class="demo-monkey-control-grid">
-                            <label class="demo-monkey-toggle-card">
-                                <div class="demo-monkey-toggle-top">
-                                    <input id="demo-monkey-latency-enabled" type="checkbox">
-                                    <span>Startup latency</span>
-                                </div>
-                                <select id="demo-monkey-latency-value">
-                                    <option value="1200">1.2 seconds</option>
-                                    <option value="1800">1.8 seconds</option>
-                                    <option value="2500">2.5 seconds</option>
-                                    <option value="4000">4 seconds</option>
-                                </select>
-                            </label>
+                                    <label class="demo-monkey-toggle-card">
+                                        <div class="demo-monkey-toggle-top">
+                                            <input id="demo-monkey-latency-enabled" type="checkbox">
+                                            <span>Startup latency</span>
+                                        </div>
+                                        <select id="demo-monkey-latency-value">
+                                            <option value="1200">1.2 seconds</option>
+                                            <option value="1800">1.8 seconds</option>
+                                            <option value="2500">2.5 seconds</option>
+                                            <option value="4000">4 seconds</option>
+                                        </select>
+                                    </label>
 
-                            <label class="demo-monkey-toggle-card">
-                                <div class="demo-monkey-toggle-top">
-                                    <input id="demo-monkey-throttle-enabled" type="checkbox">
-                                    <span>Bandwidth clamp</span>
-                                </div>
-                                <select id="demo-monkey-throttle-value">
-                                    <option value="384">384 kbps</option>
-                                    <option value="512">512 kbps</option>
-                                    <option value="768">768 kbps</option>
-                                    <option value="1500">1.5 Mbps</option>
-                                </select>
-                            </label>
+                                    <label class="demo-monkey-toggle-card">
+                                        <div class="demo-monkey-toggle-top">
+                                            <input id="demo-monkey-throttle-enabled" type="checkbox">
+                                            <span>Bandwidth clamp</span>
+                                        </div>
+                                        <select id="demo-monkey-throttle-value">
+                                            <option value="384">384 kbps</option>
+                                            <option value="512">512 kbps</option>
+                                            <option value="768">768 kbps</option>
+                                            <option value="1500">1.5 Mbps</option>
+                                        </select>
+                                    </label>
 
-                            <label class="demo-monkey-toggle-card">
-                                <div class="demo-monkey-toggle-top">
-                                    <input id="demo-monkey-disconnect-enabled" type="checkbox">
-                                    <span>Mid-stream reset</span>
-                                </div>
-                                <select id="demo-monkey-disconnect-value">
-                                    <option value="256">256 KiB</option>
-                                    <option value="384">384 KiB</option>
-                                    <option value="768">768 KiB</option>
-                                </select>
-                            </label>
+                                    <label class="demo-monkey-toggle-card">
+                                        <div class="demo-monkey-toggle-top">
+                                            <input id="demo-monkey-disconnect-enabled" type="checkbox">
+                                            <span>Mid-stream reset</span>
+                                        </div>
+                                        <select id="demo-monkey-disconnect-value">
+                                            <option value="256">256 KiB</option>
+                                            <option value="384">384 KiB</option>
+                                            <option value="768">768 KiB</option>
+                                        </select>
+                                    </label>
 
-                            <label class="demo-monkey-toggle-card">
-                                <div class="demo-monkey-toggle-top">
-                                    <input id="demo-monkey-packet-loss-enabled" type="checkbox">
-                                    <span>Packet loss</span>
-                                </div>
-                                <select id="demo-monkey-packet-loss-value">
-                                    <option value="10">10% of transfers</option>
-                                    <option value="20">20% of transfers</option>
-                                    <option value="35">35% of transfers</option>
-                                </select>
-                                <p>Abort a percentage of playback and broadcast transfers early so the viewer path looks lossy and intermittent.</p>
-                            </label>
+                                    <label class="demo-monkey-toggle-card">
+                                        <div class="demo-monkey-toggle-top">
+                                            <input id="demo-monkey-packet-loss-enabled" type="checkbox">
+                                            <span>Packet loss</span>
+                                        </div>
+                                        <select id="demo-monkey-packet-loss-value">
+                                            <option value="10">10% of transfers</option>
+                                            <option value="20">20% of transfers</option>
+                                            <option value="35">35% of transfers</option>
+                                        </select>
+                                        <p>Abort a percentage of playback and broadcast transfers early so the viewer path looks lossy and intermittent.</p>
+                                    </label>
 
-                            <label class="demo-monkey-toggle-card">
-                                <div class="demo-monkey-toggle-top">
-                                    <input id="demo-monkey-playback-failure-enabled" type="checkbox">
-                                    <span>Playback 503</span>
-                                </div>
-                                <p>Return HTTP 503 from video playback endpoints so Browser RUM and APM both record a hard failure.</p>
-                            </label>
+                                    <label class="demo-monkey-toggle-card">
+                                        <div class="demo-monkey-toggle-top">
+                                            <input id="demo-monkey-playback-failure-enabled" type="checkbox">
+                                            <span>Playback 503</span>
+                                        </div>
+                                        <p>Return HTTP 503 from video playback endpoints so Browser RUM and APM both record a hard failure.</p>
+                                    </label>
 
-                            <label class="demo-monkey-toggle-card">
-                                <div class="demo-monkey-toggle-top">
-                                    <input id="demo-monkey-trace-map-failure-enabled" type="checkbox">
-                                    <span>Trace pivot 503</span>
-                                </div>
-                                <p>Force the public trace pivot to fan out across upstream services and then return HTTP 503 for the ThousandEyes handoff story.</p>
-                            </label>
+                                    <label class="demo-monkey-toggle-card">
+                                        <div class="demo-monkey-toggle-top">
+                                            <input id="demo-monkey-trace-map-failure-enabled" type="checkbox">
+                                            <span>Trace pivot 503</span>
+                                        </div>
+                                        <p>Force the public trace pivot to fan out across upstream services and then return HTTP 503 for the ThousandEyes handoff story.</p>
+                                    </label>
 
-                            <label class="demo-monkey-toggle-card">
-                                <div class="demo-monkey-toggle-top">
-                                    <input id="demo-monkey-dependency-timeout-enabled" type="checkbox">
-                                    <span>Dependency timeout</span>
-                                </div>
-                                <select id="demo-monkey-dependency-timeout-service">
-                                    <option value="user-service-demo">User service</option>
-                                    <option value="content-service-demo">Content service</option>
-                                    <option value="billing-service">Billing service</option>
-                                    <option value="ad-service-demo">Ad service</option>
-                                </select>
-                                <p>Force the selected upstream service in the public trace pivot to time out instead of returning promptly.</p>
-                            </label>
+                                    <label class="demo-monkey-toggle-card">
+                                        <div class="demo-monkey-toggle-top">
+                                            <input id="demo-monkey-dependency-timeout-enabled" type="checkbox">
+                                            <span>Dependency timeout</span>
+                                        </div>
+                                        <select id="demo-monkey-dependency-timeout-service">
+                                            <option value="user-service-demo">User service</option>
+                                            <option value="content-service-demo">Content service</option>
+                                            <option value="billing-service">Billing service</option>
+                                            <option value="ad-service-demo">Ad service</option>
+                                        </select>
+                                        <p>Force the selected upstream service in the public trace pivot to time out instead of returning promptly.</p>
+                                    </label>
 
-                            <label class="demo-monkey-toggle-card">
-                                <div class="demo-monkey-toggle-top">
-                                    <input id="demo-monkey-dependency-failure-enabled" type="checkbox">
-                                    <span>Service failure</span>
-                                </div>
-                                <select id="demo-monkey-dependency-failure-service">
-                                    <option value="user-service-demo">User service</option>
-                                    <option value="content-service-demo">Content service</option>
-                                    <option value="billing-service">Billing service</option>
-                                    <option value="ad-service-demo">Ad service</option>
-                                </select>
-                                <p>Force the selected upstream service in the public trace pivot to return a synthetic HTTP 503.</p>
-                            </label>
+                                    <label class="demo-monkey-toggle-card">
+                                        <div class="demo-monkey-toggle-top">
+                                            <input id="demo-monkey-dependency-failure-enabled" type="checkbox">
+                                            <span>Service failure</span>
+                                        </div>
+                                        <select id="demo-monkey-dependency-failure-service">
+                                            <option value="user-service-demo">User service</option>
+                                            <option value="content-service-demo">Content service</option>
+                                            <option value="billing-service">Billing service</option>
+                                            <option value="ad-service-demo">Ad service</option>
+                                        </select>
+                                        <p>Force the selected upstream service in the public trace pivot to return a synthetic HTTP 503.</p>
+                                    </label>
 
-                            <label class="demo-monkey-toggle-card">
-                                <div class="demo-monkey-toggle-top">
-                                    <input id="demo-monkey-frontend-exception-enabled" type="checkbox">
-                                    <span>Browser exception</span>
-                                </div>
-                                <p>Emit one unhandled browser exception on page load so the frontend becomes visible in Splunk Browser RUM.</p>
-                            </label>
+                                    <label class="demo-monkey-toggle-card">
+                                        <div class="demo-monkey-toggle-top">
+                                            <input id="demo-monkey-frontend-exception-enabled" type="checkbox">
+                                            <span>Browser exception</span>
+                                        </div>
+                                        <p>Emit one unhandled browser exception on page load so the frontend becomes visible in Splunk Browser RUM.</p>
+                                    </label>
 
-                            <label class="demo-monkey-toggle-card">
-                                <div class="demo-monkey-toggle-top">
-                                    <input id="demo-monkey-slow-ad-enabled" type="checkbox">
-                                    <span>Slow ad</span>
-                                </div>
-                                <p>Delay ad decisioning so the broadcast reaches the sponsor break and then stalls before the clip starts.</p>
-                            </label>
+                                    <label class="demo-monkey-toggle-card">
+                                        <div class="demo-monkey-toggle-top">
+                                            <input id="demo-monkey-slow-ad-enabled" type="checkbox">
+                                            <span>Slow ad</span>
+                                        </div>
+                                        <p>Delay ad decisioning so the broadcast reaches the sponsor break and then stalls before the clip starts.</p>
+                                    </label>
 
-                            <label class="demo-monkey-toggle-card">
-                                <div class="demo-monkey-toggle-top">
-                                    <input id="demo-monkey-ad-load-failure-enabled" type="checkbox">
-                                    <span>Ad not loading</span>
+                                    <label class="demo-monkey-toggle-card">
+                                        <div class="demo-monkey-toggle-top">
+                                            <input id="demo-monkey-ad-load-failure-enabled" type="checkbox">
+                                            <span>Ad not loading</span>
+                                        </div>
+                                        <p>Force the sponsor clip to fail during the injected ad slot while leaving the rest of the video feed intact.</p>
+                                    </label>
                                 </div>
-                                <p>Force the sponsor clip to fail during the injected ad slot while leaving the rest of the video feed intact.</p>
-                            </label>
-                        </div>
 
                                 <div class="form-actions">
                                     <button class="button button-solid" id="demo-monkey-apply" type="submit">Apply faults</button>
@@ -1255,8 +1267,17 @@
     </main>
 
     <footer class="footer">
-        <p>Acme Broadcasting brings programming, control-room workflows, sponsor operations, contribution intake, and revenue review into one workspace.</p>
-        <p>The suite stays role-aware so platform, programming, executive, and finance users land in the desk that matches their scope.</p>
+        <div class="footer-brand">
+            <span class="brand-mark footer-mark"></span>
+            <div class="footer-copy">
+                <strong>Acme Broadcasting Network</strong>
+                <p>Programming, control-room workflows, sponsor operations, contribution intake, and revenue review in one workspace.</p>
+            </div>
+        </div>
+        <div class="footer-meta">
+            <p>The suite stays role-aware so platform, programming, executive, and finance users land in the desk that matches their scope.</p>
+            <small>&copy; Acme Broadcasting Network</small>
+        </div>
     </footer>
 </div>
 </body>
