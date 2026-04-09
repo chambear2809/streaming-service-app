@@ -1778,6 +1778,11 @@ function renderPageNavigation() {
     for (const node of elements.pageNodes) {
         node.hidden = node.dataset.page !== state.currentPage;
     }
+
+    if (pageDirty.has(state.currentPage)) {
+        renderPageContent(state.currentPage);
+        pageDirty.delete(state.currentPage);
+    }
 }
 
 function goToPage(page) {
@@ -3412,7 +3417,15 @@ function cardMarkup(item) {
     `;
 }
 
+const rowCache = new WeakMap();
+
 function renderRow(container, items, emptyMessage) {
+    const cacheKey = items.map((item) => `${item.id}:${state.myList.has(item.id)}:${progressPercent(item.id)}:${item.id === state.selectedId}`).join("|");
+    if (rowCache.get(container) === cacheKey) {
+        return;
+    }
+    rowCache.set(container, cacheKey);
+
     if (!items.length) {
         container.innerHTML = `<div class="empty-row">${escapeHtml(emptyMessage)}</div>`;
         return;
@@ -4349,6 +4362,52 @@ function renderCommerceConsole() {
 }
 
 let renderLayoutPending = false;
+const pageDirty = new Set();
+
+function markAllPagesDirty() {
+    pageDirty.add("home");
+    pageDirty.add("player");
+    pageDirty.add("library");
+    pageDirty.add("operations");
+    pageDirty.add("billing");
+    pageDirty.add("accounts");
+    pageDirty.add("payments");
+    pageDirty.add("commerce");
+}
+
+function renderPageContent(page) {
+    switch (page) {
+        case "home":
+            renderFeatured();
+            renderBroadcastDeck();
+            renderMyListPreview();
+            break;
+        case "player":
+            renderPlayerMeta();
+            break;
+        case "library":
+            renderLibrary();
+            break;
+        case "operations":
+            renderOperationsBoard();
+            renderAdIssueConsole();
+            renderDemoMonkeyConsole();
+            renderRtspJobs();
+            break;
+        case "billing":
+            renderBillingConsole();
+            break;
+        case "accounts":
+            renderAccountsConsole();
+            break;
+        case "payments":
+            renderPaymentsConsole();
+            break;
+        case "commerce":
+            renderCommerceConsole();
+            break;
+    }
+}
 
 function renderLayoutImmediate() {
     renderLayoutPending = false;
@@ -4360,24 +4419,19 @@ function renderLayoutImmediate() {
     updateRoleScopedView();
     ensurePageAccess();
     syncSelection();
-    renderFeatured();
-    renderBroadcastDeck();
-    renderOperationsBoard();
-    renderAdIssueConsole();
-    renderDemoMonkeyConsole();
-    renderRtspJobs();
-    renderBillingConsole();
-    renderAccountsConsole();
-    renderPaymentsConsole();
-    renderCommerceConsole();
-    renderMyListPreview();
-    renderLibrary();
-    renderPlayerMeta();
     renderPageNavigation();
     updateAuthView();
 }
 
+function flushDirtyPages() {
+    for (const page of pageDirty) {
+        renderPageContent(page);
+    }
+    pageDirty.clear();
+}
+
 function renderLayout() {
+    markAllPagesDirty();
     if (renderLayoutPending) {
         return;
     }
