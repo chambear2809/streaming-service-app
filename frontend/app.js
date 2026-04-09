@@ -1778,11 +1778,6 @@ function renderPageNavigation() {
     for (const node of elements.pageNodes) {
         node.hidden = node.dataset.page !== state.currentPage;
     }
-
-    if (pageDirty.has(state.currentPage)) {
-        renderPageContent(state.currentPage);
-        pageDirty.delete(state.currentPage);
-    }
 }
 
 function goToPage(page) {
@@ -4362,51 +4357,9 @@ function renderCommerceConsole() {
 }
 
 let renderLayoutPending = false;
-const pageDirty = new Set();
 
-function markAllPagesDirty() {
-    pageDirty.add("home");
-    pageDirty.add("player");
-    pageDirty.add("library");
-    pageDirty.add("operations");
-    pageDirty.add("billing");
-    pageDirty.add("accounts");
-    pageDirty.add("payments");
-    pageDirty.add("commerce");
-}
-
-function renderPageContent(page) {
-    switch (page) {
-        case "home":
-            renderFeatured();
-            renderBroadcastDeck();
-            renderMyListPreview();
-            break;
-        case "player":
-            renderPlayerMeta();
-            break;
-        case "library":
-            renderLibrary();
-            break;
-        case "operations":
-            renderOperationsBoard();
-            renderAdIssueConsole();
-            renderDemoMonkeyConsole();
-            renderRtspJobs();
-            break;
-        case "billing":
-            renderBillingConsole();
-            break;
-        case "accounts":
-            renderAccountsConsole();
-            break;
-        case "payments":
-            renderPaymentsConsole();
-            break;
-        case "commerce":
-            renderCommerceConsole();
-            break;
-    }
+function onPage(page) {
+    return state.currentPage === page;
 }
 
 function renderLayoutImmediate() {
@@ -4421,17 +4374,17 @@ function renderLayoutImmediate() {
     syncSelection();
     renderPageNavigation();
     updateAuthView();
-}
-
-function flushDirtyPages() {
-    for (const page of pageDirty) {
-        renderPageContent(page);
-    }
-    pageDirty.clear();
+    if (onPage("home")) { renderFeatured(); renderBroadcastDeck(); renderMyListPreview(); }
+    if (onPage("player")) { renderPlayerMeta(); }
+    if (onPage("library")) { renderLibrary(); }
+    if (onPage("operations")) { renderOperationsBoard(); renderAdIssueConsole(); renderDemoMonkeyConsole(); renderRtspJobs(); }
+    if (onPage("billing")) { renderBillingConsole(); }
+    if (onPage("accounts")) { renderAccountsConsole(); }
+    if (onPage("payments")) { renderPaymentsConsole(); }
+    if (onPage("commerce")) { renderCommerceConsole(); }
 }
 
 function renderLayout() {
-    markAllPagesDirty();
     if (renderLayoutPending) {
         return;
     }
