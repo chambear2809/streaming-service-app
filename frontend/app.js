@@ -3412,15 +3412,7 @@ function cardMarkup(item) {
     `;
 }
 
-const rowCache = new WeakMap();
-
 function renderRow(container, items, emptyMessage) {
-    const cacheKey = items.map((item) => `${item.id}:${state.myList.has(item.id)}:${progressPercent(item.id)}:${item.id === state.selectedId}`).join("|");
-    if (rowCache.get(container) === cacheKey) {
-        return;
-    }
-    rowCache.set(container, cacheKey);
-
     if (!items.length) {
         container.innerHTML = `<div class="empty-row">${escapeHtml(emptyMessage)}</div>`;
         return;

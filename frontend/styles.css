@@ -47,7 +47,7 @@
 }
 
 html {
-    scroll-behavior: smooth;
+    scroll-behavior: auto;
     scrollbar-color: rgba(147, 165, 183, 0.34) transparent;
 }
 
@@ -2298,7 +2298,6 @@ body.is-presentation-mode[data-page="billing"] .billing-workspace {
 
 /* Page reveal animation */
 
-.page-section:not([hidden]),
 .auth-overlay,
 .public-broadcast-hero,
 .public-broadcast-stage,
