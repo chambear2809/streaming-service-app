@@ -86,16 +86,9 @@ body::before {
     position: fixed;
     inset: 0;
     pointer-events: none;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 24%),
-        repeating-linear-gradient(
-            90deg,
-            rgba(255, 255, 255, 0.016) 0,
-            rgba(255, 255, 255, 0.016) 1px,
-            transparent 1px,
-            transparent 44px
-        );
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.016), transparent 24%);
     opacity: 0.4;
+    will-change: auto;
 }
 
 body::after {
@@ -103,10 +96,9 @@ body::after {
     position: fixed;
     inset: 0;
     pointer-events: none;
-    background:
-        radial-gradient(circle at top, rgba(255, 255, 255, 0.04), transparent 42%),
-        linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.2));
+    background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.2));
     opacity: 0.65;
+    will-change: auto;
 }
 
 .skip-link {
@@ -161,7 +153,6 @@ body::after {
     border: 1px solid var(--line);
     background: var(--panel);
     box-shadow: var(--shadow-xl);
-    backdrop-filter: blur(22px);
 }
 
 .page-section[hidden] {
@@ -170,6 +161,7 @@ body::after {
 
 .page-section {
     scroll-margin-top: 100px;
+    contain: layout style;
 }
 
 .topbar {
@@ -186,6 +178,7 @@ body::after {
     background:
         linear-gradient(180deg, rgba(8, 16, 26, 0.98), rgba(9, 18, 30, 0.94)),
         linear-gradient(90deg, rgba(127, 177, 255, 0.08), transparent 30%, rgba(230, 193, 125, 0.08));
+    contain: layout style;
 }
 
 .topbar-nav-shell {
@@ -1831,9 +1824,8 @@ h3 {
     z-index: 1;
     padding: 7px 10px;
     border-radius: 10px;
-    background: rgba(8, 17, 26, 0.55);
+    background: rgba(8, 17, 26, 0.88);
     color: var(--fog-100);
-    backdrop-filter: blur(14px);
     font-size: 0.76rem;
     text-transform: uppercase;
     letter-spacing: 0.16em;
@@ -1852,11 +1844,10 @@ h3 {
     min-height: 40px;
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(8, 17, 26, 0.64);
+    background: rgba(8, 17, 26, 0.88);
     color: var(--fog-100);
     font: inherit;
     cursor: pointer;
-    backdrop-filter: blur(12px);
 }
 
 .media-button.is-primary {
@@ -1989,6 +1980,8 @@ h3 {
 .billboard-panel,
 .queue-card {
     animation: billboardFloat 7s ease-in-out infinite;
+    will-change: transform;
+    contain: layout style;
 }
 
 @media (min-width: 1480px) {
@@ -2053,7 +2046,6 @@ body.is-presentation-mode .topbar {
     top: 0;
     z-index: 10;
     padding: 14px 18px;
-    backdrop-filter: blur(28px);
 }
 
 body.is-presentation-mode .brand-copy span:last-child,
@@ -2658,7 +2650,6 @@ body.is-presentation-mode .topbar {
     z-index: 10;
     padding: 14px 18px;
     border-radius: 0 0 22px 22px;
-    backdrop-filter: blur(28px);
 }
 
 body.is-presentation-mode .brand-copy span:last-child,

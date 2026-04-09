@@ -23,6 +23,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -50,6 +51,20 @@ TEST_TYPE_ENDPOINTS = (
     "voice",
     "http-server",
 )
+NETWORK_METRICS = ("network.latency", "network.loss", "network.jitter")
+RTP_METRICS = (
+    "rtp.client.request.mos",
+    "rtp.client.request.loss",
+    "rtp.client.request.discards",
+    "rtp.client.request.duration",
+    "rtp.client.request.pdv",
+)
+PREFERRED_NETWORK_SLOTS = ("trace_map", "broadcast_playback")
+LEGACY_NETWORK_SLOTS = ("rtsp", "udp")
+NETWORK_SLOTS = PREFERRED_NETWORK_SLOTS + LEGACY_NETWORK_SLOTS
+SIGNALFLOW_TIMEOUT_TEXT = "Timed out waiting for SignalFlow data"
+SIGNALFLOW_TIMEOUT_RETRIES = 2
+SIGNALFLOW_TIMEOUT_RETRY_DELAY_SECONDS = 2
 
 TEST_LABELS = {
     "rtsp": "RTSP",
@@ -585,8 +600,14 @@ def update_group(
     description: str,
 ) -> Dict[str, Any]:
     existing_configs = {config["dashboardId"]: config for config in group.get("dashboardConfigs", [])}
+    final_dashboard_ids = list(ordered_dashboard_ids)
+    for dashboard_id in group.get("dashboards", []):
+        if dashboard_id in final_dashboard_ids:
+            continue
+        final_dashboard_ids.append(dashboard_id)
+
     configs: List[Dict[str, Any]] = []
-    for dashboard_id in ordered_dashboard_ids:
+    for dashboard_id in final_dashboard_ids:
         config = dict(existing_configs.get(dashboard_id, {}))
         config["dashboardId"] = dashboard_id
         config["nameOverride"] = None
@@ -596,7 +617,7 @@ def update_group(
 
     updated = dict(group)
     updated["description"] = description
-    updated["dashboards"] = ordered_dashboard_ids
+    updated["dashboards"] = final_dashboard_ids
     updated["dashboardConfigs"] = configs
     return splunk_api.request("PUT", f"/dashboardgroup/{group['id']}", payload=updated)
 
@@ -1007,6 +1028,7 @@ def dashboard_specs(
     namespace: str,
     broadcast_page_filter: str,
     include_isovalent_dashboard: bool,
+    rtp_placeholder_description: Optional[str] = None,
 ) -> List[DashboardSpec]:
     specs: List[DashboardSpec] = []
     trace_map_name, trace_map = matched_test(resolved_tests, "trace_map")
@@ -1286,22 +1308,32 @@ def dashboard_specs(
     rtp_name, rtp = matched_test(resolved_tests, "rtp")
     if rtp:
         rtp_id = str(rtp["testId"])
+        rtp_charts: tuple[ChartSpec, ...]
+        rtp_description = (
+            rtp_placeholder_description
+            if rtp_placeholder_description is not None
+            else (
+                f"Deep dive for {rtp_name} test {rtp_id}. Use this when the RTP proxy path looks suspicious "
+                "and you need voice-quality telemetry for MOS, loss, discards, duration, and packet delay variation."
+            )
+        )
+        if rtp_placeholder_description is not None:
+            rtp_charts = ()
+        else:
+            rtp_charts = (
+                te_chart("RTP MOS trend", f"rtp.client.request.mos for {rtp_name}.", "rtp.client.request.mos", account_group_id, rtp_id, rtp_name),
+                te_chart("RTP frame loss trend", f"rtp.client.request.loss for {rtp_name}.", "rtp.client.request.loss", account_group_id, rtp_id, rtp_name),
+                te_chart("RTP discards trend", f"rtp.client.request.discards for {rtp_name}.", "rtp.client.request.discards", account_group_id, rtp_id, rtp_name),
+                te_chart("RTP stream duration", f"rtp.client.request.duration for {rtp_name}.", "rtp.client.request.duration", account_group_id, rtp_id, rtp_name),
+                te_chart("RTP packet delay variation", f"rtp.client.request.pdv for {rtp_name}.", "rtp.client.request.pdv", account_group_id, rtp_id, rtp_name),
+            )
         specs.append(
             DashboardSpec(
                 key="rtp_detail",
                 aliases=("RTP-Stream-Proxy", "06 RTP-Stream-Proxy", "06 Deep Dive: RTP Media Quality"),
                 name="06 Deep Dive: RTP Media Quality",
-                description=(
-                    f"Deep dive for {rtp_name} test {rtp_id}. Use this when the RTP proxy path looks suspicious "
-                    "and you need voice-quality telemetry for MOS, loss, discards, duration, and packet delay variation."
-                ),
-                charts=(
-                    te_chart("RTP MOS trend", f"rtp.client.request.mos for {rtp_name}.", "rtp.client.request.mos", account_group_id, rtp_id, rtp_name),
-                    te_chart("RTP frame loss trend", f"rtp.client.request.loss for {rtp_name}.", "rtp.client.request.loss", account_group_id, rtp_id, rtp_name),
-                    te_chart("RTP discards trend", f"rtp.client.request.discards for {rtp_name}.", "rtp.client.request.discards", account_group_id, rtp_id, rtp_name),
-                    te_chart("RTP stream duration", f"rtp.client.request.duration for {rtp_name}.", "rtp.client.request.duration", account_group_id, rtp_id, rtp_name),
-                    te_chart("RTP packet delay variation", f"rtp.client.request.pdv for {rtp_name}.", "rtp.client.request.pdv", account_group_id, rtp_id, rtp_name),
-                ),
+                description=rtp_description,
+                charts=rtp_charts,
             )
         )
 
@@ -1315,6 +1347,7 @@ def summary_description(
     resolved_tests: Dict[str, tuple[Optional[str], Optional[Dict[str, Any]]]],
     configured_slots: Dict[str, tuple[str, ...]],
     has_isovalent_dashboard: bool,
+    tests_without_recent_data: Optional[List[str]] = None,
 ) -> str:
     present: List[str] = []
     missing: List[str] = []
@@ -1336,13 +1369,20 @@ def summary_description(
     )
     presence = f"Present ThousandEyes tests: {', '.join(present)}." if present else "No matching repo ThousandEyes tests were found."
     missing_text = f" Missing and not rendered as detail dashboards: {', '.join(missing)}." if missing else ""
+    missing_data_text = (
+        " Present but skipped because Splunk had no recent metric data: "
+        + ", ".join(tests_without_recent_data)
+        + "."
+        if tests_without_recent_data
+        else ""
+    )
     frontend_missing = [configured_slots[key][0] for key in ("trace_map", "broadcast_playback") if not matched_test(resolved_tests, key)[0]]
     frontend_hint = (
         " Frontend HTTP tests are missing, so Splunk may need the Demo Monkey HTTP tests before the dashboard group fully populates."
         if frontend_missing
         else ""
     )
-    return f"{demo_flow} {presence}{missing_text}{frontend_hint}"
+    return f"{demo_flow} {presence}{missing_text}{missing_data_text}{frontend_hint}"
 
 
 def has_resolved_thousandeyes_tests(
@@ -1351,23 +1391,80 @@ def has_resolved_thousandeyes_tests(
     return any(test for _, test in resolved_tests.values())
 
 
+def rtp_placeholder_dashboard_description(
+    test_name: str,
+    test_id: str,
+    missing_metrics: List[str],
+    validation_window_hours: int,
+) -> str:
+    metric_list = ", ".join(missing_metrics)
+    return (
+        f"RTP test {test_name} ({test_id}) is still configured, but Splunk did not return recent telemetry for "
+        f"{metric_list} in the last {validation_window_hours}h. This placeholder intentionally replaces the old "
+        "deep-dive charts so stale RTP visuals do not linger after sync. Repair the ThousandEyes voice test or "
+        "metric stream, then rerun this sync to restore the full dashboard."
+    )
+
+
 def metric_validation_specs(
     resolved_tests: Dict[str, tuple[Optional[str], Optional[Dict[str, Any]]]],
 ) -> List[MetricValidationSpec]:
-    preferred_network_tests = present_tests(resolved_tests, "trace_map", "broadcast_playback")
-    legacy_network_tests = present_tests(resolved_tests, "rtsp", "udp")
-    network_tests = preferred_network_tests or legacy_network_tests
+    network_tests = present_tests(resolved_tests, *NETWORK_SLOTS)
     validations: List[MetricValidationSpec] = []
     seen: set[tuple[str, str]] = set()
     for _, test_name, test in network_tests:
         test_id = str(test["testId"])
-        for metric in ("network.latency", "network.loss", "network.jitter"):
+        for metric in NETWORK_METRICS:
             key = (metric, test_id)
             if key in seen:
                 continue
             validations.append(MetricValidationSpec(metric=metric, test_name=test_name, test_id=test_id))
             seen.add(key)
     return validations
+
+
+def select_network_tests_with_recent_data(
+    resolved_tests: Dict[str, tuple[Optional[str], Optional[Dict[str, Any]]]],
+    validation_results: List[Dict[str, Any]],
+) -> tuple[set[str], List[Dict[str, Any]]]:
+    has_data_by_metric = {
+        (str(result.get("testId", "")), str(result.get("metric", ""))): bool(result.get("hasData"))
+        for result in validation_results
+    }
+
+    available_slots: set[str] = set()
+    missing: List[Dict[str, Any]] = []
+    for slot, test_name, test in present_tests(resolved_tests, *NETWORK_SLOTS):
+        test_id = str(test["testId"])
+        missing_metrics = [
+            metric for metric in NETWORK_METRICS if not has_data_by_metric.get((test_id, metric), False)
+        ]
+        if missing_metrics:
+            missing.append({"slot": slot, "name": test_name, "test_id": test_id, "metrics": missing_metrics})
+            continue
+        available_slots.add(slot)
+
+    preferred_available = {slot for slot in PREFERRED_NETWORK_SLOTS if slot in available_slots}
+    legacy_available = {slot for slot in LEGACY_NETWORK_SLOTS if slot in available_slots}
+    return preferred_available or legacy_available, missing
+
+
+def without_unavailable_network_tests(
+    resolved_tests: Dict[str, tuple[Optional[str], Optional[Dict[str, Any]]]],
+    allowed_slots: set[str],
+) -> Dict[str, tuple[Optional[str], Optional[Dict[str, Any]]]]:
+    filtered = dict(resolved_tests)
+    for slot in NETWORK_SLOTS:
+        if slot not in allowed_slots and slot in filtered:
+            filtered[slot] = (None, None)
+    return filtered
+
+
+def format_missing_metric_tests(missing_tests: List[Dict[str, Any]]) -> List[str]:
+    return [
+        f"{item['name']} ({item['test_id']}) [{', '.join(item['metrics'])}]"
+        for item in missing_tests
+    ]
 
 
 def isovalent_metric_validation_specs() -> List[MetricValidationSpec]:
@@ -1411,6 +1508,19 @@ def isovalent_metric_validation_specs() -> List[MetricValidationSpec]:
     ]
 
 
+def rtp_metric_validation_specs(
+    resolved_tests: Dict[str, tuple[Optional[str], Optional[Dict[str, Any]]]],
+) -> List[MetricValidationSpec]:
+    rtp_name, rtp = matched_test(resolved_tests, "rtp")
+    if not rtp_name or not rtp:
+        return []
+    rtp_id = str(rtp["testId"])
+    return [
+        MetricValidationSpec(metric=metric, test_name=rtp_name, test_id=rtp_id)
+        for metric in RTP_METRICS
+    ]
+
+
 def validate_metric_data(
     splunk_realm: str,
     validation_token: str,
@@ -1440,62 +1550,55 @@ def validate_metric_data(
             for validation in validations
         ],
     }
-    try:
-        completed = subprocess.run(
-            ["node", str(SIGNALFLOW_VALIDATOR)],
-            input=json.dumps(payload),
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-    except FileNotFoundError as error:
-        raise SystemExit(
-            "ThousandEyes metric validation requires Node.js because it uses the Splunk SignalFlow websocket API. "
-            "Install node or rerun with --skip-te-metric-validation if you need to update dashboards without the live data check."
-        ) from error
+    for attempt in range(SIGNALFLOW_TIMEOUT_RETRIES + 1):
+        try:
+            completed = subprocess.run(
+                ["node", str(SIGNALFLOW_VALIDATOR)],
+                input=json.dumps(payload),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        except FileNotFoundError as error:
+            raise SystemExit(
+                "ThousandEyes metric validation requires Node.js because it uses the Splunk SignalFlow websocket API. "
+                "Install node or rerun with --skip-te-metric-validation if you need to update dashboards without the live data check."
+            ) from error
 
-    stdout = completed.stdout.strip()
-    stderr = completed.stderr.strip()
-    if completed.returncode == 2:
-        raise SystemExit(
-            "ThousandEyes metric validation could not authenticate against Splunk SignalFlow APIs. "
-            "Set SPLUNK_VALIDATION_TOKEN to a Splunk API token with API scope, or rerun "
-            "with --skip-te-metric-validation if you need to update dashboards without the live data check."
-        )
-    if completed.returncode != 0:
+        stdout = completed.stdout.strip()
+        stderr = completed.stderr.strip()
+        if completed.returncode == 2:
+            raise SystemExit(
+                "ThousandEyes metric validation could not authenticate against Splunk SignalFlow APIs. "
+                "Set SPLUNK_VALIDATION_TOKEN to a Splunk API token with API scope, or rerun "
+                "with --skip-te-metric-validation if you need to update dashboards without the live data check."
+            )
+        if completed.returncode == 0:
+            try:
+                results = json.loads(stdout)
+            except json.JSONDecodeError as error:
+                raise SystemExit(
+                    "ThousandEyes metric validation returned an unreadable SignalFlow response. "
+                    f"stdout={stdout!r} stderr={stderr!r}"
+                ) from error
+            if not isinstance(results, list):
+                raise SystemExit(
+                    "ThousandEyes metric validation returned an unexpected SignalFlow payload. "
+                    f"stdout={stdout!r}"
+                )
+            return results
+
         detail = stderr or stdout or f"validator exited with status {completed.returncode}"
+        if SIGNALFLOW_TIMEOUT_TEXT in detail and attempt < SIGNALFLOW_TIMEOUT_RETRIES:
+            print(
+                f"Warning: SignalFlow validator timed out (attempt {attempt + 1}/{SIGNALFLOW_TIMEOUT_RETRIES + 1}). Retrying...",
+                file=sys.stderr,
+            )
+            time.sleep(SIGNALFLOW_TIMEOUT_RETRY_DELAY_SECONDS)
+            continue
         raise SystemExit(f"ThousandEyes metric validation failed while querying Splunk SignalFlow: {detail}")
-    try:
-        results = json.loads(stdout)
-    except json.JSONDecodeError as error:
-        raise SystemExit(
-            "ThousandEyes metric validation returned an unreadable SignalFlow response. "
-            f"stdout={stdout!r} stderr={stderr!r}"
-        ) from error
-    if not isinstance(results, list):
-        raise SystemExit(
-            "ThousandEyes metric validation returned an unexpected SignalFlow payload. "
-            f"stdout={stdout!r}"
-        )
-    return results
 
-
-def fail_for_missing_metric_data(results: List[Dict[str, Any]], validation_window_hours: int) -> None:
-    missing = [result for result in results if not result["hasData"]]
-    if not missing:
-        return
-    missing_text = "; ".join(
-        (
-            f"{result['metric']} for {result['testName']} ({result['testId']})"
-            if result.get("testId")
-            else f"{result['metric']} for {result['testName']}"
-        )
-        for result in missing
-    )
-    raise SystemExit(
-        "ThousandEyes dashboard metric validation failed. Splunk did not return data for "
-        f"{missing_text} in the last {validation_window_hours}h."
-    )
+    raise AssertionError("SignalFlow validator retry loop should always return or raise before this point.")
 
 
 def parse_args() -> argparse.Namespace:
@@ -1562,8 +1665,13 @@ def main() -> int:
         )
     warn_if_missing_rtp_metric_stream(thousandeyes_api, thousandeyes_account_group_id, resolved_tests)
     include_isovalent_dashboard = True
+    include_rtp_dashboard = True
     validation_results: List[Dict[str, Any]] = []
+    rtp_validation_results: List[Dict[str, Any]] = []
     isovalent_validation_results: List[Dict[str, Any]] = []
+    tests_without_recent_data: List[str] = []
+    rtp_placeholder_description = None
+    dashboard_resolved_tests = resolved_tests
     if not args.skip_te_metric_validation:
         validation_results = validate_metric_data(
             splunk_realm,
@@ -1572,7 +1680,70 @@ def main() -> int:
             metric_validation_specs(resolved_tests),
             args.validation_window_hours,
         )
-        fail_for_missing_metric_data(validation_results, args.validation_window_hours)
+        active_network_slots, missing_metric_tests = select_network_tests_with_recent_data(
+            resolved_tests,
+            validation_results,
+        )
+        tests_without_recent_data = format_missing_metric_tests(missing_metric_tests)
+        if not active_network_slots:
+            missing_text = "; ".join(tests_without_recent_data)
+            raise SystemExit(
+                "ThousandEyes dashboard metric validation failed. Splunk did not return the required "
+                "network metrics for any matched network-backed ThousandEyes test in the last "
+                f"{args.validation_window_hours}h: {missing_text}."
+            )
+        dashboard_resolved_tests = without_unavailable_network_tests(
+            resolved_tests,
+            active_network_slots,
+        )
+        if tests_without_recent_data:
+            print(
+                "Warning: skipping dashboard sections for ThousandEyes tests without recent Splunk "
+                f"network metrics in the last {args.validation_window_hours}h: "
+                + "; ".join(tests_without_recent_data),
+                file=sys.stderr,
+            )
+        rtp_validation_results = validate_metric_data(
+            splunk_realm,
+            validation_token,
+            thousandeyes_account_group_id,
+            rtp_metric_validation_specs(resolved_tests),
+            args.validation_window_hours,
+        )
+        missing_rtp = [result for result in rtp_validation_results if not result["hasData"]]
+        if missing_rtp:
+            include_rtp_dashboard = False
+            tests_without_recent_data.extend(
+                format_missing_metric_tests(
+                    [
+                        {
+                            "slot": "rtp",
+                            "name": result["testName"],
+                            "test_id": result["testId"],
+                            "metrics": [result["metric"]],
+                        }
+                        for result in missing_rtp
+                    ]
+                )
+            )
+            missing_text = "; ".join(
+                f"{result['metric']} for {result['testName']} ({result['testId']})"
+                for result in missing_rtp
+            )
+            rtp_name, rtp_test = matched_test(resolved_tests, "rtp")
+            if rtp_name and rtp_test:
+                rtp_placeholder_description = rtp_placeholder_dashboard_description(
+                    rtp_name,
+                    str(rtp_test["testId"]),
+                    [result["metric"] for result in missing_rtp],
+                    args.validation_window_hours,
+                )
+            print(
+                "Warning: skipping 06 Deep Dive: RTP Media Quality because Splunk did not "
+                f"return RTP telemetry for {missing_text} in the last "
+                f"{args.validation_window_hours}h.",
+                file=sys.stderr,
+            )
         isovalent_validation_results = validate_metric_data(
             splunk_realm,
             validation_token,
@@ -1597,13 +1768,14 @@ def main() -> int:
             )
 
     specs = dashboard_specs(
-        resolved_tests,
+        dashboard_resolved_tests,
         thousandeyes_account_group_id,
         apm_environment,
         rum_app_name,
         namespace,
         broadcast_page_filter,
         include_isovalent_dashboard=include_isovalent_dashboard,
+        rtp_placeholder_description=rtp_placeholder_description,
     )
     if not specs:
         raise SystemExit("No dashboards were generated from the current ThousandEyes and Splunk configuration.")
@@ -1633,6 +1805,7 @@ def main() -> int:
         resolved_tests,
         configured_slots,
         has_isovalent_dashboard=include_isovalent_dashboard,
+        tests_without_recent_data=tests_without_recent_data,
     )
     updated_group = update_group(splunk_api, group, ordered_ids, group_description)
 
@@ -1643,7 +1816,10 @@ def main() -> int:
         },
         "dashboards": dashboard_results,
         "metricValidation": validation_results,
+        "rtpMetricValidation": rtp_validation_results,
         "isovalentMetricValidation": isovalent_validation_results,
+        "rtpDashboardIncluded": include_rtp_dashboard,
+        "rtpDashboardPlaceholder": rtp_placeholder_description is not None,
         "isovalentDashboardIncluded": include_isovalent_dashboard,
         "presentTests": {
             name: test["testId"]
@@ -1651,6 +1827,7 @@ def main() -> int:
             if name and test
         },
         "missingTests": [names[0] for slot, names in configured_slots.items() if not matched_test(resolved_tests, slot)[0]],
+        "testsWithoutRecentData": tests_without_recent_data,
         "namespace": namespace,
         "rumApp": rum_app_name,
         "apmEnvironment": apm_environment,

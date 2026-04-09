@@ -111,9 +111,15 @@ set -euo pipefail
 
 response_file=""
 payload=""
+method="GET"
+url=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    -X)
+      method="$2"
+      shift 2
+      ;;
     -o)
       response_file="$2"
       shift 2
@@ -123,6 +129,9 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     *)
+      if [[ "$1" == http*://* ]]; then
+        url="$1"
+      fi
       shift
       ;;
   esac
@@ -136,10 +145,53 @@ fi
 counter=$((counter + 1))
 printf '%s' "${counter}" > "${counter_file}"
 printf '%s' "${payload}" > "${THOUSANDEYES_TEST_CAPTURE_DIR}/payload-${counter}.json"
+printf '%s' "${method}" > "${THOUSANDEYES_TEST_CAPTURE_DIR}/method-${counter}.txt"
+printf '%s' "${url}" > "${THOUSANDEYES_TEST_CAPTURE_DIR}/url-${counter}.txt"
 printf '{"testId":"%s"}\n' "${counter}" > "${response_file}"
-printf '201'
+if [[ "${method}" == "PUT" ]]; then
+  printf '200'
+else
+  printf '201'
+fi
 EOF
 chmod +x "${stub_dir}/curl"
+
+direct_capture_dir="${temp_dir}/direct-captures"
+mkdir -p "${direct_capture_dir}"
+
+PATH="${stub_dir}:${PATH}" \
+THOUSANDEYES_TEST_CAPTURE_DIR="${direct_capture_dir}" \
+THOUSANDEYES_BEARER_TOKEN=test-token \
+THOUSANDEYES_ACCOUNT_GROUP_ID=1234 \
+TE_SOURCE_AGENT_IDS=111 \
+TE_TARGET_AGENT_ID=222 \
+TE_UDP_TARGET_AGENT_ID=333 \
+TE_RTSP_SERVER=rtsp.example.com \
+TE_RTSP_PORT=8554 \
+TE_RTSP_TCP_TEST_ID=8399993 \
+TE_UDP_MEDIA_TEST_ID=8399994 \
+TE_RTP_STREAM_TEST_ID=8405216 \
+TE_TRACE_MAP_TEST_ID=8400453 \
+TE_BROADCAST_TEST_ID=8400454 \
+TE_TRACE_MAP_TEST_URL=https://demo.example.com/api/v1/demo/public/trace-map \
+TE_BROADCAST_TEST_URL=https://demo.example.com/api/v1/demo/public/broadcast/live/index.m3u8 \
+bash "${DIRECT_SCRIPT}" create-all >/dev/null
+
+direct_method_count="$(find "${direct_capture_dir}" -name 'method-*.txt' | wc -l | tr -d ' ')"
+assert_equals "${direct_method_count}" "5" "direct create-all should reconcile all five existing ThousandEyes tests"
+
+direct_methods="$(cat "${direct_capture_dir}"/method-*.txt)"
+assert_equals \
+  "$(count_fixed_occurrences "${direct_methods}" "PUT")" \
+  "5" \
+  "direct create-all should update existing tests with PUT when TE_*_TEST_ID values are set"
+
+direct_urls="$(cat "${direct_capture_dir}"/url-*.txt)"
+assert_contains "${direct_urls}" "/tests/agent-to-server/8399993?aid=1234"
+assert_contains "${direct_urls}" "/tests/agent-to-agent/8399994?aid=1234"
+assert_contains "${direct_urls}" "/tests/voice/8405216?aid=1234"
+assert_contains "${direct_urls}" "/tests/http-server/8400453?aid=1234"
+assert_contains "${direct_urls}" "/tests/http-server/8400454?aid=1234"
 
 PATH="${stub_dir}:${PATH}" \
 THOUSANDEYES_TEST_CAPTURE_DIR="${capture_dir}" \
@@ -158,6 +210,11 @@ payload_count="$(find "${capture_dir}" -name 'payload-*.json' | wc -l | tr -d ' 
 assert_equals "${payload_count}" "5" "in-cluster create-all should submit all five ThousandEyes tests"
 
 combined_payloads="$(cat "${capture_dir}"/payload-*.json)"
+in_cluster_methods="$(cat "${capture_dir}"/method-*.txt)"
+assert_equals \
+  "$(count_fixed_occurrences "${in_cluster_methods}" "POST")" \
+  "5" \
+  "in-cluster create-all should create tests with POST when TE_*_TEST_ID values are unset"
 assert_contains "${combined_payloads}" "\"testName\":\"aleccham-broadcast-trace-map\""
 assert_contains "${combined_payloads}" "\"testName\":\"aleccham-broadcast-playback\""
 assert_equals \

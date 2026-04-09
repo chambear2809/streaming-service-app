@@ -78,9 +78,10 @@ with_account_group() {
   fi
 }
 
-post_json() {
-  path="$1"
-  payload="$2"
+request_json() {
+  method="$1"
+  path="$2"
+  payload="$3"
   url="${THOUSANDEYES_API_BASE_URL%/}${path}"
   response_file="$(mktemp)"
 
@@ -88,7 +89,7 @@ post_json() {
     curl -sS \
       -o "${response_file}" \
       -w '%{http_code}' \
-      -X POST \
+      -X "${method}" \
       -H "Authorization: Bearer ${THOUSANDEYES_BEARER_TOKEN}" \
       -H 'Accept: application/json' \
       -H 'Content-Type: application/json' \
@@ -108,6 +109,23 @@ post_json() {
       return 1
       ;;
   esac
+}
+
+submit_test() {
+  collection_path="$1"
+  payload="$2"
+  existing_test_id="${3:-}"
+  method='POST'
+  path=''
+
+  if [ -n "${existing_test_id}" ]; then
+    method='PUT'
+    path="$(with_account_group "${collection_path}/${existing_test_id}")"
+  else
+    path="$(with_account_group "${collection_path}")"
+  fi
+
+  request_json "${method}" "${path}" "${payload}"
 }
 
 build_rtsp_tcp_payload() {
@@ -249,23 +267,23 @@ build_broadcast_payload() {
 }
 
 create_rtsp_tcp() {
-  post_json "$(with_account_group "/tests/agent-to-server")" "$(build_rtsp_tcp_payload)"
+  submit_test "/tests/agent-to-server" "$(build_rtsp_tcp_payload)" "${TE_RTSP_TCP_TEST_ID:-}"
 }
 
 create_udp_media() {
-  post_json "$(with_account_group "/tests/agent-to-agent")" "$(build_udp_media_payload)"
+  submit_test "/tests/agent-to-agent" "$(build_udp_media_payload)" "${TE_UDP_MEDIA_TEST_ID:-}"
 }
 
 create_rtp_stream() {
-  post_json "$(with_account_group "/tests/voice")" "$(build_rtp_stream_payload)"
+  submit_test "/tests/voice" "$(build_rtp_stream_payload)" "${TE_RTP_STREAM_TEST_ID:-}"
 }
 
 create_demo_monkey_trace_map() {
-  post_json "$(with_account_group "/tests/http-server")" "$(build_trace_map_payload)"
+  submit_test "/tests/http-server" "$(build_trace_map_payload)" "${TE_TRACE_MAP_TEST_ID:-}"
 }
 
 create_demo_monkey_broadcast() {
-  post_json "$(with_account_group "/tests/http-server")" "$(build_broadcast_payload)"
+  submit_test "/tests/http-server" "$(build_broadcast_payload)" "${TE_BROADCAST_TEST_ID:-}"
 }
 
 require_env THOUSANDEYES_BEARER_TOKEN

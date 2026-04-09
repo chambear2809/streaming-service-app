@@ -1105,6 +1105,27 @@ function scopedKey(name) {
     return `streaming-frontend.${identity}.${name}`;
 }
 
+function debounce(fn, delayMs) {
+    let timer;
+    return function (...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), delayMs);
+    };
+}
+
+function throttleRAF(fn) {
+    let frameId = 0;
+    return function (...args) {
+        if (frameId) {
+            return;
+        }
+        frameId = requestAnimationFrame(() => {
+            frameId = 0;
+            fn.apply(this, args);
+        });
+    };
+}
+
 function escapeHtml(value) {
     return String(value ?? "")
         .replaceAll("&", "&amp;")
@@ -4327,7 +4348,10 @@ function renderCommerceConsole() {
     `;
 }
 
-function renderLayout() {
+let renderLayoutPending = false;
+
+function renderLayoutImmediate() {
+    renderLayoutPending = false;
     elements.clusterContext.textContent = runtimeConfig.clusterLabel ?? "cluster not set";
     elements.deploymentNamespace.textContent = runtimeConfig.namespace ?? "namespace not set";
     elements.runtimeMode.textContent = runtimeConfig.environment ?? "review";
@@ -4351,6 +4375,14 @@ function renderLayout() {
     renderPlayerMeta();
     renderPageNavigation();
     updateAuthView();
+}
+
+function renderLayout() {
+    if (renderLayoutPending) {
+        return;
+    }
+    renderLayoutPending = true;
+    requestAnimationFrame(renderLayoutImmediate);
 }
 
 function setPlayerStatus(status, message) {
@@ -4879,10 +4911,10 @@ function handleGenreSelection(event) {
     renderLibrary();
 }
 
-function handleLibrarySearch(event) {
+const handleLibrarySearch = debounce(function (event) {
     state.searchTerm = event.target.value ?? "";
     renderLibrary();
-}
+}, 150);
 
 function playRandomTitle() {
     if (!state.session) {
@@ -5919,10 +5951,10 @@ function handleBillingDetailInteraction(event) {
     updateBillingInvoiceStatus(trigger.dataset.id, trigger.dataset.status);
 }
 
-function handleAccountsSearch(event) {
+const handleAccountsSearch = debounce(function (event) {
     state.accounts.searchTerm = event.target.value ?? "";
     renderAccountsConsole();
-}
+}, 150);
 
 function handleAccountsSelection(event) {
     const card = event.target.closest("[data-customer-id]");
@@ -6551,20 +6583,24 @@ elements.moviePlayer.addEventListener("pause", () => {
     if (!elements.moviePlayer.ended && elements.moviePlayer.currentTime > 0) {
         setPlayerStatus("risk", "Playback paused.");
         saveProgressSnapshot(true);
-        renderLayout();
+        renderPlayerMeta();
+        renderMyListPreview();
+        renderFeatured();
     }
 });
 
-elements.moviePlayer.addEventListener("timeupdate", () => {
+elements.moviePlayer.addEventListener("timeupdate", throttleRAF(() => {
     updatePlaybackProgressVisual();
     saveProgressSnapshot(false);
-});
+}));
 
 elements.moviePlayer.addEventListener("ended", () => {
     updatePlaybackProgressVisual();
     saveProgressSnapshot(true);
     setPlayerStatus("ready", "Title complete.");
-    renderLayout();
+    renderPlayerMeta();
+    renderMyListPreview();
+    renderFeatured();
 });
 
 elements.moviePlayer.addEventListener("error", () => {

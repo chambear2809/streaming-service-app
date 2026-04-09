@@ -309,6 +309,11 @@ export THOUSANDEYES_DRY_RUN=false
 scripts/thousandeyes/create-rtsp-tests.sh create-all
 ```
 
+When the repo-root `.env` already has `TE_*_TEST_ID` values, the same
+`create-all` command now reconciles those existing ThousandEyes tests in place.
+Keep those IDs current so rerunning the repo helper repairs agent, target, URL,
+alert, and distributed-tracing drift instead of creating duplicate tests.
+
 Or create them one at a time:
 
 ```bash
@@ -325,6 +330,13 @@ Then preview or apply the repo-managed custom alert rules:
 ```bash
 python3 scripts/thousandeyes/sync-demo-alert-rules.py plan
 python3 scripts/thousandeyes/sync-demo-alert-rules.py apply
+```
+
+Before you sync Splunk dashboards, verify that the live repo tests still match the
+current `.env` and that the enabled ThousandEyes metric streams still cover them:
+
+```bash
+python3 scripts/thousandeyes/verify_demo_tests.py
 ```
 
 ## Run From Kubernetes

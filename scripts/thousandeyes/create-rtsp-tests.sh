@@ -88,16 +88,19 @@ RTSP TCP test environment:
   TE_RTSP_SERVER=rtsp.example.com
   TE_RTSP_PORT=8554
   TE_RTSP_TCP_TEST_NAME=RTSP-TCP-8554
+  TE_RTSP_TCP_TEST_ID=1234
   TE_RTSP_TCP_INTERVAL=60
 
 UDP media path environment:
   TE_UDP_MEDIA_TEST_NAME=UDP-Media-Path
+  TE_UDP_MEDIA_TEST_ID=2345
   TE_UDP_MEDIA_INTERVAL=60
   TE_A2A_PORT=5004
   TE_A2A_THROUGHPUT_RATE_MBPS=10
 
 RTP stream environment:
   TE_RTP_STREAM_TEST_NAME=RTP-Stream-Proxy
+  TE_RTP_STREAM_TEST_ID=3456
   TE_RTP_STREAM_INTERVAL=60
   TE_VOICE_PORT=49152
   TE_VOICE_CODEC_ID=0
@@ -106,11 +109,16 @@ RTP stream environment:
 Demo Monkey HTTP test environment:
   TE_DEMO_MONKEY_FRONTEND_BASE_URL=http://streaming-frontend.streaming-service-app.svc.cluster.local
   TE_TRACE_MAP_TEST_NAME=aleccham-broadcast-trace-map
+  TE_TRACE_MAP_TEST_ID=4567
   TE_TRACE_MAP_TEST_URL=${TE_DEMO_MONKEY_FRONTEND_BASE_URL}/api/v1/demo/public/trace-map
   TE_TRACE_MAP_INTERVAL=60
   TE_BROADCAST_TEST_NAME=aleccham-broadcast-playback
+  TE_BROADCAST_TEST_ID=5678
   TE_BROADCAST_TEST_URL=${TE_DEMO_MONKEY_FRONTEND_BASE_URL}/api/v1/demo/public/broadcast/live/index.m3u8
   TE_BROADCAST_INTERVAL=60
+
+If the matching TE_*_TEST_ID value is set, the create commands reconcile that
+existing test in place with PUT instead of creating a duplicate with POST.
 EOF
 }
 
@@ -251,15 +259,25 @@ api_request() {
 }
 
 submit_test() {
-  local path="$1"
+  local collection_path="$1"
   local payload="$2"
+  local existing_test_id="${3:-}"
+  local method="POST"
+  local path=""
+
+  if [[ -n "${existing_test_id}" ]]; then
+    method="PUT"
+    path="$(with_account_group "${collection_path}/${existing_test_id}")"
+  else
+    path="$(with_account_group "${collection_path}")"
+  fi
 
   if [[ "$(json_bool "${THOUSANDEYES_DRY_RUN}")" == "true" ]]; then
     printf '%s\n' "${payload}"
     return 0
   fi
 
-  api_request POST "${path}" "${payload}"
+  api_request "${method}" "${path}" "${payload}"
 }
 
 build_rtsp_tcp_payload() {
@@ -405,23 +423,23 @@ build_broadcast_payload() {
 }
 
 create_rtsp_tcp() {
-  submit_test "$(with_account_group "/tests/agent-to-server")" "$(build_rtsp_tcp_payload)"
+  submit_test "/tests/agent-to-server" "$(build_rtsp_tcp_payload)" "${TE_RTSP_TCP_TEST_ID:-}"
 }
 
 create_udp_media() {
-  submit_test "$(with_account_group "/tests/agent-to-agent")" "$(build_udp_media_payload)"
+  submit_test "/tests/agent-to-agent" "$(build_udp_media_payload)" "${TE_UDP_MEDIA_TEST_ID:-}"
 }
 
 create_rtp_stream() {
-  submit_test "$(with_account_group "/tests/voice")" "$(build_rtp_stream_payload)"
+  submit_test "/tests/voice" "$(build_rtp_stream_payload)" "${TE_RTP_STREAM_TEST_ID:-}"
 }
 
 create_demo_monkey_trace_map() {
-  submit_test "$(with_account_group "/tests/http-server")" "$(build_trace_map_payload)"
+  submit_test "/tests/http-server" "$(build_trace_map_payload)" "${TE_TRACE_MAP_TEST_ID:-}"
 }
 
 create_demo_monkey_broadcast() {
-  submit_test "$(with_account_group "/tests/http-server")" "$(build_broadcast_payload)"
+  submit_test "/tests/http-server" "$(build_broadcast_payload)" "${TE_BROADCAST_TEST_ID:-}"
 }
 
 case "${1:-}" in

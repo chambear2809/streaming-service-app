@@ -306,7 +306,7 @@ The full set lives in [`example.env`](example.env). The variables below are the 
 - `TE_RTSP_SERVER` and `TE_RTSP_PORT` are needed for the direct API flow or when the Kubernetes wrapper cannot discover RTSP automatically
 - `TE_DEMO_MONKEY_FRONTEND_BASE_URL`, `TE_TRACE_MAP_TEST_URL`, and `TE_BROADCAST_TEST_URL` control the Demo Monkey-sensitive HTTP test targets
 - `TE_ALERTS_ENABLED` defaults test payload alerts on for all five repo ThousandEyes tests, while `TE_*_ALERTS_ENABLED` env vars can override individual tests when you want a narrower booth alert posture
-- `TE_*_TEST_ID` values let the repo alert-rule sync script target existing ThousandEyes tests deterministically
+- `TE_*_TEST_ID` values let the repo alert-rule sync script target existing ThousandEyes tests deterministically, and let `scripts/thousandeyes/create-rtsp-tests.sh create-all` reconcile those tests in place with PUT instead of creating duplicates
 - `TE_ALERT_MINIMUM_SOURCES`, `TE_ALERT_NOTIFY_ON_CLEAR`, `THOUSANDEYES_ALERT_EMAIL_RECIPIENTS`, `THOUSANDEYES_ALERT_EMAIL_MESSAGE`, and `THOUSANDEYES_ALERT_NOTIFICATIONS_JSON` control the repo-managed custom ThousandEyes alert rules and optional routing
 - `TE_A2A_THROUGHPUT_MEASUREMENTS=false` is required when the UDP media-path test uses a Cloud Agent endpoint because ThousandEyes rejects UDP throughput measurements in that configuration
 
