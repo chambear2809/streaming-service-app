@@ -13,6 +13,37 @@ const errorLogThrottleMs = Number.parseInt(process.env.ERROR_LOG_THROTTLE_MS ?? 
 const internalAuthSecret = process.env.INTERNAL_AUTH_SECRET ?? "";
 const throttledErrorState = new Map();
 
+const SESSION_CACHE_TTL_MS = 8000;
+const SESSION_COOKIE_NAME = "acme_demo_session";
+const sessionAuthCache = new Map();
+
+function sessionCacheKey(req) {
+    const cookieHeader = req.headers["cookie"] ?? "";
+    for (const part of cookieHeader.split(";")) {
+        const trimmed = part.trim();
+        if (trimmed.startsWith(SESSION_COOKIE_NAME + "=")) {
+            return trimmed.slice(SESSION_COOKIE_NAME.length + 1);
+        }
+    }
+    return "";
+}
+
+function getCachedAuthResult(cacheKey) {
+    if (!cacheKey) return null;
+    const entry = sessionAuthCache.get(cacheKey);
+    if (!entry) return null;
+    if (Date.now() >= entry.expiresAt) {
+        sessionAuthCache.delete(cacheKey);
+        return null;
+    }
+    return entry.result;
+}
+
+function setCachedAuthResult(cacheKey, result) {
+    if (!cacheKey) return;
+    sessionAuthCache.set(cacheKey, { result, expiresAt: Date.now() + SESSION_CACHE_TTL_MS });
+}
+
 const HOP_BY_HOP_HEADERS = new Set([
     "connection",
     "keep-alive",
@@ -44,6 +75,25 @@ const roleCapabilities = {
     qa_reviewer: ["operations"],
     staff_operator: ["operations"]
 };
+
+const roleCapabilitySets = Object.fromEntries(
+    Object.entries(roleCapabilities).map(([role, caps]) => [role, new Set(caps)])
+);
+
+const resolvedStaticRoot = path.resolve(staticRoot);
+
+const precomputedAuthorities = Object.fromEntries(
+    Object.keys(roleCapabilities).map((role) => {
+        const authorities = new Set();
+        if (role === "billing_admin" || role === "platform_admin") {
+            authorities.add("ROLE_ADMIN");
+        }
+        for (const capability of roleCapabilities[role]) {
+            authorities.add(`CAP_${String(capability).toUpperCase()}`);
+        }
+        return [role, Array.from(authorities)];
+    })
+);
 
 const protectedProxyRules = [
     {
@@ -397,6 +447,15 @@ async function handleApi(req, res, url) {
 }
 
 async function authorize(req, requiredCapabilities = []) {
+    const cacheKey = sessionCacheKey(req);
+    const cached = getCachedAuthResult(cacheKey);
+    if (cached) {
+        if (!hasRequiredCapabilities(cached.role, requiredCapabilities)) {
+            return forbiddenAuthResult(requiredCapabilities);
+        }
+        return cached;
+    }
+
     return new Promise((resolve) => {
         const upstream = {
             hostname: serviceHost("user-service-demo"),
@@ -443,13 +502,15 @@ async function authorize(req, requiredCapabilities = []) {
                             return;
                         }
 
-                        resolve({
+                        const successResult = {
                             authorized: true,
                             role,
                             statusCode,
                             headers: authRes.headers,
                             body
-                        });
+                        };
+                        setCachedAuthResult(cacheKey, successResult);
+                        resolve(successResult);
                     } catch (error) {
                         logThrottledError("Auth session parsing failed", error, `${upstream.hostname}:${upstream.port}${upstream.path}`);
                         resolve({
@@ -497,8 +558,8 @@ function hasRequiredCapabilities(role, requiredCapabilities) {
         return true;
     }
 
-    const permissions = roleCapabilities[role] ?? roleCapabilities.staff_operator;
-    return requiredCapabilities.every((capability) => permissions.includes(capability));
+    const permissions = roleCapabilitySets[role] ?? roleCapabilitySets.staff_operator;
+    return requiredCapabilities.every((capability) => permissions.has(capability));
 }
 
 function forbiddenAuthResult(requiredCapabilities) {
@@ -625,7 +686,10 @@ function buildProxyHeaders(req, options = {}) {
         headers[headerName] = headerValue;
     }
 
-    headers["x-forwarded-for"] = appendForwardedFor(req.headers["x-forwarded-for"], req.socket.remoteAddress);
+    const existing = req.headers["x-forwarded-for"];
+    const remoteAddress = req.socket?.remoteAddress ?? "";
+    const forwardedChain = [existing, remoteAddress].filter(Boolean).join(", ");
+    headers["x-forwarded-for"] = forwardedChain || "127.0.0.1";
     headers["x-forwarded-proto"] = req.headers["x-forwarded-proto"] ?? (req.socket.encrypted ? "https" : "http");
 
     for (const [headerName, headerValue] of Object.entries(options.extraHeaders ?? {})) {
@@ -652,17 +716,7 @@ function buildInternalProxyHeaders(role) {
 
 function authoritiesForRole(role) {
     const normalizedRole = normalizeRole(role);
-    const authorities = new Set();
-
-    if (normalizedRole === "billing_admin" || normalizedRole === "platform_admin") {
-        authorities.add("ROLE_ADMIN");
-    }
-
-    for (const capability of roleCapabilities[normalizedRole] ?? roleCapabilities.staff_operator) {
-        authorities.add(`CAP_${String(capability).toUpperCase()}`);
-    }
-
-    return Array.from(authorities);
+    return precomputedAuthorities[normalizedRole] ?? precomputedAuthorities.staff_operator;
 }
 
 async function serveStatic(res, requestPath) {
@@ -712,9 +766,8 @@ function resolveStaticPath(requestPath) {
     }
 
     const relativePath = decodedPath.replace(/^\/+/, "");
-    const resolvedRoot = path.resolve(staticRoot);
-    const candidate = path.resolve(resolvedRoot, relativePath);
-    const relativeCandidate = path.relative(resolvedRoot, candidate);
+    const candidate = path.resolve(resolvedStaticRoot, relativePath);
+    const relativeCandidate = path.relative(resolvedStaticRoot, candidate);
 
     if (relativeCandidate.startsWith("..") || path.isAbsolute(relativeCandidate)) {
         return null;
@@ -768,11 +821,6 @@ function matchRule(rules, pathname, method) {
 
         return false;
     });
-}
-
-function appendForwardedFor(existing, remoteAddress) {
-    const forwarded = [existing, remoteAddress].filter(Boolean).join(", ");
-    return forwarded || "127.0.0.1";
 }
 
 function redirect(res, location) {
@@ -839,7 +887,19 @@ function summarizeError(error) {
     return parts.join(" ") || String(error);
 }
 
+function sweepStaleMaps() {
+    const now = Date.now();
+    for (const [key, entry] of sessionAuthCache) {
+        if (now >= entry.expiresAt) sessionAuthCache.delete(key);
+    }
+    for (const [key, entry] of throttledErrorState) {
+        if (now - entry.loggedAt >= errorLogThrottleMs * 10) throttledErrorState.delete(key);
+    }
+}
+
 function startServer() {
+    const sweepInterval = setInterval(sweepStaleMaps, SESSION_CACHE_TTL_MS * 2);
+    sweepInterval.unref();
     return server.listen(port, host, () => {
         console.log(`streaming-frontend gateway listening on ${host}:${port}`);
     });

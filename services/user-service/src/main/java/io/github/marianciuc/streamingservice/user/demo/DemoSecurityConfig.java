@@ -1,4 +1,4 @@
-package io.github.marianciuc.streamingservice.payment.config;
+package io.github.marianciuc.streamingservice.user.demo;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -10,16 +10,13 @@ import org.springframework.security.web.SecurityFilterChain;
 /**
  * Demo-profile security configuration — intentionally permits all requests.
  *
- * <p>This bean is only active when {@code spring.profiles.active=broadcast-demo}. All HTTP
- * security (CORS, CSRF, and authorization) is disabled so that the frontend gateway
- * in {@code frontend/server.js} can act as the sole enforcement boundary during demos.
+ * <p>Active only when {@code spring.profiles.active=demo}. All HTTP security is disabled
+ * so the demo auth controller endpoints are reachable without JWT credentials.
  *
  * <p><strong>Do not enable this profile on a network-accessible deployment.</strong>
- * Replace this class with a production {@code SecurityFilterChain} before any
- * customer-facing use.
  */
 @Configuration
-@Profile("broadcast-demo")
+@Profile("demo")
 public class DemoSecurityConfig {
 
     @Bean

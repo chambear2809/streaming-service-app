@@ -71,5 +71,10 @@ window.STREAMING_CONFIG = {
     demoMovieTitle: "Big Buck Bunny",
     demoMovieDescription: "An openly licensed short staged through the media service for screening and playout review.",
     demoMovieUrl: "/api/v1/demo/media/movie.mp4",
-    demoMovieBadges: ["media-service", "Kubernetes", "House asset"]
+    demoMovieBadges: ["media-service", "Kubernetes", "House asset"],
+    observabilityLinks: {
+        thousandEyesUrl: "",
+        splunkApmUrl: "",
+        splunkRumUrl: ""
+    }
 };

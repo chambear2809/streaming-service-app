@@ -23,7 +23,14 @@ spec:
       containers:
         - name: app
           image: node:22-alpine
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           command:
             - node
             - /srv/frontend/server.js

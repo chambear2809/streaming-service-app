@@ -262,7 +262,14 @@ spec:
       containers:
         - name: app
           image: eclipse-temurin:22-jre
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           command:
             - sh
             - -c
@@ -347,7 +354,14 @@ spec:
               mountPath: /broadcast-state
         - name: rtsp-restreamer
           image: jrottenberg/ffmpeg:7.1-alpine
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           command:
             - sh
             - -c
@@ -859,7 +873,14 @@ spec:
               readOnly: true
         - name: rtsp-server
           image: bluenviron/mediamtx:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: MTX_PROTOCOLS
               value: tcp

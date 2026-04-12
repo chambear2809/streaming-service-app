@@ -21,6 +21,7 @@
     --code-font: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
     --line: rgba(164, 184, 206, 0.16);
     --line-strong: rgba(164, 184, 206, 0.24);
+    --line-subtle: rgba(164, 184, 206, 0.1);
     --panel: linear-gradient(180deg, rgba(10, 20, 31, 0.94), rgba(8, 16, 25, 0.88));
     --panel-strong: linear-gradient(180deg, rgba(9, 18, 29, 0.98), rgba(7, 14, 23, 0.94));
     --panel-soft: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018));
@@ -88,7 +89,6 @@ body::before {
     pointer-events: none;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.016), transparent 24%);
     opacity: 0.4;
-    will-change: auto;
 }
 
 body::after {
@@ -98,7 +98,6 @@ body::after {
     pointer-events: none;
     background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.2));
     opacity: 0.65;
-    will-change: auto;
 }
 
 .skip-link {
@@ -113,7 +112,7 @@ body::after {
     font-weight: 700;
     text-decoration: none;
     box-shadow: var(--shadow-lg);
-    transition: top var(--motion-fast, 160ms) ease;
+    transition: top var(--motion-fast) ease;
 }
 
 .skip-link:focus {
@@ -354,31 +353,39 @@ h3 {
 .suite-strip {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px;
+    gap: 0;
     margin-bottom: 20px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--line);
+    border-top: 2px solid rgba(127, 177, 255, 0.2);
+    background: linear-gradient(180deg, rgba(9, 19, 28, 0.88), rgba(10, 20, 30, 0.76));
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
 }
 
 .suite-strip-card {
-    padding: 16px 18px;
-    border-radius: 18px;
-    border: 1px solid rgba(164, 184, 206, 0.14);
-    background:
-        linear-gradient(180deg, rgba(9, 19, 28, 0.9), rgba(10, 20, 30, 0.82)),
-        radial-gradient(circle at top right, rgba(127, 177, 255, 0.08), transparent 34%);
+    padding: 13px 20px;
+    border-right: 1px solid var(--line);
+    background: transparent;
+}
+
+.suite-strip-card:last-child {
+    border-right: none;
 }
 
 .suite-strip-card span {
     display: block;
-    margin-bottom: 6px;
+    margin-bottom: 3px;
     color: var(--fog-300);
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.16em;
 }
 
 .suite-strip-card strong {
     color: var(--fog-100);
-    font-size: 0.92rem;
+    font-size: 0.88rem;
+    font-weight: 600;
 }
 
 .profile-badge {
@@ -394,12 +401,20 @@ h3 {
     border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.eyebrow {
+.eyebrow,
+.eyebrow-ops {
     margin: 0 0 12px;
-    color: var(--gold-400);
     text-transform: uppercase;
     letter-spacing: 0.24em;
     font-size: 0.72rem;
+}
+
+.eyebrow {
+    color: var(--gold-400);
+}
+
+.eyebrow-ops {
+    color: var(--sky-400);
 }
 
 .button {
@@ -767,9 +782,16 @@ h3 {
     font-size: 0.8rem;
 }
 
+.status-pill {
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    font-size: 0.72rem;
+}
+
 .tag-row span {
-    border: 1px solid rgba(173, 196, 219, 0.14);
-    background: rgba(173, 196, 219, 0.05);
+    border: 1px solid rgba(164, 184, 206, 0.14);
+    background: rgba(164, 184, 206, 0.05);
     color: var(--fog-100);
 }
 
@@ -803,7 +825,7 @@ h3 {
 .queue-card,
 .signal-card {
     border-radius: var(--radius-lg);
-    border: 1px solid rgba(173, 196, 219, 0.1);
+    border: 1px solid var(--line-subtle);
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
 }
 
@@ -884,7 +906,7 @@ h3 {
 
 .broadcast-panel {
     border-radius: var(--radius-lg);
-    border: 1px solid rgba(173, 196, 219, 0.1);
+    border: 1px solid var(--line-subtle);
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)),
         radial-gradient(circle at top right, rgba(130, 168, 217, 0.08), transparent 28%);
@@ -926,12 +948,17 @@ h3 {
     border-color: rgba(127, 177, 255, 0.24);
 }
 
+.rundown-item:hover {
+    border-color: rgba(127, 177, 255, 0.2);
+    background: rgba(255, 255, 255, 0.06);
+}
+
 .channel-card,
 .service-card,
 .desk-note,
 .rundown-item {
     border-radius: var(--radius-md);
-    border: 1px solid rgba(173, 196, 219, 0.1);
+    border: 1px solid var(--line-subtle);
     background: rgba(255, 255, 255, 0.04);
 }
 
@@ -942,7 +969,7 @@ h3 {
 }
 
 .channel-card[data-state] {
-    transition: box-shadow var(--motion-mid, 260ms) ease;
+    transition: box-shadow var(--motion-mid) ease;
 }
 
 .channel-card[data-state="ready"] {
@@ -1005,7 +1032,7 @@ h3 {
     padding: 12px 14px;
     border-radius: 12px;
     background: rgba(8, 17, 26, 0.54);
-    border: 1px solid rgba(173, 196, 219, 0.12);
+    border: 1px solid var(--line);
 }
 
 .endpoint-chip span {
@@ -1071,7 +1098,7 @@ h3 {
 }
 
 .service-card[data-state] {
-    transition: border-color var(--motion-mid, 260ms) ease;
+    transition: border-color var(--motion-mid) ease;
 }
 
 .service-card[data-state="ready"] {
@@ -1237,13 +1264,19 @@ h3 {
 
 .billing-toolbar {
     display: grid;
-    grid-template-columns: minmax(220px, 1fr) minmax(180px, 0.7fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.7fr) auto auto;
     gap: 14px;
     align-items: end;
     padding: 18px;
     border-radius: 18px;
     border: 1px solid rgba(164, 184, 206, 0.12);
     background: rgba(255, 255, 255, 0.03);
+}
+
+@media (min-width: 760px) {
+    .billing-toolbar {
+        grid-template-columns: minmax(200px, 1fr) minmax(160px, 0.7fr) auto auto;
+    }
 }
 
 .billing-toggle {
@@ -1272,12 +1305,11 @@ h3 {
     gap: 12px;
     padding: 18px;
     border-radius: var(--radius-lg);
-    border: 1px solid rgba(173, 196, 219, 0.12);
+    border: 1px solid var(--line);
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.016)),
         radial-gradient(circle at top right, rgba(130, 168, 217, 0.08), transparent 28%);
     cursor: pointer;
-    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
 
 .invoice-card:hover {
@@ -1473,7 +1505,7 @@ h3 {
     gap: 12px;
     padding: 16px;
     border-radius: var(--radius-md);
-    border: 1px solid rgba(173, 196, 219, 0.1);
+    border: 1px solid var(--line-subtle);
     background: rgba(8, 17, 26, 0.46);
     color: var(--fog-100);
 }
@@ -1542,7 +1574,7 @@ h3 {
     padding: 16px;
     border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(173, 196, 219, 0.1);
+    border: 1px solid var(--line-subtle);
 }
 
 .job-topline,
@@ -1620,11 +1652,13 @@ h3 {
 
 .compact-empty,
 .empty-row {
-    padding: 18px;
+    padding: 16px 20px;
     border-radius: var(--radius-md);
     color: var(--fog-300);
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px dashed rgba(255, 255, 255, 0.12);
+    background: rgba(7, 15, 24, 0.42);
+    border: 1px solid var(--line-subtle);
+    font-size: 0.84rem;
+    letter-spacing: 0.04em;
 }
 
 .player-stage,
@@ -2033,122 +2067,6 @@ h3 {
     .billing-workspace {
         grid-template-columns: minmax(0, 1.14fr) minmax(360px, 0.86fr);
     }
-}
-
-body.is-presentation-mode .app-shell {
-    width: min(1660px, calc(100vw - 40px));
-    padding-top: 14px;
-    padding-bottom: 30px;
-}
-
-body.is-presentation-mode .topbar {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    padding: 14px 18px;
-}
-
-body.is-presentation-mode .brand-copy span:last-child,
-body.is-presentation-mode .footer {
-    display: none;
-}
-
-body.is-presentation-mode .billboard,
-body.is-presentation-mode .player-stage,
-body.is-presentation-mode .section {
-    padding: 24px;
-}
-
-body.is-presentation-mode .hero-actions {
-    margin: 22px 0 24px;
-}
-
-body.is-presentation-mode .billboard-text,
-body.is-presentation-mode .section-heading p:not(.eyebrow),
-body.is-presentation-mode .signal-card p,
-body.is-presentation-mode .service-card p,
-body.is-presentation-mode .desk-note p,
-body.is-presentation-mode .rundown-copy p,
-body.is-presentation-mode .billboard-panel p {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    overflow: hidden;
-}
-
-body.is-presentation-mode .queue-card .compact-item span {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 1;
-    overflow: hidden;
-}
-
-body.is-presentation-mode[data-page="home"] .billboard {
-    grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.62fr);
-    gap: 22px;
-}
-
-body.is-presentation-mode[data-page="home"] .broadcast-deck {
-    grid-template-columns: minmax(0, 1.18fr) minmax(0, 1fr);
-}
-
-body.is-presentation-mode[data-page="home"] .broadcast-deck > .broadcast-panel:last-child {
-    grid-column: 1 / -1;
-}
-
-body.is-presentation-mode[data-page="home"] .broadcast-deck > .broadcast-panel:last-child .service-wall {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-body.is-presentation-mode[data-page="home"] .broadcast-deck > .broadcast-panel:last-child .desk-highlights {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-body.is-presentation-mode[data-page="player"] .player-stage {
-    grid-template-columns: minmax(0, 1.66fr) minmax(300px, 0.48fr);
-    align-items: start;
-}
-
-body.is-presentation-mode[data-page="player"] #movie-player {
-    aspect-ratio: auto;
-    min-height: min(70vh, 820px);
-    max-height: 76vh;
-    object-fit: contain;
-}
-
-body.is-presentation-mode[data-page="player"] .player-panel {
-    position: sticky;
-    top: 86px;
-    max-height: calc(100vh - 116px);
-    overflow: auto;
-}
-
-body.is-presentation-mode[data-page="player"] .advanced-panel:not([open]) {
-    display: none;
-}
-
-body.is-presentation-mode[data-page="operations"] .governance-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-body.is-presentation-mode[data-page="operations"] .governance-grid > .signal-card:nth-child(5) {
-    grid-column: span 2;
-}
-
-body.is-presentation-mode[data-page="operations"] .ops-console-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(340px, 0.74fr);
-}
-
-body.is-presentation-mode[data-page="operations"] .demo-monkey-control-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-body.is-presentation-mode[data-page="operations"] .demo-monkey-shell {
-    grid-template-columns: minmax(320px, 0.7fr) minmax(0, 1fr);
-}
-
-body.is-presentation-mode[data-page="billing"] .billing-workspace {
-    grid-template-columns: minmax(0, 1.16fr) minmax(360px, 0.84fr);
 }
 
 /* Surface disclosure component */
@@ -2667,13 +2585,13 @@ body.is-presentation-mode .hero-actions {
 }
 
 body.is-presentation-mode .billboard-text,
-body.is-presentation-mode .section-heading p:not(.eyebrow),
+body.is-presentation-mode .section-heading p:not(.eyebrow):not(.eyebrow-ops),
 body.is-presentation-mode .signal-card p,
 body.is-presentation-mode .service-card p,
 body.is-presentation-mode .desk-note p,
 body.is-presentation-mode .rundown-copy p,
 body.is-presentation-mode .billboard-panel p,
-body.is-presentation-mode .auth-copy > p:not(.eyebrow),
+body.is-presentation-mode .auth-copy > p:not(.eyebrow):not(.eyebrow-ops),
 body.is-presentation-mode .auth-form-heading p,
 body.is-presentation-mode .channel-note,
 body.is-presentation-mode .media-copy p,

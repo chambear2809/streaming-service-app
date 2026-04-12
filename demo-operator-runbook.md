@@ -44,13 +44,36 @@ APM services to look for:
 1. Open `/broadcast` and confirm the public player loads, sponsor timing is present, and the channel is healthy.
 2. Open `/` and confirm the launch overlay shows the public channel, sponsor pod, and incident posture.
 3. Open `/#operations` as the operator persona and confirm Master Control, sponsor context, and service posture render cleanly.
-4. Open `/demo-monkey` and confirm the current profile is `Clear` or `Simulation bypassed`.
-5. In ThousandEyes, confirm the playback and trace-map HTTP tests are reporting.
-6. In Splunk, confirm the numbered demo dashboard group exists and traces are arriving for `streaming-frontend` and `media-service-demo`.
+4. Open `/demo-monkey` and confirm the current profile is `Clear` or `Simulation bypassed`. Check the **Preset** row in the detail card on the left side of the page (labeled "Simulation bypassed" when no fault is armed) — not the form toggle state, which is ephemeral.
+5. On `/demo-monkey`, confirm the **"Next break"** row in the left detail panel shows a sponsor pod time within the next few minutes. If it reads "Waiting for schedule" or shows a time more than 10 minutes away, verify the broadcast is running and the backend ad schedule is responding before starting the walkthrough. The primary booth story depends on arming the fault close to a pod boundary.
+6. In ThousandEyes, confirm the playback and trace-map HTTP tests are reporting.
+7. In Splunk, confirm the numbered demo dashboard group exists and traces are arriving for `streaming-frontend` and `media-service-demo`.
+7. If you plan to use `trace-map-outage`, `dependency-timeout`, or `service-specific-failure`, open `/demo-monkey` and click the **"Open ThousandEyes"** launch button before the walkthrough to confirm it opens the ThousandEyes dashboard and not a JSON endpoint.
+
+> **Config check:** The button reads `observabilityLinks.thousandEyesUrl` from `config.js`. If that key is absent, the button falls back to `/api/v1/demo/public/trace-map`, which returns raw JSON. Open `frontend/config.js` and confirm `observabilityLinks.thousandEyesUrl` is set before running a trace-pivot scenario. Example:
+> ```js
+> observabilityLinks: {
+>     thousandEyesUrl: "https://app.thousandeyes.com/...",
+>     splunkApmUrl: "https://app.us1.signalfx.com/...",
+>     splunkRumUrl: "https://app.us1.signalfx.com/..."
+> }
+> ```
+> If the URL is not configured, navigate to ThousandEyes directly and skip the launch button for this walkthrough.
 
 If ThousandEyes tests or dashboards are missing, use `docs/06-thousandeyes-rtsp-api.md` and `docs/03-distributed-tracing.md` before the booth cycle starts.
 
 ## Warm The Environment
+
+Available profiles for both loadgen scripts:
+
+| Profile | Broadcast viewers | Duration | Purpose |
+| --- | --- | --- | --- |
+| `warmup` | 25 | 6m | Light pre-check before the booth opens |
+| `booth` | 90 | 10m | Standard demo load (35% page viewers, 10% trace-map sessions) |
+| `stress` | 120 | 12m | Pressure test — do not use during a live walkthrough |
+| `custom` | (from env) | (from env) | Manual override for any parameter |
+
+Use `booth` for all standard walkthroughs. For the operator loadgen, `booth` uses 3 concurrent workers, 8-minute duration, 4-second pause between requests, and `TAKE_LIVE_RATIO=0.00`.
 
 Viewer-side traffic:
 
@@ -214,14 +237,15 @@ Use the same close every time:
 
 ## Scenario Pivot Guide
 
-| Fault preset | Show first | Best Splunk destination |
-| --- | --- | --- |
-| `ad-break-delay` | `/broadcast` then `/#operations` | dashboards `02` and `03`, then APM |
-| `one-break-sponsor-miss` | `/broadcast` | dashboard `03`, Browser RUM, then APM |
-| `sponsor-pod-miss` | `/broadcast` | dashboard `03`, APM, Browser RUM |
-| `viewer-startup-spike`, `viewer-brownout`, `packet-loss` | ThousandEyes | dashboard `01`, then `02` |
-| `dependency-timeout`, `service-specific-failure`, `trace-map-outage` | `/api/v1/demo/public/trace-map` and ThousandEyes | dashboard `04`, then APM service map |
-| `frontend-crash` | Browser RUM | Browser RUM first, APM second if needed |
+| Scenario | Start Here | Application Proof | Splunk Landing Zone |
+| --- | --- | --- | --- |
+| `ad-break-delay` | `/broadcast` then `/#operations` | queued sponsor break stalls but still exists | dashboards `02` and `03`, then APM |
+| `one-break-sponsor-miss` | `/broadcast` | one sponsor break misses, then auto-clears (the **Duration** card on `/demo-monkey` shows the scheduled `autoClearAt` timestamp) | dashboard `03`, Browser RUM, then dashboard `05` if playback detail matters |
+| `sponsor-pod-miss` | `/broadcast` | sponsor clip fails at the break boundary | dashboard `03`, APM, Browser RUM |
+| `playback-outage` | `/broadcast` | public HLS player cannot start or stalls completely; player reconnect loop is visible | dashboard `05`, then `01` for network context |
+| `viewer-startup-spike`, `viewer-brownout`, `packet-loss` | ThousandEyes | public stream starts slowly or drops | dashboard `01`, then `02` |
+| `dependency-timeout`, `service-specific-failure`, `trace-map-outage` | `/api/v1/demo/public/trace-map` and ThousandEyes | public trace pivot degrades without taking down everything else | dashboard `04`, then APM service map |
+| `frontend-crash` | Browser RUM | viewer page throws a client-side exception | Browser RUM first, APM second if needed |
 
 ## Reset
 

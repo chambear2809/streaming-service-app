@@ -1,0 +1,87 @@
+# ConfigMap Template for Streaming Service App
+#
+# This is a template for operators deploying the streaming service app from scratch.
+# Copy this file, fill in all values marked CHANGEME with environment-specific settings,
+# and apply it to your cluster before deploying the frontend and backend services:
+#
+#   kubectl apply -f k8s/config/configmap-template.yaml
+#
+# Values that have known defaults (from the deployment files) are pre-filled.
+# Values marked CHANGEME must be set per environment.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: streaming-demo-config
+  namespace: streaming-service-app
+
+data:
+  # ---------------------------------------------------------------------------
+  # Frontend configuration
+  # ---------------------------------------------------------------------------
+
+  # Port the frontend Node.js server listens on
+  PORT: "3000"
+
+  # Kubernetes namespace this app is deployed into
+  K8S_NAMESPACE: "streaming-service-app"
+
+  # Filesystem path where static assets are served from
+  STATIC_ROOT: "/app/public"
+
+  # Path to the Splunk RUM browser instrumentation script
+  SPLUNK_RUM_SCRIPT_PATH: "CHANGEME"
+
+  # Timeout (in milliseconds) for upstream API requests made by the frontend
+  UPSTREAM_REQUEST_TIMEOUT_MS: "5000"
+
+  # ---------------------------------------------------------------------------
+  # OpenTelemetry — frontend
+  # (OTEL_SERVICE_NAME is also used by backend; set per-service in deployments
+  #  if values differ, or use a shared value here as a default)
+  # ---------------------------------------------------------------------------
+
+  # Logical service name reported in traces and metrics (frontend)
+  OTEL_SERVICE_NAME: "streaming-demo-frontend"
+
+  # Wire protocol used to export telemetry data
+  OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
+
+  # Trace context propagation formats
+  OTEL_PROPAGATORS: "tracecontext,baggage,b3"
+
+  # Additional resource attributes attached to all telemetry (key=value pairs)
+  # Example: deployment.environment=production,service.version=1.0.0
+  OTEL_RESOURCE_ATTRIBUTES: "CHANGEME"
+
+  # ---------------------------------------------------------------------------
+  # Backend services — shared configuration
+  # Applied to all Spring Boot microservices (catalog, account, etc.)
+  # ---------------------------------------------------------------------------
+
+  # Default server port for backend Spring Boot services
+  SERVER_PORT: "8080"
+
+  # ---------------------------------------------------------------------------
+  # Database — Spring DataSource
+  # ---------------------------------------------------------------------------
+
+  # JDBC connection URL for the application database
+  # Example: jdbc:postgresql://postgres-svc:5432/streamingdb
+  SPRING_DATASOURCE_URL: "CHANGEME"
+
+  # Database username (non-secret; password is in the Secret template)
+  SPRING_DATASOURCE_USERNAME: "CHANGEME"
+
+  # ---------------------------------------------------------------------------
+  # HikariCP connection pool tuning
+  # ---------------------------------------------------------------------------
+
+  # Maximum number of connections in the pool
+  SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "10"
+
+  # Minimum number of idle connections kept in the pool
+  SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "2"
+
+  # Time (in milliseconds) a connection can sit idle before being retired
+  SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT: "600000"

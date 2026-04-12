@@ -2,6 +2,7 @@ import {
     DEFAULT_BROADCAST_DETAIL,
     buildDefaultAdStatus
 } from "./demo-ad-schedule.mjs";
+import { absoluteUrl } from "./shared.js";
 
 const runtimeConfig = window.STREAMING_CONFIG ?? {};
 
@@ -61,14 +62,6 @@ function resolveBroadcastDetail(detail) {
 
 function fallbackAdStatus() {
     return buildDefaultAdStatus();
-}
-
-function absoluteUrl(path) {
-    try {
-        return new URL(path || "/", window.location.origin).href;
-    } catch (_error) {
-        return path || "/";
-    }
 }
 
 function formatStamp(dateLike) {

@@ -158,6 +158,8 @@ Splunk Observability is also organized for the walkthrough. The current dashboar
 5. `05 Deep Dive: Broadcast Playback Path`
 6. `06 Deep Dive: RTP Media Quality`
 
+Note: the numbers in these dashboard names are organizational labels, not a required visit order. The recommended usage order for the primary sponsor-delay story is `02` then `03`, with `01` used only if you want to reconnect the APM finding to the ThousandEyes network timeline. Dashboard `01` is the entry point only when the story starts with a network-first symptom.
+
 Browser RUM is active on the public and protected frontend. The Kubernetes frontend is instrumented as `streaming-frontend`, so Splunk APM should show the gateway service before the Java backends.
 
 ## Core Story
@@ -184,7 +186,15 @@ Why this works:
 - It lands cleanly in Splunk APM and Browser RUM.
 - It does not require you to claim a network outage when the issue is really in the application path.
 
-Use `one-break-sponsor-miss` when you want a safer single-break failure that auto-clears. Use `sponsor-pod-miss` when you want the harder persistent failure.
+Use `one-break-sponsor-miss` when you want a safer single-break failure. This preset sets `nextBreakOnlyEnabled`, which means:
+
+1. The fault fires on the **next** sponsor pod boundary.
+2. After that pod ends, the simulation **auto-clears automatically** — no operator action needed.
+3. Symptoms on `/broadcast` and `/#operations` normalize on their own.
+
+**Presenter timing note:** Once you arm `one-break-sponsor-miss`, keep Splunk APM open during the break itself. The fault will disappear as soon as the pod ends (~15 seconds after it starts). If you are mid-explanation in APM when the auto-clear fires, tell the audience: "The system just recovered automatically — that is by design with this preset. The trace evidence stays in Splunk." This is also visible in Demo Monkey: the **Duration** card reads "Next sponsor pod only" and shows the scheduled `autoClearAt` timestamp so you can see exactly when the simulation will self-clear. Use that timestamp to pace your Splunk walkthrough — if less than a minute remains, finish your APM pivot before the auto-clear fires rather than starting a new thread.
+
+Use `sponsor-pod-miss` when you want the harder persistent failure that stays armed until you manually apply `Clear`.
 
 ## Primary Walkthrough
 
@@ -286,7 +296,7 @@ Talk track:
 
 ### 7. Move Into Splunk Observability Cloud
 
-Use the numbered dashboards with this order for the sponsor-delay story:
+Use the numbered dashboards in this order for the sponsor-delay story (this is the recommended usage order, not the sequential listing order):
 
 1. `02 Pivot: User Impact To Root Cause`
    Show the common time window where viewer impact and backend pressure line up.
@@ -329,6 +339,16 @@ Close with the same structure every time:
 - Splunk showed why the workflow fell behind.
 - The operator suite showed the business impact in sponsor timing and channel control.
 
+## Reset Between Walkthroughs
+
+For each new booth cycle, return to baseline before restarting:
+
+1. Open `/demo-monkey` and apply `Clear`.
+2. Confirm `/broadcast` is healthy and sponsor timing has normalized.
+3. If a contribution feed was taken live during the previous cycle, return the channel to the house loop from Master Control before starting the next walkthrough.
+
+The full reset procedure including loadgen teardown is in `demo-operator-runbook.md` (the Reset section). If running the walkthrough solo, use the three steps above as the minimum between cycles and handle loadgen cleanup at the end of the booth session.
+
 ## Scenario-To-Tool Map
 
 Use this when you need to change course mid-demo.
@@ -338,9 +358,17 @@ Use this when you need to change course mid-demo.
 | `ad-break-delay` | `/broadcast` or `/#operations` | queued sponsor break stalls but still exists | dashboards `02` and `03`, then APM |
 | `one-break-sponsor-miss` | `/broadcast` | one sponsor break misses and then auto-clears | dashboard `03`, Browser RUM, then dashboard `05` if playback detail matters |
 | `sponsor-pod-miss` | `/broadcast` | sponsor clip fails at the break boundary | dashboard `03`, APM, Browser RUM |
-| `viewer-startup-spike`, `viewer-brownout`, `packet-loss` | ThousandEyes | public stream starts slowly or drops | dashboard `01`, then `02`, then APM if needed |
+| `playback-outage` | `/broadcast` | public HLS player cannot start or stalls completely; player reconnect loop is visible | dashboard `05`, then `01` for network context |
+| `viewer-startup-spike`, `viewer-brownout`, `packet-loss` (also: `slow-start`, `saturated-link`, `carrier-brownout`) | ThousandEyes | public stream starts slowly or drops | dashboard `01`, then `02`, then APM if needed |
 | `dependency-timeout`, `service-specific-failure`, `trace-map-outage` | `/api/v1/demo/public/trace-map` and ThousandEyes | public trace pivot degrades without taking down everything else | dashboard `04`, then APM service map |
 | `frontend-crash` | Browser RUM | viewer page throws a client-side exception | Browser RUM first, then APM if the crash also exposed a backend problem |
+
+The presets `slow-start`, `saturated-link`, and `carrier-brownout` are named variants of the startup-degradation family with slightly different parameter values (`slow-start` adds only startup delay; `saturated-link` adds delay plus bandwidth clamp; `carrier-brownout` adds delay, clamp, and mid-stream reset). They follow the same ThousandEyes-first story path as `viewer-startup-spike` and `viewer-brownout`. Prefer the explicitly named presets in the table above for booth walkthroughs. Use the variants only if you want a subtly different degradation profile for a repeat audience.
+
+Presenter notes on preset variants:
+
+- `slow-start` and `viewer-startup-spike` produce identical presenter guide copy in Demo Monkey (both read: "Public broadcast startup is delayed. Demo Monkey is holding the session open past the expected start window"). The flag values differ slightly (`viewer-startup-spike` also clamps bandwidth to 768 Kbps), so the viewer experience is measurably worse under `viewer-startup-spike`, but the Demo Monkey guide text will not tell you which one is armed. Check the **Preset** row in the detail card to confirm which is active.
+- `carrier-brownout` and `viewer-brownout` share identical flag values (`startupDelayMs: 1800`, `throttleKbps: 512`, `disconnectAfterKb: 384`). They are functionally equivalent. The name difference is cosmetic — use whichever fits your story framing (viewer-side language vs. carrier/network language).
 
 ## Optional RTSP And Media-Path Deep Dive
 

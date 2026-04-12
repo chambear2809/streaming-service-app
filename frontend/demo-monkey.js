@@ -1,236 +1,25 @@
+import {
+    roleCapabilities,
+    demoMonkeyPresets,
+    demoMonkeyDependencyOptions,
+    defaultDemoMonkeyDependencyService,
+    absoluteUrl,
+    hasRoleCapability
+} from "./shared.js";
+
 const runtimeConfig = window.STREAMING_CONFIG ?? {};
 
-const demoMonkeyPresets = {
-    clear: {
-        label: "Clear",
-        enabled: false,
-        preset: "clear",
-        startupDelayMs: 0,
-        throttleKbps: 0,
-        disconnectAfterKb: 0,
-        playbackFailureEnabled: false,
-        traceMapFailureEnabled: false,
-        frontendExceptionEnabled: false,
-        slowAdEnabled: false,
-        adLoadFailureEnabled: false
-    },
-    "viewer-startup-spike": {
-        label: "Slow startup",
-        enabled: true,
-        preset: "viewer-startup-spike",
-        startupDelayMs: 2500,
-        throttleKbps: 768,
-        disconnectAfterKb: 0,
-        playbackFailureEnabled: false,
-        traceMapFailureEnabled: false,
-        frontendExceptionEnabled: false,
-        slowAdEnabled: false,
-        adLoadFailureEnabled: false
-    },
-    "viewer-brownout": {
-        label: "Viewer brownout",
-        enabled: true,
-        preset: "viewer-brownout",
-        startupDelayMs: 1800,
-        throttleKbps: 512,
-        disconnectAfterKb: 384,
-        playbackFailureEnabled: false,
-        traceMapFailureEnabled: false,
-        frontendExceptionEnabled: false,
-        slowAdEnabled: false,
-        adLoadFailureEnabled: false
-    },
-    "packet-loss": {
-        label: "Packet loss",
-        enabled: true,
-        preset: "packet-loss",
-        startupDelayMs: 0,
-        throttleKbps: 0,
-        disconnectAfterKb: 0,
-        packetLossPercent: 20,
-        playbackFailureEnabled: false,
-        traceMapFailureEnabled: false,
-        dependencyTimeoutEnabled: false,
-        dependencyTimeoutService: "",
-        dependencyFailureEnabled: false,
-        dependencyFailureService: "",
-        frontendExceptionEnabled: false,
-        slowAdEnabled: false,
-        adLoadFailureEnabled: false
-    },
-    "playback-outage": {
-        label: "Playback outage",
-        enabled: true,
-        preset: "playback-outage",
-        startupDelayMs: 0,
-        throttleKbps: 0,
-        disconnectAfterKb: 0,
-        playbackFailureEnabled: true,
-        traceMapFailureEnabled: false,
-        frontendExceptionEnabled: false,
-        slowAdEnabled: false,
-        adLoadFailureEnabled: false
-    },
-    "trace-map-outage": {
-        label: "Trace pivot outage",
-        enabled: true,
-        preset: "trace-map-outage",
-        startupDelayMs: 0,
-        throttleKbps: 0,
-        disconnectAfterKb: 0,
-        playbackFailureEnabled: false,
-        traceMapFailureEnabled: true,
-        frontendExceptionEnabled: false,
-        slowAdEnabled: false,
-        adLoadFailureEnabled: false
-    },
-    "dependency-timeout": {
-        label: "Dependency timeout",
-        enabled: true,
-        preset: "dependency-timeout",
-        startupDelayMs: 0,
-        throttleKbps: 0,
-        disconnectAfterKb: 0,
-        packetLossPercent: 0,
-        playbackFailureEnabled: false,
-        traceMapFailureEnabled: false,
-        dependencyTimeoutEnabled: true,
-        dependencyTimeoutService: "ad-service-demo",
-        dependencyFailureEnabled: false,
-        dependencyFailureService: "",
-        frontendExceptionEnabled: false,
-        slowAdEnabled: false,
-        adLoadFailureEnabled: false
-    },
-    "service-specific-failure": {
-        label: "Service failure",
-        enabled: true,
-        preset: "service-specific-failure",
-        startupDelayMs: 0,
-        throttleKbps: 0,
-        disconnectAfterKb: 0,
-        packetLossPercent: 0,
-        playbackFailureEnabled: false,
-        traceMapFailureEnabled: false,
-        dependencyTimeoutEnabled: false,
-        dependencyTimeoutService: "",
-        dependencyFailureEnabled: true,
-        dependencyFailureService: "billing-service",
-        frontendExceptionEnabled: false,
-        slowAdEnabled: false,
-        adLoadFailureEnabled: false
-    },
-    "frontend-crash": {
-        label: "Frontend crash",
-        enabled: true,
-        preset: "frontend-crash",
-        startupDelayMs: 0,
-        throttleKbps: 0,
-        disconnectAfterKb: 0,
-        playbackFailureEnabled: false,
-        traceMapFailureEnabled: false,
-        frontendExceptionEnabled: true,
-        slowAdEnabled: false,
-        adLoadFailureEnabled: false
-    },
-    "ad-break-delay": {
-        label: "Ad break delay",
-        enabled: true,
-        preset: "ad-break-delay",
-        startupDelayMs: 0,
-        throttleKbps: 0,
-        disconnectAfterKb: 0,
-        playbackFailureEnabled: false,
-        traceMapFailureEnabled: false,
-        frontendExceptionEnabled: false,
-        slowAdEnabled: true,
-        adLoadFailureEnabled: false
-    },
-    "one-break-sponsor-miss": {
-        label: "One-break sponsor miss",
-        enabled: true,
-        preset: "one-break-sponsor-miss",
-        startupDelayMs: 0,
-        throttleKbps: 0,
-        disconnectAfterKb: 0,
-        playbackFailureEnabled: false,
-        traceMapFailureEnabled: false,
-        frontendExceptionEnabled: false,
-        slowAdEnabled: true,
-        adLoadFailureEnabled: true,
-        nextBreakOnlyEnabled: true
-    },
-    "sponsor-pod-miss": {
-        label: "Sponsor pod miss",
-        enabled: true,
-        preset: "sponsor-pod-miss",
-        startupDelayMs: 0,
-        throttleKbps: 0,
-        disconnectAfterKb: 0,
-        playbackFailureEnabled: false,
-        traceMapFailureEnabled: false,
-        frontendExceptionEnabled: false,
-        slowAdEnabled: true,
-        adLoadFailureEnabled: true
-    },
-    "slow-start": {
-        label: "Slow start",
-        enabled: true,
-        preset: "slow-start",
-        startupDelayMs: 2500,
-        throttleKbps: 0,
-        disconnectAfterKb: 0,
-        playbackFailureEnabled: false,
-        traceMapFailureEnabled: false,
-        frontendExceptionEnabled: false,
-        slowAdEnabled: false,
-        adLoadFailureEnabled: false
-    },
-    "saturated-link": {
-        label: "Saturated link",
-        enabled: true,
-        preset: "saturated-link",
-        startupDelayMs: 1200,
-        throttleKbps: 768,
-        disconnectAfterKb: 0,
-        playbackFailureEnabled: false,
-        traceMapFailureEnabled: false,
-        frontendExceptionEnabled: false,
-        slowAdEnabled: false,
-        adLoadFailureEnabled: false
-    },
-    "carrier-brownout": {
-        label: "Carrier brownout",
-        enabled: true,
-        preset: "carrier-brownout",
-        startupDelayMs: 1800,
-        throttleKbps: 512,
-        disconnectAfterKb: 384,
-        playbackFailureEnabled: false,
-        traceMapFailureEnabled: false,
-        frontendExceptionEnabled: false,
-        slowAdEnabled: false,
-        adLoadFailureEnabled: false
+function validateObservabilityConfig(cfg) {
+    if (!cfg?.observabilityLinks?.thousandEyesUrl) {
+        console.warn(
+            "[demo-monkey] observabilityLinks.thousandEyesUrl is not set in config.js. " +
+            "The 'Open ThousandEyes' button will fall back to /api/v1/demo/public/trace-map (raw JSON). " +
+            "Set this URL before running a trace-pivot demo walkthrough."
+        );
     }
-};
+}
 
-const demoMonkeyDependencyOptions = [
-    { value: "user-service-demo", label: "User service" },
-    { value: "content-service-demo", label: "Content service" },
-    { value: "billing-service", label: "Billing service" },
-    { value: "ad-service-demo", label: "Ad service" }
-];
-
-const defaultDemoMonkeyDependencyService = "ad-service-demo";
-const roleCapabilities = {
-    billing_admin: ["operations", "governance", "billing", "billing_write"],
-    finance_analyst: ["operations", "billing", "billing_write"],
-    platform_admin: ["operations", "governance", "ingest", "billing", "billing_write"],
-    programming_manager: ["operations", "governance", "ingest"],
-    executive: ["operations", "governance", "billing"],
-    qa_reviewer: ["operations"],
-    staff_operator: ["operations"]
-};
+validateObservabilityConfig(runtimeConfig);
 
 const elements = {
     summary: document.querySelector("#demo-monkey-summary"),
@@ -336,55 +125,33 @@ const state = {
 };
 
 let lastFrontendFaultKey = "";
+let lastGuideWarnKey = "";
 let presentationFallbackEnabled = false;
 
-function hasRoleCapability(role, capability) {
-    const permissions = roleCapabilities[String(role ?? "").trim().toLowerCase()] ?? roleCapabilities.staff_operator;
-    return permissions.includes(capability);
-}
-
-function absoluteUrl(path) {
-    try {
-        return new URL(path || "/", window.location.origin).href;
-    } catch (_error) {
-        return path || "/";
+function formatDate(dateLike, fallback) {
+    if (!dateLike) {
+        return fallback;
     }
+
+    const date = new Date(dateLike);
+    if (Number.isNaN(date.getTime())) {
+        return String(dateLike);
+    }
+
+    return date.toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit"
+    });
 }
 
 function formatStamp(dateLike) {
-    if (!dateLike) {
-        return "Awaiting operator change";
-    }
-
-    const date = new Date(dateLike);
-    if (Number.isNaN(date.getTime())) {
-        return String(dateLike);
-    }
-
-    return date.toLocaleString([], {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit"
-    });
+    return formatDate(dateLike, "Awaiting operator change");
 }
 
 function formatShortTime(dateLike) {
-    if (!dateLike) {
-        return "Awaiting timing";
-    }
-
-    const date = new Date(dateLike);
-    if (Number.isNaN(date.getTime())) {
-        return String(dateLike);
-    }
-
-    return date.toLocaleString([], {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit"
-    });
+    return formatDate(dateLike, "Awaiting timing");
 }
 
 function formatLabel(value, fallback = "Unknown") {
@@ -665,8 +432,8 @@ function buildPresenterGuide(config, broadcast) {
         return {
             storyHeadline: "Trace pivot is failing",
             storyCopy: "Use this when you want to make the upstream dependency chain obvious and create a crisp service-map handoff.",
-            pivotTitle: "Synthetic path then service map",
-            pivotCopy: "Lead with the failing transaction and follow the propagated failure across upstream services.",
+            pivotTitle: "ThousandEyes then Splunk dashboard 04",
+            pivotCopy: "Open ThousandEyes 'aleccham-broadcast-trace-map' first — it monitors the same /api/v1/demo/public/trace-map endpoint that is now returning 503. Use the test result to prove the outside-in failure, then pivot into the Splunk Trace Map deep dive (dashboard 04) and the APM service map to follow the propagated failure across the upstream dependency chain.",
             revenueTitle: "Diagnosis is urgent",
             revenueCopy: "Sponsor revenue is not yet failing directly, but teams have lost clean visibility into the affected path."
         };
@@ -943,11 +710,35 @@ function maybeEmitFrontendException(config = state.current) {
     }, 0);
 }
 
+const knownNamedScenarioFlags = [
+    "playbackFailureEnabled",
+    "traceMapFailureEnabled",
+    "dependencyTimeoutEnabled",
+    "dependencyFailureEnabled",
+    "frontendExceptionEnabled",
+    "slowAdEnabled",
+    "adLoadFailureEnabled"
+];
+
+function warnIfMissingPresenterGuide(config, guide) {
+    if (!config.enabled) return;
+    const hasNamedFlag = knownNamedScenarioFlags.some((key) => Boolean(config[key]));
+    if (!hasNamedFlag) return;
+    if (guide.storyHeadline !== "Custom incident profile") return;
+    const warnKey = [config.updatedAt, config.preset].join(":");
+    if (lastGuideWarnKey === warnKey) return;
+    lastGuideWarnKey = warnKey;
+    console.warn(
+        "[demo-monkey] Active preset has no opinionated presenter guide — using generic fallback. Consider adding a dedicated guide block."
+    );
+}
+
 function render() {
     const current = state.current;
     const broadcast = state.broadcast;
     const adStatus = broadcast?.adStatus ?? {};
     const presenterGuide = buildPresenterGuide(current, broadcast);
+    warnIfMissingPresenterGuide(current, presenterGuide);
     const scriptWalkthrough = buildScriptWalkthrough(current, broadcast);
     const launchTargets = buildLaunchTargets(current);
     const currentPresetLabel = presetLabel(current.preset);
@@ -955,7 +746,7 @@ function render() {
     const throttleValue = current.throttleKbps || Number.parseInt(elements.throttleValue.value, 10) || 768;
     const disconnectValue = current.disconnectAfterKb || Number.parseInt(elements.disconnectValue.value, 10) || 384;
     const publicIncidentPath = runtimeConfig.publicDemoMonkeyUrl ?? "/api/v1/demo/public/demo-monkey";
-    const apiUrl = absoluteUrl(runtimeConfig.publicDemoMonkeyUrl ?? "/api/v1/demo/public/demo-monkey");
+    const apiUrl = absoluteUrl(publicIncidentPath);
     const affectedCount = current.affectedPaths.length;
     const liveSourceLabel = broadcast?.status === "ON_AIR"
         ? "External contribution"
@@ -1280,18 +1071,18 @@ async function unlockOperatorAccess() {
 
 async function bootstrap() {
     render();
-    await loadStatus();
-    await loadBroadcastStatus(true);
-    await loadWriteAccess(true);
+    await Promise.all([
+        loadStatus(),
+        loadBroadcastStatus(true),
+        loadWriteAccess(true)
+    ]);
     window.setInterval(() => {
-        loadStatus(true).catch((error) => {
+        Promise.all([
+            loadStatus(true),
+            loadBroadcastStatus(true),
+            loadWriteAccess(true)
+        ]).catch((error) => {
             console.warn("Unable to refresh incident simulation state.", error);
-        });
-        loadBroadcastStatus(true).catch((error) => {
-            console.warn("Unable to refresh public broadcast status.", error);
-        });
-        loadWriteAccess(true).catch((error) => {
-            console.warn("Unable to refresh incident-simulation write access.", error);
         });
     }, 15000);
 }
@@ -1300,9 +1091,7 @@ elements.form.addEventListener("submit", handleSubmit);
 elements.disable.addEventListener("click", disableMonkey);
 elements.unlock.addEventListener("click", unlockOperatorAccess);
 elements.presets.addEventListener("click", handlePresetClick);
-elements.presentationToggle.addEventListener("click", () => {
-    togglePresentationMode();
-});
+elements.presentationToggle.addEventListener("click", togglePresentationMode);
 document.addEventListener("fullscreenchange", () => {
     if (!document.fullscreenElement) {
         presentationFallbackEnabled = false;
