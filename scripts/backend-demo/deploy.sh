@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 ENV_FILE="${ENV_FILE:-${ROOT_DIR}/.env}"
 DEMO_AUTH_SECRET_NAME="streaming-demo-auth"
 RENDERED_NAMESPACE=""
+RENDERED_DEPLOYMENT_ENVIRONMENT=""
 
 load_env_file() {
   local env_file="$1"
@@ -54,6 +55,7 @@ NAMESPACE="${NAMESPACE:-streaming-service-app}"
 DEMO_AUTH_SECRET="${DEMO_AUTH_SECRET:-}"
 DEMO_AUTH_PASSWORD="${DEMO_AUTH_PASSWORD:-}"
 DEMO_AUTH_PASSWORD_DEFAULT="password123"
+DEPLOYMENT_ENVIRONMENT="${SPLUNK_DEPLOYMENT_ENVIRONMENT:-streaming-app}"
 TEMP_DIR="$(mktemp -d)"
 CONTENT_ARCHIVE_PATH="${TEMP_DIR}/content-service-source.tgz"
 MEDIA_ARCHIVE_PATH="${TEMP_DIR}/media-service-source.tgz"
@@ -84,7 +86,10 @@ escape_sed_replacement() {
 }
 
 render_manifest() {
-  sed -e "s/streaming-service-app/${RENDERED_NAMESPACE}/g" "$1"
+  sed \
+    -e "s/streaming-service-app/${RENDERED_NAMESPACE}/g" \
+    -e "s/deployment.environment=streaming-app/deployment.environment=${RENDERED_DEPLOYMENT_ENVIRONMENT}/g" \
+    "$1"
 }
 
 apply_manifest() {
@@ -96,6 +101,7 @@ create_namespace() {
 }
 
 RENDERED_NAMESPACE="$(escape_sed_replacement "${NAMESPACE}")"
+RENDERED_DEPLOYMENT_ENVIRONMENT="$(escape_sed_replacement "${DEPLOYMENT_ENVIRONMENT}")"
 
 secret_field_b64() {
   local name="$1"

@@ -31,3 +31,4 @@ __pycache__/
 
 # Ignore repo-local tool caches
 /.tools/
+/.generated/
