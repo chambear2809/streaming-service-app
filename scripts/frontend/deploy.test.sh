@@ -77,8 +77,6 @@ cat > "${dist_dir}/build-info.json" <<'JSON'
   "appVersion": "fixture-build"
 }
 JSON
-
-printf '%s' "${SPLUNK_RUM_ACCESS_TOKEN-}" > "${PWD}/build-rum-token.txt"
 EOF
   chmod +x "${path}"
 }
@@ -115,11 +113,7 @@ YAML
 fi
 
 if [[ "${1-}" == "apply" ]]; then
-  if [[ -n "${KUBECTL_APPLY_LOG_FILE:-}" ]]; then
-    cat >> "${KUBECTL_APPLY_LOG_FILE}"
-  else
-    cat >/dev/null
-  fi
+  cat >/dev/null
   exit 0
 fi
 
@@ -187,14 +181,6 @@ kind: Deployment
 metadata:
   name: streaming-frontend
   namespace: streaming-service-app
-spec:
-  template:
-    spec:
-      containers:
-        - name: app
-          env:
-            - name: OTEL_RESOURCE_ATTRIBUTES
-              value: service.name=streaming-frontend,deployment.environment=streaming-app
 EOF
 
   cat > "${root}/k8s/frontend/service.yaml" <<'EOF'
@@ -222,7 +208,6 @@ run_deploy() {
     PATH="${root}/bin:${PATH}" \
     SPLUNK_STUB_COUNT_FILE="${root}/stub-count.txt" \
     SPLUNK_STUB_ARGS_FILE="${root}/stub-args.txt" \
-    KUBECTL_APPLY_LOG_FILE="${root}/apply.log" \
     zsh "${root}/scripts/frontend/deploy.sh" > "${output_file}" 2>&1
   local status=$?
   set -e
@@ -234,13 +219,14 @@ run_deploy() {
 }
 
 test_access_token_default_is_used_for_upload() {
-  local root args built_rum_token output
+  local root output args
 
   root="$(make_fixture_repo access-token)"
 
   cat > "${root}/.env" <<'EOF'
 SPLUNK_REALM=us1
 SPLUNK_ACCESS_TOKEN=observability-upload-token
+SPLUNK_RUM_ACCESS_TOKEN=browser-rum-token
 EOF
 
   run_deploy "${root}" "${root}/output.log"
@@ -249,10 +235,6 @@ EOF
 
   args="$(tr '\n' ' ' < "${root}/stub-args.txt")"
   assert_contains "${args}" "--token observability-upload-token"
-  built_rum_token="$(<"${root}/frontend/build-rum-token.txt")"
-  [[ -z "${built_rum_token}" ]] || fail "expected frontend build to keep SPLUNK_ACCESS_TOKEN out of the browser RUM config"
-  output="$(<"${root}/output.log")"
-  assert_contains "${output}" "SPLUNK_RUM_ACCESS_TOKEN is not set. Browser RUM will remain disabled"
 }
 
 test_explicit_upload_override_wins() {
@@ -294,22 +276,6 @@ EOF
   fi
 }
 
-test_dotenv_deployment_environment_rewrites_manifest() {
-  local root applied
-
-  root="$(make_fixture_repo deployment-environment)"
-
-  cat > "${root}/.env" <<'EOF'
-SPLUNK_DEPLOYMENT_ENVIRONMENT=from-dotenv
-EOF
-
-  run_deploy "${root}" "${root}/output.log"
-
-  applied="$(<"${root}/apply.log")"
-  assert_contains "${applied}" "deployment.environment=from-dotenv"
-}
-
 test_access_token_default_is_used_for_upload
 test_explicit_upload_override_wins
 test_browser_token_only_warns_and_skips_upload
-test_dotenv_deployment_environment_rewrites_manifest

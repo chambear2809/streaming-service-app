@@ -10,13 +10,13 @@ import org.springframework.security.web.SecurityFilterChain;
 /**
  * Demo-profile security configuration — intentionally permits all requests.
  *
- * <p>Active only when {@code spring.profiles.active=broadcast-demo}. All HTTP security is disabled
+ * <p>Active only when {@code spring.profiles.active=demo}. All HTTP security is disabled
  * so the demo auth controller endpoints are reachable without JWT credentials.
  *
  * <p><strong>Do not enable this profile on a network-accessible deployment.</strong>
  */
 @Configuration
-@Profile("broadcast-demo")
+@Profile("demo")
 public class DemoSecurityConfig {
 
     @Bean

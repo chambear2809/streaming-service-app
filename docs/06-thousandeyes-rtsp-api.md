@@ -218,10 +218,6 @@ Required user inputs:
 - `TE_TARGET_AGENT_ID`: set the target Enterprise Agent or Cloud Agent ID from `scripts/thousandeyes/create-rtsp-tests.sh list-agents`
 - `TE_UDP_TARGET_AGENT_ID`: optional override when the UDP media-path test should target a different agent than the RTP proxy test
 
-Optional test enablement inputs:
-
-- `TE_RTSP_TCP_ENABLED`, `TE_UDP_MEDIA_ENABLED`, `TE_RTP_STREAM_ENABLED`, `TE_TRACE_MAP_ENABLED`, and `TE_BROADCAST_ENABLED`: per-test `enabled` flags. The scripts default these to `true`; set them to `false` when you need the tests defined in ThousandEyes without running them or consuming utilization.
-
 Optional alert posture inputs:
 
 - `TE_ALERTS_ENABLED`: shared default for `alertsEnabled` across all five repo ThousandEyes tests. The scripts now default this to `true`.
@@ -288,11 +284,6 @@ export THOUSANDEYES_ACCOUNT_GROUP_ID='1234'
 export TE_SOURCE_AGENT_IDS='111,222'
 export TE_TARGET_AGENT_ID='333'
 export TE_UDP_TARGET_AGENT_ID='3'
-export TE_RTSP_TCP_ENABLED='false'
-export TE_UDP_MEDIA_ENABLED='false'
-export TE_RTP_STREAM_ENABLED='false'
-export TE_TRACE_MAP_ENABLED='false'
-export TE_BROADCAST_ENABLED='false'
 export TE_ALERTS_ENABLED='true'
 export TE_ALERT_MINIMUM_SOURCES='1'
 export TE_RTSP_SERVER='rtsp.example.com'
@@ -322,8 +313,6 @@ When the repo-root `.env` already has `TE_*_TEST_ID` values, the same
 `create-all` command now reconciles those existing ThousandEyes tests in place.
 Keep those IDs current so rerunning the repo helper repairs agent, target, URL,
 alert, and distributed-tracing drift instead of creating duplicate tests.
-That same reconcile path also lets you flip existing tests between `enabled=true`
-and `enabled=false` without creating replacements.
 
 Or create them one at a time:
 

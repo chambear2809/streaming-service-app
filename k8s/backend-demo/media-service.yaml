@@ -298,20 +298,6 @@ spec:
               value: /broadcast-state/rtsp-review
             - name: DEMO_CONTENT_SERVICE_BASE_URL
               value: http://content-service-demo.streaming-service-app.svc.cluster.local
-            - name: DEMO_TRACE_MAP_USER_SERVICE_URL
-              value: http://user-service-demo.streaming-service-app.svc.cluster.local/api/v1/demo/auth/health
-            - name: DEMO_TRACE_MAP_CONTENT_SERVICE_URL
-              value: http://content-service-demo.streaming-service-app.svc.cluster.local/api/v1/demo/content
-            - name: DEMO_TRACE_MAP_BILLING_SERVICE_URL
-              value: http://billing-service.streaming-service-app.svc.cluster.local:8070/api/v1/billing/health
-            - name: DEMO_TRACE_MAP_AD_SERVICE_URL
-              value: http://ad-service-demo.streaming-service-app.svc.cluster.local/api/v1/demo/ads/health
-            - name: DEMO_AD_SERVICE_CURRENT_URL
-              value: http://ad-service-demo.streaming-service-app.svc.cluster.local/api/v1/demo/ads/current
-            - name: DEMO_AD_SERVICE_ISSUE_URL
-              value: http://ad-service-demo.streaming-service-app.svc.cluster.local/api/v1/demo/ads/issues
-            - name: DEMO_AD_SERVICE_TIMELINE_URL
-              value: http://ad-service-demo.streaming-service-app.svc.cluster.local/api/v1/demo/ads/timeline
             - name: SPRING_DATASOURCE_URL
               value: jdbc:postgresql://streaming-postgres.streaming-service-app.svc.cluster.local:5432/streaming?currentSchema=demo_media
             - name: SPRING_DATASOURCE_USERNAME

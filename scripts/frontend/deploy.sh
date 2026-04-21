@@ -40,10 +40,6 @@ load_env_file() {
       continue
     fi
 
-    if (( ${+parameters[$key]} )); then
-      continue
-    fi
-
     if [[ "${value}" == \"*\" && "${value}" == *\" ]]; then
       value="${value:1:${#value}-2}"
     elif [[ "${value}" == \'*\' && "${value}" == *\' ]]; then
@@ -64,13 +60,10 @@ DIST_DIR="${FRONTEND_DIR}/dist"
 APP_VERSION="${APP_VERSION:-$(git -C "${ROOT_DIR}" rev-parse --short HEAD)}"
 RUM_CONFIGMAP_NAME="${RUM_CONFIGMAP_NAME:-streaming-frontend-rum-assets}"
 SPLUNK_RUM_APP_NAME="${SPLUNK_RUM_APP_NAME:-streaming-app-frontend}"
-DEPLOYMENT_ENVIRONMENT="${SPLUNK_DEPLOYMENT_ENVIRONMENT:-streaming-app}"
-SPLUNK_ACCESS_TOKEN="${SPLUNK_ACCESS_TOKEN:-}"
 SPLUNK_RUM_ACCESS_TOKEN="${SPLUNK_RUM_ACCESS_TOKEN:-}"
+SPLUNK_ACCESS_TOKEN="${SPLUNK_ACCESS_TOKEN:-}"
 SPLUNK_SOURCEMAP_UPLOAD_TOKEN="${SPLUNK_SOURCEMAP_UPLOAD_TOKEN:-${SPLUNK_ACCESS_TOKEN:-}}"
-export SPLUNK_RUM_ACCESS_TOKEN
 RENDERED_NAMESPACE=""
-RENDERED_DEPLOYMENT_ENVIRONMENT=""
 
 fail() {
   print -u2 -r -- "[frontend-deploy] ERROR: $*"
@@ -82,10 +75,7 @@ escape_sed_replacement() {
 }
 
 render_manifest() {
-  sed \
-    -e "s/streaming-service-app/${RENDERED_NAMESPACE}/g" \
-    -e "s/deployment.environment=streaming-app/deployment.environment=${RENDERED_DEPLOYMENT_ENVIRONMENT}/g" \
-    "$1"
+  sed -e "s/streaming-service-app/${RENDERED_NAMESPACE}/g" "$1"
 }
 
 apply_manifest() {
@@ -97,7 +87,6 @@ create_namespace() {
 }
 
 RENDERED_NAMESPACE="$(escape_sed_replacement "${NAMESPACE}")"
-RENDERED_DEPLOYMENT_ENVIRONMENT="$(escape_sed_replacement "${DEPLOYMENT_ENVIRONMENT}")"
 
 create_namespace
 
@@ -117,10 +106,6 @@ log "Building frontend assets"
   npm run build:production
 )
 
-if [[ -n "${SPLUNK_REALM:-}" && -z "${SPLUNK_RUM_ACCESS_TOKEN:-}" ]]; then
-  warn "SPLUNK_RUM_ACCESS_TOKEN is not set. Browser RUM will remain disabled even if sourcemap upload is configured with SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN."
-fi
-
 if [[ -n "${SPLUNK_REALM:-}" && -z "${SPLUNK_SOURCEMAP_UPLOAD_TOKEN:-}" && -n "${SPLUNK_RUM_ACCESS_TOKEN:-}" ]]; then
   warn "SPLUNK_RUM_ACCESS_TOKEN is set, but sourcemap upload needs SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN. Browser RUM will still work; sourcemap upload is being skipped."
 elif [[ -n "${SPLUNK_REALM:-}" && -n "${SPLUNK_SOURCEMAP_UPLOAD_TOKEN:-}" ]]; then
@@ -135,7 +120,7 @@ elif [[ -n "${SPLUNK_REALM:-}" && -n "${SPLUNK_SOURCEMAP_UPLOAD_TOKEN:-}" ]]; th
     warn "Splunk source map upload still failed after retries; continuing deploy because the frontend rollout does not depend on it."
   fi
 else
-  log "Skipping Splunk source map upload because SPLUNK_REALM and/or SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN are not set."
+  log "Skipping Splunk source map upload because SPLUNK_REALM and/or SPLUNK_ACCESS_TOKEN are not set."
 fi
 
 kubectl -n "${NAMESPACE}" create configmap "${CONFIGMAP_NAME}" \

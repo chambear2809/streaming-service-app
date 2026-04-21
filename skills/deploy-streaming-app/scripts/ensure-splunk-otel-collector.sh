@@ -205,11 +205,6 @@ has_collector_resource() {
   "${KUBECLI}" -n "${COLLECTOR_NAMESPACE}" get "${resource}" "${name}" >/dev/null 2>&1
 }
 
-has_collector_operator_deployment() {
-  has_collector_resource deployment "${COLLECTOR_RELEASE}-operator" \
-    || has_collector_resource deployment "${COLLECTOR_RELEASE}-opentelemetry-operator"
-}
-
 instrumentation_propagators() {
   "${KUBECLI}" -n "${COLLECTOR_NAMESPACE}" get instrumentations.opentelemetry.io "${COLLECTOR_RELEASE}" \
     -o jsonpath='{range .spec.propagators[*]}{.}{"\n"}{end}' 2>/dev/null || true
@@ -235,7 +230,7 @@ has_required_propagators() {
 
 collector_is_compatible() {
   has_collector_namespace \
-    && has_collector_operator_deployment \
+    && has_collector_resource deployment "${COLLECTOR_RELEASE}-opentelemetry-operator" \
     && has_collector_resource deployment "${COLLECTOR_RELEASE}-k8s-cluster-receiver" \
     && has_collector_resource daemonset "${COLLECTOR_RELEASE}-agent" \
     && has_collector_resource instrumentations.opentelemetry.io "${COLLECTOR_RELEASE}" \
@@ -248,7 +243,7 @@ require_compatible_collector() {
   missing=()
 
   has_collector_namespace || missing+=("namespace/${COLLECTOR_NAMESPACE}")
-  has_collector_operator_deployment || missing+=("deployment/${COLLECTOR_RELEASE}-operator")
+  has_collector_resource deployment "${COLLECTOR_RELEASE}-opentelemetry-operator" || missing+=("deployment/${COLLECTOR_RELEASE}-opentelemetry-operator")
   has_collector_resource deployment "${COLLECTOR_RELEASE}-k8s-cluster-receiver" || missing+=("deployment/${COLLECTOR_RELEASE}-k8s-cluster-receiver")
   has_collector_resource daemonset "${COLLECTOR_RELEASE}-agent" || missing+=("daemonset/${COLLECTOR_RELEASE}-agent")
   has_collector_resource instrumentations.opentelemetry.io "${COLLECTOR_RELEASE}" || missing+=("instrumentation/${COLLECTOR_RELEASE}")
@@ -344,11 +339,7 @@ install_or_upgrade_collector() {
   helm "${helm_args[@]}"
 
   wait_for_instrumentation
-  if has_collector_resource deployment "${COLLECTOR_RELEASE}-operator"; then
-    "${KUBECLI}" -n "${COLLECTOR_NAMESPACE}" rollout status "deployment/${COLLECTOR_RELEASE}-operator" --timeout="${ROLLOUT_TIMEOUT}"
-  else
-    "${KUBECLI}" -n "${COLLECTOR_NAMESPACE}" rollout status "deployment/${COLLECTOR_RELEASE}-opentelemetry-operator" --timeout="${ROLLOUT_TIMEOUT}"
-  fi
+  "${KUBECLI}" -n "${COLLECTOR_NAMESPACE}" rollout status "deployment/${COLLECTOR_RELEASE}-opentelemetry-operator" --timeout="${ROLLOUT_TIMEOUT}"
   "${KUBECLI}" -n "${COLLECTOR_NAMESPACE}" rollout status "deployment/${COLLECTOR_RELEASE}-k8s-cluster-receiver" --timeout="${ROLLOUT_TIMEOUT}"
   "${KUBECLI}" -n "${COLLECTOR_NAMESPACE}" rollout status "daemonset/${COLLECTOR_RELEASE}-agent" --timeout="${ROLLOUT_TIMEOUT}"
 }
