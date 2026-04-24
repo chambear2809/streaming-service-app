@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 ENV_FILE="${ENV_FILE:-${ROOT_DIR}/.env}"
 DEMO_AUTH_SECRET_NAME="streaming-demo-auth"
 RENDERED_NAMESPACE=""
-RENDERED_DEPLOYMENT_ENVIRONMENT=""
+TRACE_DEPLOYMENT_ENVIRONMENT=""
 
 load_env_file() {
   local env_file="$1"
@@ -88,8 +88,22 @@ escape_sed_replacement() {
 render_manifest() {
   sed \
     -e "s/streaming-service-app/${RENDERED_NAMESPACE}/g" \
-    -e "s/deployment.environment=streaming-app/deployment.environment=${RENDERED_DEPLOYMENT_ENVIRONMENT}/g" \
-    "$1"
+    "$1" | awk -v env_value="${TRACE_DEPLOYMENT_ENVIRONMENT}" '
+      BEGIN {
+        escaped_env = env_value
+        gsub(/\047/, "\047\047", escaped_env)
+      }
+      pending && $0 ~ /^[[:space:]]*value:[[:space:]]+/ {
+        match($0, /^[[:space:]]*/)
+        indent = substr($0, RSTART, RLENGTH)
+        printf "%svalue: \047%s\047\n", indent, escaped_env
+        pending = 0
+        next
+      }
+      pending { pending = 0 }
+      $0 ~ /^[[:space:]]*- name:[[:space:]]+OTEL_DEPLOYMENT_ENVIRONMENT[[:space:]]*$/ { pending = 1 }
+      { print }
+    '
 }
 
 apply_manifest() {
@@ -101,7 +115,7 @@ create_namespace() {
 }
 
 RENDERED_NAMESPACE="$(escape_sed_replacement "${NAMESPACE}")"
-RENDERED_DEPLOYMENT_ENVIRONMENT="$(escape_sed_replacement "${DEPLOYMENT_ENVIRONMENT}")"
+TRACE_DEPLOYMENT_ENVIRONMENT="${DEPLOYMENT_ENVIRONMENT}"
 
 secret_field_b64() {
   local name="$1"

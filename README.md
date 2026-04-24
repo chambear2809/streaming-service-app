@@ -275,7 +275,9 @@ The full set lives in [`example.env`](example.env). The variables below are the 
 - `SPLUNK_ACCESS_TOKEN` is used by dashboard sync, [`scripts/frontend/upload-sourcemaps.sh`](scripts/frontend/upload-sourcemaps.sh), [`scripts/frontend/deploy.sh`](scripts/frontend/deploy.sh), and the canonical deploy path for sourcemap upload; uploads now retry transient failures with bounded backoff before they warn and let the deploy continue
 - `SPLUNK_SOURCEMAP_UPLOAD_TOKEN` optionally overrides `SPLUNK_ACCESS_TOKEN` just for sourcemap upload when you need a separate token
 - `SPLUNK_OTEL_CLUSTER_NAME` overrides the cluster name used by the repo-managed Splunk OTel Collector bootstrap path
-- `SPLUNK_OTEL_HELM_CHART_VERSION` pins the upstream collector Helm chart version used by the repo-managed bootstrap path
+- `SPLUNK_OTEL_HELM_CHART_VERSION` overrides the upstream collector Helm chart version used by the repo-managed bootstrap path; if you leave it unset, the helper reconciles incompatible installs to the repo default chart version
+- `SPLUNK_OTEL_SECONDARY_REALM` and `SPLUNK_OTEL_SECONDARY_ACCESS_TOKEN` optionally make the collector dual-ship to a second Splunk Observability org while keeping the primary destination in place
+- `SPLUNK_OTEL_SECONDARY_INGEST_URL` and `SPLUNK_OTEL_SECONDARY_API_URL` optionally override the secondary tenant endpoints when it does not use the standard `ingest.<realm>` and `api.<realm>` hosts
 - `SPLUNK_RUM_APP_NAME` overrides the frontend RUM application name
 - `SPLUNK_DEPLOYMENT_ENVIRONMENT` overrides the default deployment environment label
 - `SPLUNK_DEMO_DASHBOARD_GROUP_ID` pins dashboard sync to an existing group when automatic matching would be ambiguous
@@ -303,6 +305,7 @@ The full set lives in [`example.env`](example.env). The variables below are the 
 - `TE_SOURCE_AGENT_IDS` supplies the source agent IDs for test creation
 - `TE_TARGET_AGENT_ID` is required for the RTP proxy test and acts as the default target for the UDP media-path test
 - `TE_UDP_TARGET_AGENT_ID` optionally overrides the UDP media-path target when it should differ from the RTP target
+- `TE_EXTERNAL_ROUTER_HOST` optionally derives the external RTSP host and Demo Monkey HTTP base URL from one public router or proxy hostname when the cluster sits behind a delay-injecting edge
 - `TE_RTSP_SERVER` and `TE_RTSP_PORT` are needed for the direct API flow or when the Kubernetes wrapper cannot discover RTSP automatically
 - `TE_DEMO_MONKEY_FRONTEND_BASE_URL`, `TE_TRACE_MAP_TEST_URL`, and `TE_BROADCAST_TEST_URL` control the Demo Monkey-sensitive HTTP test targets
 - `TE_RTSP_TCP_ENABLED`, `TE_UDP_MEDIA_ENABLED`, `TE_RTP_STREAM_ENABLED`, `TE_TRACE_MAP_ENABLED`, and `TE_BROADCAST_ENABLED` control whether each repo ThousandEyes test is active after create or reconcile; set them to `false` when you need the test definitions to exist without consuming utilization
@@ -315,6 +318,7 @@ Choose the ThousandEyes target mode explicitly before deriving URLs:
 
 - `local` keeps the default `svc.cluster.local` targets for same-network Enterprise Agents
 - `external` requires browser-facing or internet-reachable frontend and RTSP targets
+- When a public router or proxy fronts the cluster, prefer that router hostname or IP for `external` mode so ThousandEyes observes the injected delay instead of bypassing it through direct service load balancers
 
 ## Observability And Synthetic Tests
 
@@ -328,10 +332,15 @@ The ordered guide list lives in [`docs/README.md`](docs/README.md). Read the mai
 - [`docs/06-thousandeyes-rtsp-api.md`](docs/06-thousandeyes-rtsp-api.md)
 - [`docs/07-broadcast-loadgen.md`](docs/07-broadcast-loadgen.md)
 - [`docs/08-operator-billing-loadgen.md`](docs/08-operator-billing-loadgen.md)
+- [`docs/09-splunk-otel-traffic-architecture.md`](docs/09-splunk-otel-traffic-architecture.md)
 
 The checked-in collector override for PostgreSQL DB monitoring lives at:
 
 - [`k8s/otel-splunk/postgresql-dbmon.values.yaml`](k8s/otel-splunk/postgresql-dbmon.values.yaml)
+
+The optional checked-in collector override for a second Splunk Observability destination lives at:
+
+- [`k8s/otel-splunk/collector.secondary-o11y.values.yaml`](k8s/otel-splunk/collector.secondary-o11y.values.yaml)
 
 The main scripts are:
 
@@ -342,11 +351,18 @@ The main scripts are:
 - [`scripts/thousandeyes/create-demo-dashboards.py`](scripts/thousandeyes/create-demo-dashboards.py) for Splunk Observability dashboard sync
 - [`skills/deploy-streaming-app/tests/postgresql-db-monitoring-config.test.sh`](skills/deploy-streaming-app/tests/postgresql-db-monitoring-config.test.sh) for repo-side DB monitoring config validation
 - [`skills/deploy-streaming-app/tests/postgresql-db-monitoring-live-smoke.test.sh`](skills/deploy-streaming-app/tests/postgresql-db-monitoring-live-smoke.test.sh) for a live cluster smoke test of the collector and PostgreSQL path
+- [`skills/deploy-streaming-app/tests/splunk-otel-tracing-live-smoke.test.sh`](skills/deploy-streaming-app/tests/splunk-otel-tracing-live-smoke.test.sh) for a live cluster smoke test of the trace exporter path, including primary and optional secondary O11y export
 
 Important behavior:
 
 - The repo-managed collector bootstrap path expects namespace `otel-splunk` and instrumentation name `splunk-otel-collector` because the checked-in app manifests annotate pods with that exact target.
 - Use `bash skills/deploy-streaming-app/scripts/deploy-demo.sh --splunk-otel-mode install-if-missing ...` when the cluster does not already have that repo-compatible collector install.
+- The checked-in collector values pin the collector onto the private `otel` nodegroup so outbound Splunk traffic uses the router EIP `44.208.125.119` instead of ephemeral worker public IPs.
+- The repo-compatible app trace path is OTLP gRPC to `http://splunk-otel-collector-agent.otel-splunk.svc.cluster.local:4317`.
+- The helper uses [`skills/deploy-streaming-app/scripts/post-render-splunk-otel-manifests.sh`](skills/deploy-streaming-app/scripts/post-render-splunk-otel-manifests.sh) plus a live verification step to keep `splunk-otel-collector-agent` on `internalTrafficPolicy=Cluster`, because chart `0.149.0` hardcodes `Local` and breaks app-to-collector connectivity when agents run only on the private `otel` nodes.
+- The canonical and legacy repo deploy scripts render `SPLUNK_DEPLOYMENT_ENVIRONMENT` into the app `OTEL_RESOURCE_ATTRIBUTES`, so APM and collector-side telemetry stay aligned on the same environment label.
+- Set both `SPLUNK_OTEL_SECONDARY_REALM` and `SPLUNK_OTEL_SECONDARY_ACCESS_TOKEN` before rerunning the collector helper when you want the same cluster to send telemetry to another Splunk Observability org as well.
+- When the secondary tenant uses nonstandard hosts such as rc0, also set `SPLUNK_OTEL_SECONDARY_INGEST_URL` and `SPLUNK_OTEL_SECONDARY_API_URL`, for example `https://external-ingest.rc0.signalfx.com` and `https://external-api.rc0.signalfx.com`.
 - PostgreSQL DB monitoring belongs on the Splunk OTel Collector `clusterReceiver`, not the `agent` DaemonSet, so the shared database is scraped once instead of once per node.
 - The checked-in DBMON overlay uses dedicated `metrics/dbmon` and `logs/dbmon` pipelines so it can layer on top of the chart defaults without replacing the main `metrics` receiver list.
 - The current demo deploy uses one PostgreSQL database named `streaming` and multiple schemas, so the receiver `databases` list should target `streaming`, not `demo_content`, `billing`, or the other schema names.

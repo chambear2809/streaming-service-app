@@ -77,8 +77,10 @@ spec:
               value: grpc
             - name: OTEL_PROPAGATORS
               value: baggage,b3,tracecontext
+            - name: OTEL_DEPLOYMENT_ENVIRONMENT
+              value: 'streaming-app'
             - name: OTEL_RESOURCE_ATTRIBUTES
-              value: service.name=$(OTEL_SERVICE_NAME),service.namespace=streaming-service-app,k8s.namespace.name=streaming-service-app,k8s.deployment.name=ad-service-demo,deployment.environment=streaming-app
+              value: service.name=$(OTEL_SERVICE_NAME),service.namespace=streaming-service-app,k8s.namespace.name=streaming-service-app,k8s.deployment.name=ad-service-demo,deployment.environment=$(OTEL_DEPLOYMENT_ENVIRONMENT)
             - name: SERVER_PORT
               value: "8080"
             - name: SPRING_DATASOURCE_URL

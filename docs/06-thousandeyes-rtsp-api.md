@@ -233,6 +233,7 @@ Optional alert posture inputs:
 
 Sometimes required:
 
+- `TE_EXTERNAL_ROUTER_HOST`: set this when a public router or proxy fronts the cluster and ThousandEyes should stay on that delay-injecting public path; the helpers derive the external RTSP host and Demo Monkey HTTP base URL from it
 - `TE_RTSP_SERVER`: set this if you are running the direct API flow or if the Kubernetes wrapper cannot discover the RTSP hostname automatically
 - `TE_RTSP_PORT`: override this if your RTSP service is not using the default port expected by your chosen flow
 - `TE_DEMO_MONKEY_FRONTEND_BASE_URL`: set this to the public frontend URL in `external` mode instead of leaving the default `svc.cluster.local` value in place
@@ -247,6 +248,7 @@ If you are not sure what to put in those variables, use this translation:
 - `TE_SOURCE_AGENT_IDS`: "which agent or agents should start the test?"
 - `TE_TARGET_AGENT_ID`: "which remote agent should represent the far side of the media path?"
 - `TE_UDP_TARGET_AGENT_ID`: "should the UDP media-path test use a different remote agent than the RTP test?"
+- `TE_EXTERNAL_ROUTER_HOST`: "what public router or proxy should ThousandEyes use so the test path includes the injected network delay?"
 - `TE_RTSP_SERVER`: "what hostname should ThousandEyes use for the RTSP endpoint?"
 - `TE_DEMO_MONKEY_FRONTEND_BASE_URL`: "what base frontend URL should the HTTP tests hit?"
 
@@ -295,9 +297,10 @@ export TE_TRACE_MAP_ENABLED='false'
 export TE_BROADCAST_ENABLED='false'
 export TE_ALERTS_ENABLED='true'
 export TE_ALERT_MINIMUM_SOURCES='1'
-export TE_RTSP_SERVER='rtsp.example.com'
+export TE_EXTERNAL_ROUTER_HOST='demo-router.example.com'
 export TE_RTSP_PORT='8554'
-export TE_DEMO_MONKEY_FRONTEND_BASE_URL='https://demo.example.com'
+export TE_RTSP_SERVER="${TE_EXTERNAL_ROUTER_HOST}"
+export TE_DEMO_MONKEY_FRONTEND_BASE_URL="http://${TE_EXTERNAL_ROUTER_HOST}"
 export TE_TRACE_MAP_TEST_URL="${TE_DEMO_MONKEY_FRONTEND_BASE_URL}/api/v1/demo/public/trace-map"
 export TE_BROADCAST_TEST_URL="${TE_DEMO_MONKEY_FRONTEND_BASE_URL}/api/v1/demo/public/broadcast/live/index.m3u8"
 export TE_A2A_PORT='5004'
@@ -384,7 +387,7 @@ scripts/thousandeyes/deploy-k8s-rtsp-tests.sh
 If the service hostname is not ready yet, override it manually:
 
 ```bash
-export TE_RTSP_SERVER='rtsp.example.com'
+export TE_EXTERNAL_ROUTER_HOST='demo-router.example.com'
 export TE_RTSP_PORT='8554'
 scripts/thousandeyes/deploy-k8s-rtsp-tests.sh
 ```
@@ -404,13 +407,12 @@ For a non-networking user, this is a good first ThousandEyes exercise because th
 To force the Kubernetes wrapper to create tests against external endpoints instead of cluster-local defaults:
 
 ```bash
-export TE_RTSP_SERVER='rtsp.example.com'
+export TE_EXTERNAL_ROUTER_HOST='demo-router.example.com'
 export TE_RTSP_PORT='8554'
-export TE_DEMO_MONKEY_FRONTEND_BASE_URL='https://demo.example.com'
-export TE_TRACE_MAP_TEST_URL="${TE_DEMO_MONKEY_FRONTEND_BASE_URL}/api/v1/demo/public/trace-map"
-export TE_BROADCAST_TEST_URL="${TE_DEMO_MONKEY_FRONTEND_BASE_URL}/api/v1/demo/public/broadcast/live/index.m3u8"
 scripts/thousandeyes/deploy-k8s-rtsp-tests.sh
 ```
+
+When the cluster sits behind a delay-injecting router or proxy, prefer `TE_EXTERNAL_ROUTER_HOST` over the direct service load balancer hostnames so the ThousandEyes tests stay on the real public path.
 
 ## Build The Splunk Demo Dashboards
 
@@ -753,6 +755,7 @@ Target selection guidance:
 
 - Leave `TE_DEMO_MONKEY_FRONTEND_BASE_URL` on the `svc.cluster.local` default when you want `local` Enterprise-Agent reachability inside the cluster network
 - Override `TE_DEMO_MONKEY_FRONTEND_BASE_URL`, `TE_TRACE_MAP_TEST_URL`, and `TE_BROADCAST_TEST_URL` with public URLs when you want `external` ThousandEyes reachability
+- When a public router or proxy fronts the cluster, prefer `TE_EXTERNAL_ROUTER_HOST` or explicit router-backed URLs so the test path includes the injected delay instead of bypassing it through direct service load balancers
 
 Splunk demo dashboard sync:
 

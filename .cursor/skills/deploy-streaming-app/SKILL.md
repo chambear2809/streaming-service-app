@@ -20,11 +20,13 @@ Use this skill when the task is to deploy this repository's demo stack into a Ku
    - Make this yes or no answer explicit before you rely on Java or Node.js auto-instrumentation.
    - If the answer is `yes`, verify the repo-compatible install exists in namespace `otel-splunk` with instrumentation `splunk-otel-collector`.
    - Compatibility also includes propagators in this order: `baggage,b3,tracecontext`.
+   - Compatibility also includes OTLP gRPC on `http://splunk-otel-collector-agent.otel-splunk.svc.cluster.local:4317`, collector placement on the private `otel` nodegroup, and agent Service routing with `internalTrafficPolicy=Cluster`.
    - If the answer is `no`, use the repo bootstrap path instead of asking the user to hand-install the collector.
    - The repo-compatible install is `otel-splunk/splunk-otel-collector`. The checked-in app manifests already point at that exact namespace and instrumentation name.
    - The collector bootstrap needs `SPLUNK_REALM`, `SPLUNK_ACCESS_TOKEN`, and a stable cluster name. Reuse `SPLUNK_OTEL_CLUSTER_NAME` when it is already set, otherwise derive it from the current kube context or the chosen cluster label.
    - Use `.cursor/skills/deploy-streaming-app/scripts/ensure-splunk-otel-collector.sh --mode reuse` when the user says the collector is already installed.
    - Use `.cursor/skills/deploy-streaming-app/scripts/ensure-splunk-otel-collector.sh --mode install-if-missing` when the user says the collector is not installed or the existing install is incompatible with the repo target.
+   - After changing the collector or debugging missing APM traces, use `skills/deploy-streaming-app/tests/splunk-otel-tracing-live-smoke.test.sh` for live validation of the trace exporter path.
 
 3. Run the bundled deploy script.
    - Entry point: `.cursor/skills/deploy-streaming-app/scripts/deploy-demo.sh`

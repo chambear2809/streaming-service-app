@@ -1,0 +1,152 @@
+# Optional overlay that fans out collector traffic to a second Splunk
+# Observability Cloud org. The helper script injects the required
+# SPLUNK_OTEL_SECONDARY_* env vars at runtime when the user opts into this
+# path.
+
+agent:
+  config:
+    exporters:
+      otlp_http/secondary:
+        auth:
+          authenticator: headers_setter/secondary
+        metrics_endpoint: ${env:SPLUNK_OTEL_SECONDARY_INGEST_URL}/v2/datapoint/otlp
+        traces_endpoint: ${env:SPLUNK_OTEL_SECONDARY_INGEST_URL}/v2/trace/otlp
+      otlp_http/entities_secondary:
+        auth:
+          authenticator: headers_setter/secondary
+        logs_endpoint: ${env:SPLUNK_OTEL_SECONDARY_INGEST_URL}/v3/event
+      signalfx/secondary:
+        access_token: ${env:SPLUNK_OTEL_SECONDARY_ACCESS_TOKEN}
+        api_url: ${env:SPLUNK_OTEL_SECONDARY_API_URL}
+        correlation: null
+        ingest_url: ${env:SPLUNK_OTEL_SECONDARY_INGEST_URL}
+        root_path: /hostfs
+        sync_host_metadata: true
+      signalfx/histograms_secondary:
+        access_token: ${env:SPLUNK_OTEL_SECONDARY_ACCESS_TOKEN}
+        api_url: ${env:SPLUNK_OTEL_SECONDARY_API_URL}
+        ingest_url: ${env:SPLUNK_OTEL_SECONDARY_INGEST_URL}
+        send_otlp_histograms: true
+    extensions:
+      headers_setter/secondary:
+        headers:
+          - action: upsert
+            default_value: ${env:SPLUNK_OTEL_SECONDARY_ACCESS_TOKEN}
+            from_context: X-SF-TOKEN
+            key: X-SF-TOKEN
+    service:
+      extensions:
+        - health_check
+        - headers_setter
+        - headers_setter/secondary
+        - k8s_observer
+        - zpages
+      pipelines:
+        logs/entities:
+          exporters:
+            - otlp_http/entities
+            - otlp_http/entities_secondary
+          processors:
+            - memory_limiter
+            - batch
+            - resourcedetection
+            - resource
+          receivers:
+            - nop
+        metrics:
+          exporters:
+            - signalfx
+            - signalfx/secondary
+          processors:
+            - memory_limiter
+            - batch
+            - resourcedetection
+            - resource
+          receivers:
+            - hostmetrics
+            - kubeletstats
+            - otlp
+        metrics/agent:
+          exporters:
+            - signalfx
+            - signalfx/secondary
+          processors:
+            - memory_limiter
+            - batch
+            - resource/add_agent_k8s
+            - resourcedetection
+            - resource
+            - resource/add_mode
+          receivers:
+            - prometheus/agent
+        metrics/histograms:
+          exporters:
+            - signalfx/histograms
+            - signalfx/histograms_secondary
+          processors:
+            - memory_limiter
+            - batch
+            - resource/add_agent_k8s
+            - resourcedetection
+            - resource
+          receivers:
+            - receiver_creator
+        traces:
+          exporters:
+            - otlp_http
+            - otlp_http/secondary
+            - signalfx
+            - signalfx/secondary
+          processors:
+            - memory_limiter
+            - k8s_attributes
+            - batch
+            - resourcedetection
+            - resource
+            - resource/add_environment
+          receivers:
+            - otlp
+            - jaeger
+            - zipkin
+
+clusterReceiver:
+  config:
+    exporters:
+      signalfx/secondary:
+        access_token: ${env:SPLUNK_OTEL_SECONDARY_ACCESS_TOKEN}
+        api_url: ${env:SPLUNK_OTEL_SECONDARY_API_URL}
+        disable_default_translation_rules: true
+        ingest_url: ${env:SPLUNK_OTEL_SECONDARY_INGEST_URL}
+        timeout: 10s
+    receivers:
+      k8s_cluster:
+        metadata_exporters:
+          - signalfx
+          - signalfx/secondary
+    service:
+      pipelines:
+        metrics:
+          exporters:
+            - signalfx
+            - signalfx/secondary
+          processors:
+            - memory_limiter
+            - batch
+            - transform/k8shpascaletargetref
+            - resource
+            - resource/k8s_cluster
+          receivers:
+            - k8s_cluster
+        metrics/collector:
+          exporters:
+            - signalfx
+            - signalfx/secondary
+          processors:
+            - memory_limiter
+            - batch
+            - resource/add_collector_k8s
+            - resourcedetection
+            - resource
+            - resource/add_mode
+          receivers:
+            - prometheus/k8s_cluster_receiver

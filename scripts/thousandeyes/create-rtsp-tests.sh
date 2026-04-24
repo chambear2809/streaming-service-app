@@ -51,7 +51,13 @@ load_env_file() {
 load_env_file "${ENV_FILE}"
 
 THOUSANDEYES_BEARER_TOKEN="${THOUSANDEYES_BEARER_TOKEN:-${THOUSANDEYES_TOKEN:-}}"
-TE_DEMO_MONKEY_FRONTEND_BASE_URL="${TE_DEMO_MONKEY_FRONTEND_BASE_URL:-http://streaming-frontend.streaming-service-app.svc.cluster.local}"
+TE_EXTERNAL_ROUTER_HOST="${TE_EXTERNAL_ROUTER_HOST:-}"
+if [[ -n "${TE_EXTERNAL_ROUTER_HOST}" ]]; then
+  TE_RTSP_SERVER="${TE_RTSP_SERVER:-${TE_EXTERNAL_ROUTER_HOST}}"
+  TE_DEMO_MONKEY_FRONTEND_BASE_URL="${TE_DEMO_MONKEY_FRONTEND_BASE_URL:-http://${TE_EXTERNAL_ROUTER_HOST}}"
+else
+  TE_DEMO_MONKEY_FRONTEND_BASE_URL="${TE_DEMO_MONKEY_FRONTEND_BASE_URL:-http://streaming-frontend.streaming-service-app.svc.cluster.local}"
+fi
 TE_TRACE_MAP_TEST_URL="${TE_TRACE_MAP_TEST_URL:-${TE_DEMO_MONKEY_FRONTEND_BASE_URL%/}/api/v1/demo/public/trace-map}"
 TE_BROADCAST_TEST_URL="${TE_BROADCAST_TEST_URL:-${TE_DEMO_MONKEY_FRONTEND_BASE_URL%/}/api/v1/demo/public/broadcast/live/index.m3u8}"
 
@@ -85,6 +91,7 @@ Optional shared environment:
   TE_TARGET_AGENT_ID=333
   TE_UDP_TARGET_AGENT_ID=3
   TE_DSCP_ID=0
+  TE_EXTERNAL_ROUTER_HOST=demo-router.example.com
 
 RTSP TCP test environment:
   TE_RTSP_SERVER=rtsp.example.com
@@ -109,6 +116,9 @@ RTP stream environment:
   TE_VOICE_DURATION_SEC=10
 
 Demo Monkey HTTP test environment:
+  # Use TE_EXTERNAL_ROUTER_HOST when the public demo path must stay behind a
+  # router or proxy that injects delay or other network effects.
+  TE_EXTERNAL_ROUTER_HOST=demo-router.example.com
   TE_DEMO_MONKEY_FRONTEND_BASE_URL=http://streaming-frontend.streaming-service-app.svc.cluster.local
   TE_TRACE_MAP_TEST_NAME=aleccham-broadcast-trace-map
   TE_TRACE_MAP_TEST_ID=4567

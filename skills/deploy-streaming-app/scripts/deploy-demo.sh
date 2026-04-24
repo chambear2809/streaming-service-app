@@ -38,6 +38,7 @@ DEMO_AUTH_PASSWORD_DEFAULT="password123"
 DEMO_AUTH_PASSWORD_SOURCE="provided"
 TEMP_DIR=""
 RENDERED_NAMESPACE=""
+TRACE_DEPLOYMENT_ENVIRONMENT=""
 
 usage() {
   cat <<'EOF'
@@ -368,7 +369,22 @@ render_manifest() {
     -e "s/streaming-service-app/${RENDERED_NAMESPACE}/g" \
     -e 's#/root/\.m2#/tmp/.m2#g' \
     -e 's#mvn #HOME=/tmp mvn -Dmaven.repo.local=/tmp/.m2/repository #g' \
-    "$1"
+    "$1" | awk -v env_value="${TRACE_DEPLOYMENT_ENVIRONMENT}" '
+      BEGIN {
+        escaped_env = env_value
+        gsub(/\047/, "\047\047", escaped_env)
+      }
+      pending && $0 ~ /^[[:space:]]*value:[[:space:]]+/ {
+        match($0, /^[[:space:]]*/)
+        indent = substr($0, RSTART, RLENGTH)
+        printf "%svalue: \047%s\047\n", indent, escaped_env
+        pending = 0
+        next
+      }
+      pending { pending = 0 }
+      $0 ~ /^[[:space:]]*- name:[[:space:]]+OTEL_DEPLOYMENT_ENVIRONMENT[[:space:]]*$/ { pending = 1 }
+      { print }
+    '
 }
 
 apply_manifest() {
@@ -981,6 +997,7 @@ fi
 
 TEMP_DIR="$(mktemp -d)"
 RENDERED_NAMESPACE="$(escape_sed_replacement "${NAMESPACE}")"
+TRACE_DEPLOYMENT_ENVIRONMENT="${SPLUNK_DEPLOYMENT_ENVIRONMENT:-streaming-app}"
 
 verify_repo_layout
 verify_tooling

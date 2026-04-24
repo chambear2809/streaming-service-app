@@ -20,11 +20,13 @@ Use this skill when the task is to deploy this repository's demo stack into a Ku
    - Make this yes or no answer explicit before you rely on Java or Node.js auto-instrumentation.
    - If the answer is `yes`, verify the repo-compatible install exists in namespace `otel-splunk` with instrumentation `splunk-otel-collector`.
    - Compatibility also includes propagators in this order: `baggage,b3,tracecontext`.
+   - Compatibility also includes OTLP gRPC on `http://splunk-otel-collector-agent.otel-splunk.svc.cluster.local:4317`, collector placement on the private `otel` nodegroup, and agent Service routing with `internalTrafficPolicy=Cluster`.
    - If the answer is `no`, use the repo bootstrap path instead of asking the user to hand-install the collector.
    - The repo-compatible install is `otel-splunk/splunk-otel-collector`. The checked-in app manifests already point at that exact namespace and instrumentation name.
    - The collector bootstrap needs `SPLUNK_REALM`, `SPLUNK_ACCESS_TOKEN`, and a stable cluster name. Reuse `SPLUNK_OTEL_CLUSTER_NAME` when it is already set, otherwise derive it from the current kube context or the chosen cluster label.
    - Use `skills/deploy-streaming-app/scripts/ensure-splunk-otel-collector.sh --mode reuse` when the user says the collector is already installed.
    - Use `skills/deploy-streaming-app/scripts/ensure-splunk-otel-collector.sh --mode install-if-missing` when the user says the collector is not installed or the existing install is incompatible with the repo target.
+   - After changing the collector or debugging missing APM traces, use `skills/deploy-streaming-app/tests/splunk-otel-tracing-live-smoke.test.sh` for live validation of the trace exporter path.
 
 3. Ask explicitly whether the target cluster already has Isovalent Enterprise for Cilium, Hubble, and Tetragon deployed and sending telemetry into Splunk Observability Cloud.
    - Make this yes or no answer explicit before you promise Isovalent-backed dashboards or demo pivots.
@@ -85,6 +87,7 @@ Use this skill when the task is to deploy this repository's demo stack into a Ku
    - Ask whether the ThousandEyes tests should target `local` cluster-private endpoints or `external` public endpoints. Make the choice explicit before you create or update any tests.
    - For `local` mode, prefer the in-cluster or private-service addresses that Enterprise Agents on the same network can reach, such as `streaming-frontend.<namespace>.svc.cluster.local` and the cluster-reachable RTSP endpoint.
    - For `external` mode, require the browser-facing or internet-reachable frontend base URL and RTSP hostname instead of silently using `svc.cluster.local` defaults.
+   - When a public router or proxy fronts the cluster and injects delay or loss, prefer `TE_EXTERNAL_ROUTER_HOST` or explicit router-backed URLs so ThousandEyes stays on that public path instead of bypassing it through direct service load balancers.
    - Before calling the ThousandEyes API, check whether `.env` or the current shell already defines `THOUSANDEYES_BEARER_TOKEN`. For the create flows, also confirm the needed per-test inputs such as `TE_SOURCE_AGENT_IDS`, `TE_TARGET_AGENT_ID`, optional `TE_UDP_TARGET_AGENT_ID`, and the RTSP or HTTP target variables for the chosen mode.
    - `THOUSANDEYES_ACCOUNT_GROUP_ID` is the preferred repo setting for deterministic org or account-group targeting and is required later for dashboard sync, but the direct ThousandEyes create helper can still use the token's default account group when it is omitted.
    - If any required token or object ID for the chosen flow is missing, stop and prompt the user for the exact variable names. Tell them they can either edit the repo-root `.env` or export the variables in their shell for the current session.
@@ -96,7 +99,7 @@ Use this skill when the task is to deploy this repository's demo stack into a Ku
    - Make the user-facing mapping explicit: `THOUSANDEYES_ACCOUNT_GROUP_ID` comes from `list-orgs`, while `TE_SOURCE_AGENT_IDS`, `TE_TARGET_AGENT_ID`, and optional `TE_UDP_TARGET_AGENT_ID` come from `list-agents`.
    - If the user asks for a specific Enterprise Agent, search the visible agents and, if needed, query `/v7/agents?aid=<account-group-id>` for each visible account group until the named agent is found.
    - Write the chosen `THOUSANDEYES_ACCOUNT_GROUP_ID`, `TE_SOURCE_AGENT_IDS`, `TE_TARGET_AGENT_ID`, and, when used, `TE_UDP_TARGET_AGENT_ID` into the repo `.env` when the user wants the setup persisted.
-   - In `external` mode, prompt for `TE_RTSP_SERVER`, `TE_RTSP_PORT`, and either `TE_DEMO_MONKEY_FRONTEND_BASE_URL` or the derived `TE_TRACE_MAP_TEST_URL` and `TE_BROADCAST_TEST_URL` before creating tests if they are not already set.
+   - In `external` mode, prompt for `TE_EXTERNAL_ROUTER_HOST` first when a public router fronts the cluster. If that is not available, prompt for `TE_RTSP_SERVER`, `TE_RTSP_PORT`, and either `TE_DEMO_MONKEY_FRONTEND_BASE_URL` or the derived `TE_TRACE_MAP_TEST_URL` and `TE_BROADCAST_TEST_URL` before creating tests.
    - In `local` mode, if the RTSP endpoint cannot be discovered automatically, prompt the user for `TE_RTSP_SERVER` and `TE_RTSP_PORT` before creating tests.
    - Prefer a far-away Cloud Agent as the target when the user wants geographic separation from `us-east-1`. A valid example already confirmed in this repo is Cloud Agent `3` `Singapore`.
    - If either side of the UDP test is a Cloud Agent, set `TE_A2A_THROUGHPUT_MEASUREMENTS=false` before running the create flow. ThousandEyes rejects throughput measurements when a Cloud Agent participates. When RTP should stay on an Enterprise Agent, prefer `TE_UDP_TARGET_AGENT_ID` instead of changing the shared `TE_TARGET_AGENT_ID`.
@@ -105,7 +108,7 @@ Use this skill when the task is to deploy this repository's demo stack into a Ku
 
 10. Create the ThousandEyes tests from the cluster only after the relevant endpoints are reachable.
    - For `local` mode, use `scripts/thousandeyes/deploy-k8s-rtsp-tests.sh` so the job discovers the `media-service-demo-rtsp` LoadBalancer hostname, derives the in-cluster `streaming-frontend` base URL, and creates the ThousandEyes tests from inside Kubernetes.
-   - For `external` mode, either export `TE_DEMO_MONKEY_FRONTEND_BASE_URL`, `TE_TRACE_MAP_TEST_URL`, `TE_BROADCAST_TEST_URL`, `TE_RTSP_SERVER`, and `TE_RTSP_PORT` before using the direct API helper, or override those values before running the Kubernetes wrapper so it does not fall back to cluster-local targets.
+   - For `external` mode, prefer exporting `TE_EXTERNAL_ROUTER_HOST` when a router or proxy is the real public entry point. Otherwise export `TE_DEMO_MONKEY_FRONTEND_BASE_URL`, `TE_TRACE_MAP_TEST_URL`, `TE_BROADCAST_TEST_URL`, `TE_RTSP_SERVER`, and `TE_RTSP_PORT` before using the direct API helper, or override those values before running the Kubernetes wrapper so it does not fall back to cluster-local targets.
    - Use `K8S_DRY_RUN=true` first when the user wants manifest verification without creating the Secret, ConfigMap, and Job for real.
    - Use `THOUSANDEYES_JOB_ACTION=create-demo-monkey-http` when the user specifically wants the Demo Monkey-sensitive HTTP tests.
    - Report whether the created tests target `local` or `external` endpoints, the resolved RTSP hostname and port, the frontend base URL or explicit HTTP test URLs, and state clearly if the agent-to-agent tests are partially constrained by Cloud Agent rules.
@@ -186,9 +189,8 @@ Create ThousandEyes tests against externally reachable endpoints:
 
 ```bash
 export THOUSANDEYES_BEARER_TOKEN='<bearer-token>'
-export TE_RTSP_SERVER='rtsp.example.com'
+export TE_EXTERNAL_ROUTER_HOST='demo-router.example.com'
 export TE_RTSP_PORT='8554'
-export TE_DEMO_MONKEY_FRONTEND_BASE_URL='https://demo.example.com'
 scripts/thousandeyes/create-rtsp-tests.sh create-all
 ```
 

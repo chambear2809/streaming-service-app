@@ -30,6 +30,13 @@ The backend-demo manifests already set:
 
 After updating these environment variables, restart the affected deployments so the injected Java agent picks them up.
 
+The repo-compatible collector path for those workloads is:
+
+- `OTEL_EXPORTER_OTLP_PROTOCOL=grpc`
+- `OTEL_EXPORTER_OTLP_ENDPOINT=http://splunk-otel-collector-agent.otel-splunk.svc.cluster.local:4317`
+
+Use `4317` here, not `4318`. The collector bootstrap helper also renders the agent Service to `internalTrafficPolicy=Cluster` so app pods on non-otel nodes can still reach the private collector agents.
+
 ## Frontend Gateway
 
 The Kubernetes frontend now runs as a small Node.js gateway service instead of a static NGINX container:
@@ -42,6 +49,51 @@ The Kubernetes frontend now runs as a small Node.js gateway service instead of a
 This makes the frontend visible in Splunk APM as its own service while still preserving Browser RUM in the page and full trace propagation into the Java backends.
 
 Because these annotations explicitly target `otel-splunk/splunk-otel-collector`, any reused collector install must preserve that namespace and instrumentation name or the repo-managed bootstrap path should be used instead.
+
+## APM Search Tips
+
+The canonical deploy paths now render `deployment.environment` from `SPLUNK_DEPLOYMENT_ENVIRONMENT`, with `streaming-app` as the default when that variable is unset.
+
+That means:
+
+- when you deploy through the repo scripts, APM and collector-side telemetry use the same environment label
+- if you search a default deployment, start with `deployment.environment=streaming-app`
+- if you set `SPLUNK_DEPLOYMENT_ENVIRONMENT` to a custom label, search with that custom value
+
+In the live cluster, the most useful service names to search first were:
+
+- `streaming-frontend`
+- `media-service-demo`
+- `user-service-demo`
+- `content-service-demo`
+- `billing-service`
+- `ad-service-demo`
+
+If you want a known multi-service trace shape, start with `media-service-demo`. The public trace-map path fans out into multiple downstream services in one request.
+
+## Live Smoke Test
+
+For a live cluster verification of the app-to-collector and collector-to-Splunk trace path, use:
+
+```bash
+bash skills/deploy-streaming-app/tests/splunk-otel-tracing-live-smoke.test.sh
+```
+
+When the app was deployed into a different namespace, override `APP_NAMESPACE`, for example:
+
+```bash
+APP_NAMESPACE=streaming-demo \
+  bash skills/deploy-streaming-app/tests/splunk-otel-tracing-live-smoke.test.sh
+```
+
+The smoke test:
+
+- checks the live collector shape that this repo depends on, including `internalTrafficPolicy=Cluster` and OTLP gRPC on `4317`
+- generates `trace-map` requests against `streaming-frontend`
+- scrapes collector self-metrics from every agent pod
+- fails if accepted spans do not rise, if exporter failure counters rise, or if recent collector logs show errors like `no such host`, `unsupported protocol scheme`, or `RBAC: access denied`
+
+It also prints the live `deployment.environment` value from `streaming-frontend` so the resulting environment filter is obvious when you open Splunk APM.
 
 ## Browser RUM
 
@@ -90,6 +142,8 @@ For a multi-service ThousandEyes Service Map in this demo environment, target:
 
 That endpoint enters through `media-service-demo` and fans out to `user-service-demo`, `content-service-demo`, and `billing-service` in a single trace.
 
+Only the HTTP ThousandEyes tests generate app traces. The RTSP, UDP, and RTP ThousandEyes tests are still useful for network and media validation, but they do not create APM spans by themselves. For stronger APM validation, use the repo load generators in [`docs/07-broadcast-loadgen.md`](07-broadcast-loadgen.md) and [`docs/08-operator-billing-loadgen.md`](08-operator-billing-loadgen.md).
+
 ## ThousandEyes Connector
 
 Create a Generic Connector in ThousandEyes with:
@@ -107,3 +161,5 @@ Once deployed, open the ThousandEyes Service Map and follow the trace link into 
 - `thousandeyes.test.id`
 - `thousandeyes.permalink`
 - `thousandeyes.source.agent.id`
+
+For the full traffic and collector egress diagram, including the private-node collector path and router EIP `44.208.125.119`, read [`docs/09-splunk-otel-traffic-architecture.md`](09-splunk-otel-traffic-architecture.md).

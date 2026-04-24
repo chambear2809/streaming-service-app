@@ -20,6 +20,13 @@ assert_contains() {
   [[ "${haystack}" == *"${needle}"* ]] || fail "expected output to contain: ${needle}"
 }
 
+assert_not_contains() {
+  local haystack="$1"
+  local needle="$2"
+
+  [[ "${haystack}" != *"${needle}"* ]] || fail "did not expect output to contain: ${needle}"
+}
+
 cleanup() {
   rm -rf "${TEMP_DIR}"
 }
@@ -191,10 +198,12 @@ spec:
   template:
     spec:
       containers:
-        - name: app
+        - name: streaming-frontend
           env:
+            - name: OTEL_DEPLOYMENT_ENVIRONMENT
+              value: 'streaming-app'
             - name: OTEL_RESOURCE_ATTRIBUTES
-              value: service.name=streaming-frontend,deployment.environment=streaming-app
+              value: service.name=streaming-frontend,deployment.environment=$(OTEL_DEPLOYMENT_ENVIRONMENT)
 EOF
 
   cat > "${root}/k8s/frontend/service.yaml" <<'EOF'
@@ -294,22 +303,26 @@ EOF
   fi
 }
 
-test_dotenv_deployment_environment_rewrites_manifest() {
-  local root applied
+test_trace_environment_is_rendered_into_manifest() {
+  local root apply_log
 
-  root="$(make_fixture_repo deployment-environment)"
+  root="$(make_fixture_repo trace-environment)"
 
   cat > "${root}/.env" <<'EOF'
-SPLUNK_DEPLOYMENT_ENVIRONMENT=from-dotenv
+SPLUNK_DEPLOYMENT_ENVIRONMENT=network-streaming-app
 EOF
 
   run_deploy "${root}" "${root}/output.log"
 
-  applied="$(<"${root}/apply.log")"
-  assert_contains "${applied}" "deployment.environment=from-dotenv"
+  apply_log="$(<"${root}/apply.log")"
+  assert_contains "${apply_log}" "name: OTEL_DEPLOYMENT_ENVIRONMENT"
+  assert_contains "${apply_log}" "value: 'network-streaming-app'"
+  assert_contains "${apply_log}" 'deployment.environment=$(OTEL_DEPLOYMENT_ENVIRONMENT)'
 }
 
 test_access_token_default_is_used_for_upload
 test_explicit_upload_override_wins
 test_browser_token_only_warns_and_skips_upload
-test_dotenv_deployment_environment_rewrites_manifest
+test_trace_environment_is_rendered_into_manifest
+
+printf 'PASS: frontend deploy\n'

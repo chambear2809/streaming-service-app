@@ -201,10 +201,16 @@ wait_and_stream_logs() {
 
 require_job_action_config
 
-TE_RTSP_SERVER="${TE_RTSP_SERVER:-$(discover_rtsp_server)}"
+TE_EXTERNAL_ROUTER_HOST="${TE_EXTERNAL_ROUTER_HOST:-}"
+if [[ -n "${TE_EXTERNAL_ROUTER_HOST}" ]]; then
+  TE_RTSP_SERVER="${TE_RTSP_SERVER:-${TE_EXTERNAL_ROUTER_HOST}}"
+  TE_DEMO_MONKEY_FRONTEND_BASE_URL="${TE_DEMO_MONKEY_FRONTEND_BASE_URL:-http://${TE_EXTERNAL_ROUTER_HOST}}"
+else
+  TE_RTSP_SERVER="${TE_RTSP_SERVER:-$(discover_rtsp_server)}"
+  TE_DEMO_MONKEY_FRONTEND_PORT="${TE_DEMO_MONKEY_FRONTEND_PORT:-$(discover_frontend_port)}"
+  TE_DEMO_MONKEY_FRONTEND_BASE_URL="${TE_DEMO_MONKEY_FRONTEND_BASE_URL:-http://${FRONTEND_SERVICE_NAME}.${NAMESPACE}.svc.cluster.local${TE_DEMO_MONKEY_FRONTEND_PORT:+:${TE_DEMO_MONKEY_FRONTEND_PORT}}}"
+fi
 TE_RTSP_PORT="${TE_RTSP_PORT:-$(discover_rtsp_port)}"
-TE_DEMO_MONKEY_FRONTEND_PORT="${TE_DEMO_MONKEY_FRONTEND_PORT:-$(discover_frontend_port)}"
-TE_DEMO_MONKEY_FRONTEND_BASE_URL="${TE_DEMO_MONKEY_FRONTEND_BASE_URL:-http://${FRONTEND_SERVICE_NAME}.${NAMESPACE}.svc.cluster.local${TE_DEMO_MONKEY_FRONTEND_PORT:+:${TE_DEMO_MONKEY_FRONTEND_PORT}}}"
 TE_TRACE_MAP_TEST_URL="${TE_TRACE_MAP_TEST_URL:-${TE_DEMO_MONKEY_FRONTEND_BASE_URL%/}/api/v1/demo/public/trace-map}"
 TE_BROADCAST_TEST_URL="${TE_BROADCAST_TEST_URL:-${TE_DEMO_MONKEY_FRONTEND_BASE_URL%/}/api/v1/demo/public/broadcast/live/index.m3u8}"
 
@@ -274,6 +280,8 @@ spec:
               value: "${TE_UDP_TARGET_AGENT_ID:-}"
             - name: TE_DSCP_ID
               value: "${TE_DSCP_ID:-0}"
+            - name: TE_EXTERNAL_ROUTER_HOST
+              value: "${TE_EXTERNAL_ROUTER_HOST:-}"
             - name: TE_RTSP_SERVER
               value: "${TE_RTSP_SERVER}"
             - name: TE_RTSP_PORT

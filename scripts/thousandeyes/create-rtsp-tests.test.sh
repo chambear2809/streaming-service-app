@@ -79,6 +79,21 @@ assert_equals \
   "5" \
   "direct create-all should enable alerts for all five tests by default"
 
+router_direct_output="$(
+  ENV_FILE="${empty_env}" \
+  THOUSANDEYES_DRY_RUN=true \
+  THOUSANDEYES_BEARER_TOKEN=test-token \
+  TE_SOURCE_AGENT_IDS=111 \
+  TE_TARGET_AGENT_ID=222 \
+  TE_UDP_TARGET_AGENT_ID=333 \
+  TE_EXTERNAL_ROUTER_HOST=router.example.com \
+  bash "${DIRECT_SCRIPT}" create-all
+)"
+
+assert_contains "${router_direct_output}" "\"server\":\"router.example.com\""
+assert_contains "${router_direct_output}" "\"url\":\"http://router.example.com/api/v1/demo/public/trace-map\""
+assert_contains "${router_direct_output}" "\"url\":\"http://router.example.com/api/v1/demo/public/broadcast/live/index.m3u8\""
+
 override_output="$(
   ENV_FILE="${empty_env}" \
   THOUSANDEYES_DRY_RUN=true \
@@ -273,5 +288,22 @@ assert_equals \
   "$(count_fixed_occurrences "${combined_payloads}" "\"alertsEnabled\":true")" \
   "5" \
   "in-cluster payloads should enable alerts for all five tests by default"
+
+router_capture_dir="${temp_dir}/router-captures"
+mkdir -p "${router_capture_dir}"
+
+PATH="${stub_dir}:${PATH}" \
+THOUSANDEYES_TEST_CAPTURE_DIR="${router_capture_dir}" \
+THOUSANDEYES_BEARER_TOKEN=test-token \
+TE_SOURCE_AGENT_IDS=111 \
+TE_TARGET_AGENT_ID=222 \
+TE_UDP_TARGET_AGENT_ID=333 \
+TE_EXTERNAL_ROUTER_HOST=router.example.com \
+sh "${IN_CLUSTER_SCRIPT}" create-all >/dev/null
+
+router_payloads="$(cat "${router_capture_dir}"/payload-*.json)"
+assert_contains "${router_payloads}" "\"server\":\"router.example.com\""
+assert_contains "${router_payloads}" "\"url\":\"http://router.example.com/api/v1/demo/public/trace-map\""
+assert_contains "${router_payloads}" "\"url\":\"http://router.example.com/api/v1/demo/public/broadcast/live/index.m3u8\""
 
 printf 'PASS: ThousandEyes alert defaults and create-all coverage regression test\n'
