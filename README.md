@@ -28,10 +28,12 @@ flowchart TB
         TETarget["RTP Target Enterprise Agent<br/>Ashburn, Virginia, US"]
         TECloud["UDP Target Cloud Agent<br/>Singapore"]
         TEHttp["HTTP Tests<br/>broadcast playback + trace map"]
-        TEMedia["RTSP / UDP / RTP Tests"]
+        TERTSP["RTSP TCP Test"]
+        TEA2A["UDP / RTP<br/>agent-to-agent tests"]
     end
 
-    subgraph Edge["Frontend Edge"]
+    subgraph Edge["Router-Backed Frontend Edge"]
+        Router["Router ingress<br/>80 + 8554"]
         Frontend["streaming-frontend<br/>Node gateway + static UI"]
     end
 
@@ -58,16 +60,20 @@ flowchart TB
         APM["APM + Service Map + Demo Dashboards"]
     end
 
-    Viewer --> Frontend
-    Operator --> Frontend
+    Viewer --> Router
+    Operator --> Router
 
     TESource --> TEHttp
-    TESource --> TEMedia
-    TETarget --> TEMedia
-    TECloud -. UDP override .-> TEMedia
+    TESource --> TERTSP
+    TESource --> TEA2A
+    TETarget --> TEA2A
+    TECloud -. UDP override .-> TEA2A
 
-    TEHttp --> Frontend
-    TEMedia --> RtspSvc
+    TEHttp --> Router
+    TERTSP --> Router
+
+    Router --> Frontend
+    Router --> RtspSvc
 
     Frontend --> User
     Frontend --> Content
@@ -111,7 +117,8 @@ flowchart TB
     Order -. optional OTel .-> APM
 
     TEHttp -. connector + dashboards .-> APM
-    TEMedia -. connector + dashboards .-> APM
+    TERTSP -. connector + dashboards .-> APM
+    TEA2A -. connector + dashboards .-> APM
 ```
 
 Diagram notes:
@@ -119,6 +126,10 @@ Diagram notes:
 - The current namespace-safe deploy path includes the `Canonical Cluster Demo Slice`.
 - The `Optional Protected Commerce Services` are present in the repo and in the legacy backend demo flow, but they are not part of the canonical skill deploy by default.
 - Public playback and the public trace pivot both enter through `streaming-frontend`.
+- In the router-backed EKS delay demo, the public application and RTSP arrows are
+  logical service paths; the physical ingress path is client to router to the
+  internal load balancer, and OTel collector egress leaves through
+  `44.208.125.119`.
 - `media-service-demo` owns the public broadcast path, Demo Monkey state, and the trace-map fanout into `user-service-demo`, `content-service-demo`, `billing-service`, and `ad-service-demo`.
 
 ## Technology Stack
@@ -272,12 +283,14 @@ The full set lives in [`example.env`](example.env). The variables below are the 
 - `STREAMING_ENVIRONMENT_LABEL` controls the operator-facing label shown in the broadcast suite
 - `SPLUNK_REALM` selects the Splunk Observability realm
 - `SPLUNK_RUM_ACCESS_TOKEN` is used by the frontend build and runtime Browser RUM
+- `SPLUNK_RUM_SECONDARY_ACCESS_TOKEN` optionally fans Browser RUM and session replay out to the secondary O11y org; use a dedicated browser-visible RUM token, not the collector token. If the primary RUM token is blank, the secondary destination becomes the only active browser RUM destination.
 - `SPLUNK_ACCESS_TOKEN` is used by dashboard sync, [`scripts/frontend/upload-sourcemaps.sh`](scripts/frontend/upload-sourcemaps.sh), [`scripts/frontend/deploy.sh`](scripts/frontend/deploy.sh), and the canonical deploy path for sourcemap upload; uploads now retry transient failures with bounded backoff before they warn and let the deploy continue
 - `SPLUNK_SOURCEMAP_UPLOAD_TOKEN` optionally overrides `SPLUNK_ACCESS_TOKEN` just for sourcemap upload when you need a separate token
 - `SPLUNK_OTEL_CLUSTER_NAME` overrides the cluster name used by the repo-managed Splunk OTel Collector bootstrap path
 - `SPLUNK_OTEL_HELM_CHART_VERSION` overrides the upstream collector Helm chart version used by the repo-managed bootstrap path; if you leave it unset, the helper reconciles incompatible installs to the repo default chart version
 - `SPLUNK_OTEL_SECONDARY_REALM` and `SPLUNK_OTEL_SECONDARY_ACCESS_TOKEN` optionally make the collector dual-ship to a second Splunk Observability org while keeping the primary destination in place
 - `SPLUNK_OTEL_SECONDARY_INGEST_URL` and `SPLUNK_OTEL_SECONDARY_API_URL` optionally override the secondary tenant endpoints when it does not use the standard `ingest.<realm>` and `api.<realm>` hosts
+- `SPLUNK_RUM_BEACON_ENDPOINT`, `SPLUNK_RUM_SESSION_REPLAY_BEACON_ENDPOINT`, `SPLUNK_RUM_SECONDARY_BEACON_ENDPOINT`, and `SPLUNK_RUM_SECONDARY_SESSION_REPLAY_BEACON_ENDPOINT` override Browser RUM and session replay ingest endpoints when a tenant does not use standard `rum-ingest.<realm>` hosts
 - `SPLUNK_RUM_APP_NAME` overrides the frontend RUM application name
 - `SPLUNK_DEPLOYMENT_ENVIRONMENT` overrides the default deployment environment label
 - `SPLUNK_DEMO_DASHBOARD_GROUP_ID` pins dashboard sync to an existing group when automatic matching would be ambiguous
@@ -302,6 +315,8 @@ The full set lives in [`example.env`](example.env). The variables below are the 
 
 - `THOUSANDEYES_BEARER_TOKEN` is required for ThousandEyes API calls
 - `THOUSANDEYES_ACCOUNT_GROUP_ID` is recommended for deterministic org selection and is required by dashboard sync
+- `THOUSANDEYES_O11Y_INGEST_TOKEN` optionally overrides `SPLUNK_ACCESS_TOKEN` for ThousandEyes OTLP export when the Splunk ingest credential must differ from the dashboard/API token
+- `THOUSANDEYES_APM_OPERATION_ID`, `THOUSANDEYES_APM_OPERATION_NAME`, `THOUSANDEYES_APM_CONNECTOR_ID`, `THOUSANDEYES_APM_CONNECTOR_NAME`, `THOUSANDEYES_APM_TARGET_URL`, `THOUSANDEYES_APM_API_TOKEN`, and `THOUSANDEYES_APM_ASSIGN_OPERATION` optionally pin the ThousandEyes Integrations 2.0 Splunk Observability APM operation and generic connector used for trace cross-launching
 - `TE_SOURCE_AGENT_IDS` supplies the source agent IDs for test creation
 - `TE_TARGET_AGENT_ID` is required for the RTP proxy test and acts as the default target for the UDP media-path test
 - `TE_UDP_TARGET_AGENT_ID` optionally overrides the UDP media-path target when it should differ from the RTP target
@@ -320,6 +335,11 @@ Choose the ThousandEyes target mode explicitly before deriving URLs:
 - `external` requires browser-facing or internet-reachable frontend and RTSP targets
 - When a public router or proxy fronts the cluster, prefer that router hostname or IP for `external` mode so ThousandEyes observes the injected delay instead of bypassing it through direct service load balancers
 
+For the router-backed EKS delay demo, public application traffic must enter
+through the router and Splunk OTel collector egress must leave through
+`44.208.125.119`. The source, destination, port, and bypass rules are captured
+in [`docs/10-traffic-flow-contract.md`](docs/10-traffic-flow-contract.md).
+
 ## Observability And Synthetic Tests
 
 The ordered guide list lives in [`docs/README.md`](docs/README.md). Read the main docs in this sequence:
@@ -332,7 +352,10 @@ The ordered guide list lives in [`docs/README.md`](docs/README.md). Read the mai
 - [`docs/06-thousandeyes-rtsp-api.md`](docs/06-thousandeyes-rtsp-api.md)
 - [`docs/07-broadcast-loadgen.md`](docs/07-broadcast-loadgen.md)
 - [`docs/08-operator-billing-loadgen.md`](docs/08-operator-billing-loadgen.md)
+- [`docs/11-browser-rum-loadgen.md`](docs/11-browser-rum-loadgen.md)
+- [`docs/09-eks-delay-demo.md`](docs/09-eks-delay-demo.md)
 - [`docs/09-splunk-otel-traffic-architecture.md`](docs/09-splunk-otel-traffic-architecture.md)
+- [`docs/10-traffic-flow-contract.md`](docs/10-traffic-flow-contract.md)
 
 The checked-in collector override for PostgreSQL DB monitoring lives at:
 
@@ -347,6 +370,8 @@ The main scripts are:
 - [`skills/deploy-streaming-app/scripts/ensure-splunk-otel-collector.sh`](skills/deploy-streaming-app/scripts/ensure-splunk-otel-collector.sh) for repo-compatible collector install or reuse checks
 - [`scripts/thousandeyes/create-rtsp-tests.sh`](scripts/thousandeyes/create-rtsp-tests.sh) for direct ThousandEyes API workflows
 - [`scripts/thousandeyes/deploy-k8s-rtsp-tests.sh`](scripts/thousandeyes/deploy-k8s-rtsp-tests.sh) for the in-cluster Kubernetes Job wrapper
+- [`scripts/thousandeyes/sync-o11y-metric-stream.py`](scripts/thousandeyes/sync-o11y-metric-stream.py) to create or reconcile the ThousandEyes OpenTelemetry metric stream into Splunk Observability Cloud
+- [`scripts/thousandeyes/sync-o11y-apm-integration.py`](scripts/thousandeyes/sync-o11y-apm-integration.py) to reconcile the ThousandEyes Integrations 2.0 Splunk Observability APM connector target and optional operation assignment
 - [`scripts/thousandeyes/sync-demo-alert-rules.py`](scripts/thousandeyes/sync-demo-alert-rules.py) for repo-managed ThousandEyes alert rules and explicit test assignment
 - [`scripts/thousandeyes/create-demo-dashboards.py`](scripts/thousandeyes/create-demo-dashboards.py) for Splunk Observability dashboard sync
 - [`skills/deploy-streaming-app/tests/postgresql-db-monitoring-config.test.sh`](skills/deploy-streaming-app/tests/postgresql-db-monitoring-config.test.sh) for repo-side DB monitoring config validation
@@ -368,6 +393,9 @@ Important behavior:
 - The current demo deploy uses one PostgreSQL database named `streaming` and multiple schemas, so the receiver `databases` list should target `streaming`, not `demo_content`, `billing`, or the other schema names.
 - PostgreSQL server logs are optional and intentionally out of the default repo flow unless you also have Splunk Platform access and choose to design that path.
 - The direct ThousandEyes helper can use the token's default account group when `THOUSANDEYES_ACCOUNT_GROUP_ID` is omitted, but dashboard sync requires both `THOUSANDEYES_BEARER_TOKEN` and `THOUSANDEYES_ACCOUNT_GROUP_ID`.
+- Use `python3 scripts/thousandeyes/sync-o11y-metric-stream.py` to create or reconcile the repo's ThousandEyes metric stream into Splunk O11y before you validate dashboards or SignalFlow coverage. Run it once per O11y destination when the demo must feed both the primary realm and a secondary tenant.
+- For nonstandard Splunk environments such as rc0, set `THOUSANDEYES_O11Y_ENDPOINT_URL=https://external-ingest.rc0.signalfx.com/v2/datapoint/otlp`, and set `THOUSANDEYES_O11Y_INGEST_TOKEN` when the rc0 ingest token differs from the rc0 API token.
+- The ThousandEyes Integrations 2.0 Splunk Observability APM connector uses the Splunk API URL, not the ingest URL. For rc0, run `python3 scripts/thousandeyes/sync-o11y-apm-integration.py --skip-operation-assignment --connector-name <name>-rc0` with `SPLUNK_OTEL_SECONDARY_API_URL=https://external-api.rc0.signalfx.com` and an API-scoped rc0 token such as `SPLUNK_OTEL_SECONDARY_ACCESS_TOKEN` or `THOUSANDEYES_APM_API_TOKEN`. Keep the primary APM operation assigned to the primary connector, then create or enable a second APM operation in the Integrations 2.0 UI and assign the rc0 connector to it.
 - Use `THOUSANDEYES_JOB_ACTION=create-demo-monkey-http` when you only want the two Demo Monkey-sensitive HTTP tests.
 - All five repo ThousandEyes tests now default to `alertsEnabled=true`. For the standard booth story, the HTTP playback and trace-map tests are still the primary outside-in signals, so use per-test `TE_*_ALERTS_ENABLED=false` overrides if RTSP, UDP, or RTP should stay quieter until the deep-dive portion.
 - Use `python3 scripts/thousandeyes/sync-demo-alert-rules.py plan` to preview the repo-managed alert rules and `python3 scripts/thousandeyes/sync-demo-alert-rules.py apply` to create or update them and explicitly assign them to the repo test IDs.
@@ -390,6 +418,14 @@ python3 scripts/thousandeyes/create-demo-dashboards.py
 - Docs: [`docs/07-broadcast-loadgen.md`](docs/07-broadcast-loadgen.md)
 
 This workload targets the public broadcast page, status API, HLS manifests, segments, and optional trace-map pivots. It supports one-shot `Job` mode and recurring `CronJob` mode in Kubernetes.
+
+### Browser RUM Load
+
+- Script: [`scripts/loadgen/browser-rum-loadgen.mjs`](scripts/loadgen/browser-rum-loadgen.mjs)
+- Kubernetes wrapper: [`scripts/loadgen/deploy-k8s-browser-rum-loadgen.sh`](scripts/loadgen/deploy-k8s-browser-rum-loadgen.sh)
+- Docs: [`docs/11-browser-rum-loadgen.md`](docs/11-browser-rum-loadgen.md)
+
+This workload launches real Playwright browser contexts so the frontend JavaScript and Splunk Browser RUM/session replay instrumentation run in a browser. The booth CronJob profile runs every 5 minutes with overlapping 15-minute browser runs, which gives Splunk RUM a steadier user-traffic shape than a one-shot spike. The Kubernetes wrapper defaults to the private router-egress nodegroup so RUM beacon traffic can use the stable router EIP path.
 
 ### Protected Operator, Billing, And Optional Commerce Load
 

@@ -160,17 +160,57 @@ class VerifyDemoTestsTests(unittest.TestCase):
             errors,
         )
 
-    def test_stream_matches_test_respects_explicit_test_match_before_test_type_filters(self):
+    def test_stream_matches_test_requires_explicit_match_and_compatible_test_type_filter(self):
         stream = {
             "testMatch": [{"id": "8400453"}],
             "filters": {"testTypes": {"values": ["agent-to-server", "voice"]}},
         }
 
-        self.assertTrue(
+        self.assertFalse(
             module.stream_matches_test(stream, {"testId": "8400453", "type": "http-server"})
         )
         self.assertFalse(
             module.stream_matches_test(stream, {"testId": "8399994", "type": "agent-to-agent"})
+        )
+
+    def test_stream_matches_test_allows_explicit_match_with_compatible_test_type_filter(self):
+        stream = {
+            "testMatch": [{"id": "8400453"}],
+            "filters": {"testTypes": {"values": ["http-server", "voice"]}},
+        }
+
+        self.assertTrue(
+            module.stream_matches_test(stream, {"testId": "8400453", "type": "http-server"})
+        )
+
+    def test_trace_map_validation_fails_when_stream_filter_excludes_test_type(self):
+        definition = next(item for item in module.TEST_DEFINITIONS if item["slot"] == "trace_map")
+        errors = module.validation_errors(
+            definition,
+            test={
+                "testId": "8400453",
+                "testName": "aleccham-broadcast-trace-map",
+                "type": "http-server",
+                "url": "https://demo.example.com/api/v1/demo/public/trace-map",
+                "distributedTracing": True,
+                "networkMeasurements": True,
+                "agents": [{"agentId": "1660330"}, {"agentId": "1660331"}],
+            },
+            agents_by_id={
+                "1660330": {"agentId": "1660330", "agentType": "enterprise", "agentState": "online"},
+                "1660331": {"agentId": "1660331", "agentType": "enterprise", "agentState": "online"},
+            },
+            streams=[
+                {
+                    "testMatch": [{"id": "8400453"}],
+                    "filters": {"testTypes": {"values": ["agent-to-server", "voice"]}},
+                }
+            ],
+        )
+
+        self.assertIn(
+            "No enabled ThousandEyes OTel metric stream covers aleccham-broadcast-trace-map (8400453).",
+            errors,
         )
 
 

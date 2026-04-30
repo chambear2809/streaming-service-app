@@ -249,6 +249,21 @@ def te_metric_streams(
     ]
 
 
+def stream_test_type_filters(stream: Dict[str, Any]) -> set[str]:
+    return {
+        str(value).strip()
+        for value in (((stream.get("filters") or {}).get("testTypes") or {}).get("values") or [])
+        if str(value).strip()
+    }
+
+
+def stream_allows_test_type(stream: Dict[str, Any], test: Dict[str, Any]) -> bool:
+    configured_test_types = stream_test_type_filters(stream)
+    if not configured_test_types:
+        return True
+    return str(test.get("type", "")).strip() in configured_test_types
+
+
 def stream_matches_test(stream: Dict[str, Any], test: Dict[str, Any]) -> bool:
     test_id = str(test.get("testId", "")).strip()
     if not test_id:
@@ -256,19 +271,12 @@ def stream_matches_test(stream: Dict[str, Any], test: Dict[str, Any]) -> bool:
 
     for matched in stream.get("testMatch", []):
         if str(matched.get("id", "")).strip() == test_id:
-            return True
+            return stream_allows_test_type(stream, test)
 
     if stream.get("testMatch"):
         return False
 
-    configured_test_types = {
-        str(value).strip()
-        for value in (((stream.get("filters") or {}).get("testTypes") or {}).get("values") or [])
-        if str(value).strip()
-    }
-    if not configured_test_types:
-        return True
-    return str(test.get("type", "")).strip() in configured_test_types
+    return stream_allows_test_type(stream, test)
 
 
 def warn_if_missing_rtp_metric_stream(

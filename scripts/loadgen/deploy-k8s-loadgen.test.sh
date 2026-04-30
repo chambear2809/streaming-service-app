@@ -6,11 +6,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 OPERATOR_SCRIPT="${REPO_ROOT}/scripts/loadgen/deploy-k8s-operator-billing-loadgen.sh"
 BROADCAST_SCRIPT="${REPO_ROOT}/scripts/loadgen/deploy-k8s-broadcast-loadgen.sh"
+BROWSER_RUM_SCRIPT="${REPO_ROOT}/scripts/loadgen/deploy-k8s-browser-rum-loadgen.sh"
 TEMP_DIR="$(mktemp -d)"
 STUB_DIR="${TEMP_DIR}/bin"
 APPLY_LOG="${TEMP_DIR}/apply.log"
 OUTPUT_FILE="${TEMP_DIR}/output.txt"
 EMPTY_ENV_FILE="${TEMP_DIR}/empty.env"
+BROWSER_ENV_FILE="${TEMP_DIR}/browser.env"
 
 fail() {
   printf 'FAIL: %s\n' "$*" >&2
@@ -125,6 +127,54 @@ env \
 apply_payload="$(cat "${APPLY_LOG}")"
 assert_contains "${apply_payload}" 'schedule: "*/10 * * * *"'
 assert_contains "${apply_payload}" 'concurrencyPolicy: Allow'
+
+: > "${APPLY_LOG}"
+: > "${OUTPUT_FILE}"
+env \
+  PATH="${STUB_DIR}:${PATH}" \
+  ENV_FILE="${EMPTY_ENV_FILE}" \
+  KUBECTL_APPLY_LOG="${APPLY_LOG}" \
+  K8S_DRY_RUN=true \
+  LOADGEN_BROWSER_K8S_MODE=cronjob \
+  LOADGEN_BROWSER_PROFILE=booth \
+  zsh "${BROWSER_RUM_SCRIPT}" \
+  > "${OUTPUT_FILE}" 2>&1
+
+apply_payload="$(cat "${APPLY_LOG}")"
+assert_contains "${apply_payload}" 'schedule: "*/5 * * * *"'
+assert_contains "${apply_payload}" 'concurrencyPolicy: Allow'
+assert_contains "${apply_payload}" 'image: mcr.microsoft.com/playwright:v1.56.1-noble'
+assert_contains "${apply_payload}" '"eks.amazonaws.com/nodegroup": "private"'
+assert_contains "${apply_payload}" 'value: otel'
+assert_contains "${apply_payload}" 'name: LOADGEN_BROWSER_NAVIGATION_RATIO'
+assert_contains "${apply_payload}" 'value: "6"'
+assert_contains "${apply_payload}" 'value: "15m"'
+assert_contains "${apply_payload}" 'value: "/broadcast,/broadcast,/,/#operations,/demo-monkey"'
+assert_contains "${apply_payload}" 'cpu: 1000m'
+assert_contains "${apply_payload}" 'memory: 6144Mi'
+assert_contains "${apply_payload}" 'PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install'
+
+cat > "${BROWSER_ENV_FILE}" <<'EOF'
+LOADGEN_BROWSER_PROFILE=warmup
+LOADGEN_BROWSER_ROUTER_EGRESS=false
+EOF
+
+: > "${APPLY_LOG}"
+: > "${OUTPUT_FILE}"
+env \
+  PATH="${STUB_DIR}:${PATH}" \
+  ENV_FILE="${BROWSER_ENV_FILE}" \
+  KUBECTL_APPLY_LOG="${APPLY_LOG}" \
+  K8S_DRY_RUN=true \
+  LOADGEN_BROWSER_K8S_MODE=cronjob \
+  zsh "${BROWSER_RUM_SCRIPT}" \
+  > "${OUTPUT_FILE}" 2>&1
+
+apply_payload="$(cat "${APPLY_LOG}")"
+assert_contains "${apply_payload}" 'schedule: "*/5 * * * *"'
+if [[ "${apply_payload}" == *'"eks.amazonaws.com/nodegroup": "private"'* ]]; then
+  fail "expected LOADGEN_BROWSER_ROUTER_EGRESS=false from .env to omit node selector"
+fi
 
 : > "${APPLY_LOG}"
 : > "${OUTPUT_FILE}"

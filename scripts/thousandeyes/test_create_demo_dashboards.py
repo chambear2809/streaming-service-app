@@ -25,6 +25,25 @@ def sample_resolved_tests():
 
 
 class CreateDemoDashboardsTests(unittest.TestCase):
+    def test_stream_matches_test_requires_compatible_type_filter_for_exact_match(self):
+        stream = {
+            "testMatch": [{"id": "8405216"}],
+            "filters": {"testTypes": {"values": ["http-server", "agent-to-server"]}},
+        }
+
+        self.assertFalse(
+            dashboards.stream_matches_test(stream, {"testId": "8405216", "type": "voice"})
+        )
+
+    def test_stream_matches_test_allows_exact_match_without_type_filter(self):
+        stream = {
+            "testMatch": [{"id": "8405216"}],
+        }
+
+        self.assertTrue(
+            dashboards.stream_matches_test(stream, {"testId": "8405216", "type": "voice"})
+        )
+
     def test_update_group_preserves_existing_dashboards_not_in_current_render(self):
         class FakeApi:
             def __init__(self):

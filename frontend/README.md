@@ -31,6 +31,8 @@ STREAMING_PUBLIC_RTSP_URL=rtsp://demo.example.com:8554/live
 
 `SPLUNK_RUM_ACCESS_TOKEN` is for runtime browser instrumentation. Source map upload during deploy uses `SPLUNK_ACCESS_TOKEN` by default, or `SPLUNK_SOURCEMAP_UPLOAD_TOKEN` if you need an explicit override.
 
+For dual-O11y demos, set `SPLUNK_RUM_SECONDARY_ACCESS_TOKEN` with a dedicated browser-visible RUM token for the secondary org. `SPLUNK_RUM_SECONDARY_REALM` can reuse `SPLUNK_OTEL_SECONDARY_REALM` when omitted, and `SPLUNK_RUM_SECONDARY_BEACON_ENDPOINT` / `SPLUNK_RUM_SECONDARY_SESSION_REPLAY_BEACON_ENDPOINT` handle nonstandard RUM ingest hosts. When the primary RUM token is blank, the secondary destination becomes the only active browser RUM destination. Source map upload is still separate and uses `SPLUNK_ACCESS_TOKEN` or `SPLUNK_SOURCEMAP_UPLOAD_TOKEN`.
+
 `STREAMING_PUBLIC_RTSP_URL` is optional. Leave it blank when the frontend should
 hide the public RTSP chip, or set it when you want the static build to show a
 known external RTSP endpoint.

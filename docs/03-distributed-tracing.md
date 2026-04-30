@@ -118,7 +118,23 @@ Override them in the repo-root `.env` instead of editing `frontend/config.js` di
 - `SPLUNK_ACCESS_TOKEN`
 - `SPLUNK_RUM_ACCESS_TOKEN`
 - `SPLUNK_RUM_APP_NAME`
+- `SPLUNK_RUM_BEACON_ENDPOINT`
+- `SPLUNK_RUM_SESSION_REPLAY_BEACON_ENDPOINT`
 - `SPLUNK_DEPLOYMENT_ENVIRONMENT`
+- `SPLUNK_RUM_SECONDARY_ACCESS_TOKEN`
+- `SPLUNK_RUM_SECONDARY_REALM`
+- `SPLUNK_RUM_SECONDARY_BEACON_ENDPOINT`
+- `SPLUNK_RUM_SECONDARY_SESSION_REPLAY_BEACON_ENDPOINT`
+
+When the demo is dual-shipping to two Splunk Observability orgs, Browser RUM can fan out too. Keep `SPLUNK_RUM_ACCESS_TOKEN` for the primary org and set `SPLUNK_RUM_SECONDARY_ACCESS_TOKEN` for the secondary org. The secondary RUM token is intentionally separate from `SPLUNK_OTEL_SECONDARY_ACCESS_TOKEN` because it is rendered into browser-visible config. If `SPLUNK_RUM_SECONDARY_REALM` is unset, the build can reuse `SPLUNK_OTEL_SECONDARY_REALM`; use the secondary beacon endpoint overrides when the secondary tenant needs nonstandard RUM ingest hosts.
+
+Dual-send behavior is explicit:
+
+- With both primary and secondary RUM tokens set, the browser initializes the Splunk RUM SDK against the primary destination and adds a secondary Zipkin span processor for the second org.
+- With only `SPLUNK_RUM_SECONDARY_ACCESS_TOKEN` set, the secondary destination becomes the only active browser RUM destination. This is useful when the primary org should keep source maps and dashboards but the live browser events should go to the secondary org for a test.
+- Session replay follows the same destinations. Secondary replay export is best-effort and does not reuse the persistent failed-replay queue, so the primary destination remains the only replay destination with queued retry semantics.
+- Source map upload is not dual-sent by the browser token settings. It still uses `SPLUNK_ACCESS_TOKEN` or `SPLUNK_SOURCEMAP_UPLOAD_TOKEN` against `SPLUNK_REALM`.
+- Do not put collector ingest tokens in `SPLUNK_RUM_ACCESS_TOKEN` or `SPLUNK_RUM_SECONDARY_ACCESS_TOKEN`; RUM tokens are browser-visible and need RUM scope.
 
 The frontend build stamps the current app version into the RUM config and then runs:
 
@@ -127,7 +143,7 @@ The frontend build stamps the current app version into the RUM config and then r
 
 `scripts/frontend/deploy.sh` will skip upload unless both `SPLUNK_REALM` and `SPLUNK_ACCESS_TOKEN` are set, unless you explicitly override the upload token with `SPLUNK_SOURCEMAP_UPLOAD_TOKEN`. When the upload endpoint returns an error, the deploy scripts now retry with bounded backoff before they warn and continue instead of aborting the rollout. You can also rerun `scripts/frontend/upload-sourcemaps.sh` against the current `frontend/dist`; it reuses the repo-root `.env` when present.
 
-Session replay is enabled for the Kubernetes frontend. It uses the same Splunk realm and RUM access token as browser RUM.
+Session replay is enabled for the Kubernetes frontend. It uses the same Splunk realm and RUM access token as browser RUM, and follows the same secondary destination when `SPLUNK_RUM_SECONDARY_ACCESS_TOKEN` is set.
 
 The frontend session replay configuration is intentionally permissive for this demo surface:
 
@@ -142,7 +158,7 @@ For a multi-service ThousandEyes Service Map in this demo environment, target:
 
 That endpoint enters through `media-service-demo` and fans out to `user-service-demo`, `content-service-demo`, and `billing-service` in a single trace.
 
-Only the HTTP ThousandEyes tests generate app traces. The RTSP, UDP, and RTP ThousandEyes tests are still useful for network and media validation, but they do not create APM spans by themselves. For stronger APM validation, use the repo load generators in [`docs/07-broadcast-loadgen.md`](07-broadcast-loadgen.md) and [`docs/08-operator-billing-loadgen.md`](08-operator-billing-loadgen.md).
+Only the HTTP ThousandEyes tests generate app traces. The RTSP, UDP, and RTP ThousandEyes tests are still useful for network and media validation, but they do not create APM spans by themselves. For stronger APM validation, use the repo load generators in [`docs/07-broadcast-loadgen.md`](07-broadcast-loadgen.md) and [`docs/08-operator-billing-loadgen.md`](08-operator-billing-loadgen.md). For real Browser RUM and session replay traffic, use the Playwright browser load generator in [`docs/11-browser-rum-loadgen.md`](11-browser-rum-loadgen.md).
 
 ## ThousandEyes Connector
 

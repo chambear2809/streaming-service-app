@@ -7,6 +7,15 @@ Use this flow when you want a dedicated AWS demo environment where:
 - `tc netem` can be toggled on demand to move ThousandEyes latency, jitter, and RTP quality metrics
 - a ThousandEyes Enterprise Agent runs inside the cluster on the private side
 
+The routing contract is part of the demo, not an implementation detail:
+
+- public application traffic goes through the router
+- OTel collector egress goes out through router EIP `44.208.125.119`
+- Kubernetes service-to-service traffic stays inside the cluster
+
+See [`10-traffic-flow-contract.md`](10-traffic-flow-contract.md) before changing
+load balancers, ThousandEyes targets, collector placement, or route tables.
+
 ## Prerequisites
 
 Populate `.env` or export these variables before you deploy:
@@ -169,5 +178,7 @@ bash scripts/aws/destroy-eks-delay-demo.sh --state-file .generated/aws/custom-de
   and RTSP load balancers before it rewrites the HAProxy backends, which avoids
   the transient public `503` we saw when the NLB hostnames existed before their
   listeners were ready.
-- Private-node internet egress also traverses the router, so the in-cluster ThousandEyes Enterprise Agent can participate in the impairment story.
+- Private-node internet egress also traverses the router.
+- Splunk OTel collector egress must remain on the private `otel` nodegroup so
+  Splunk sees source IP `44.208.125.119`.
 - The router is intentionally a single instance for demo simplicity.

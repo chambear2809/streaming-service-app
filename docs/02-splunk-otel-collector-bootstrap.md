@@ -39,9 +39,11 @@ Optional overrides:
 
 If `SPLUNK_OTEL_CLUSTER_NAME` is unset, the helper falls back to the current kube context name.
 
-If both `SPLUNK_OTEL_SECONDARY_REALM` and `SPLUNK_OTEL_SECONDARY_ACCESS_TOKEN` are set, the helper layers [`k8s/otel-splunk/collector.secondary-o11y.values.yaml`](../k8s/otel-splunk/collector.secondary-o11y.values.yaml) on top of the base install and dual-ships the collector's `agent` and `clusterReceiver` telemetry to the second Splunk Observability Cloud org without removing the primary destination.
+If both `SPLUNK_OTEL_SECONDARY_REALM` and `SPLUNK_OTEL_SECONDARY_ACCESS_TOKEN` are set, the helper layers [`k8s/otel-splunk/collector.secondary-o11y.values.yaml`](../k8s/otel-splunk/collector.secondary-o11y.values.yaml) on top of the base install and dual-ships the collector's `agent` and `clusterReceiver` telemetry to the second Splunk Observability Cloud org without removing the primary destination. Secondary metrics fan out through both the SignalFx exporter and OTLP HTTP export to `${SPLUNK_OTEL_SECONDARY_INGEST_URL}/v2/datapoint/otlp`.
 
 For standard realms, leave `SPLUNK_OTEL_SECONDARY_INGEST_URL` and `SPLUNK_OTEL_SECONDARY_API_URL` unset and the helper derives the normal `https://ingest.<realm>.signalfx.com` and `https://api.<realm>.signalfx.com` endpoints. Set those overrides only when the secondary tenant uses custom hosts such as `https://external-ingest.rc0.signalfx.com`.
+
+This collector secondary token is not a Browser RUM token. Browser RUM dual-send uses `SPLUNK_RUM_SECONDARY_ACCESS_TOKEN` because that value is rendered into frontend JavaScript.
 
 ## Canonical Deploy Path
 

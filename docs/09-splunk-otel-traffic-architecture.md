@@ -2,13 +2,19 @@
 
 This guide documents the traffic model that actually worked in the `streaming-eks-delay-demo` environment, including the rc0 secondary export path.
 
-The key design choice is that app workloads and collector egress do not live on the same node class:
+The key design choice is that public application ingress and collector egress
+are both router-controlled, while service-to-service application calls remain
+inside the cluster:
 
 - app pods can run on the normal worker nodes
 - the Splunk OTel Collector runs on the private `otel` nodegroup
 - collector egress leaves through the router Elastic IP `44.208.125.119`
 
 That split is intentional. It gives the collector one stable source IP for Splunk allowlisting without forcing the whole app onto the private nodegroup.
+
+For the full routing contract, including browser, loadgen, ThousandEyes, RTSP,
+collector, and EKS API paths, see
+[`10-traffic-flow-contract.md`](10-traffic-flow-contract.md).
 
 ## Architecture Diagram
 
@@ -20,7 +26,8 @@ flowchart LR
         Browser["Browsers"]
         TEHTTP["ThousandEyes HTTP tests"]
         Loadgen["Broadcast + operator loadgen"]
-        TEMedia["RTSP / UDP / RTP ThousandEyes tests"]
+        TERTSP["ThousandEyes RTSP TCP test"]
+        TEA2A["ThousandEyes UDP / RTP<br/>agent-to-agent tests"]
     end
 
     subgraph App["Application Workloads"]
@@ -35,37 +42,48 @@ flowchart LR
         ClusterRx["splunk-otel-collector-k8s-cluster-receiver<br/>private nodegroup + dedicated=otel"]
     end
 
-    Router["Router egress<br/>44.208.125.119"]
+    RouterIngress["Router ingress<br/>public app path<br/>80 + 8554"]
+    RouterEgress["Router egress / NAT<br/>44.208.125.119"]
+    TEA2ATarget["Selected ThousandEyes<br/>target agent"]
 
     subgraph Splunk["Splunk Observability Destinations"]
         Primary["Primary Splunk O11y org"]
         RC0["Secondary rc0 org<br/>external-ingest.rc0.signalfx.com<br/>external-api.rc0.signalfx.com"]
     end
 
-    Browser --> Frontend
-    TEHTTP --> Frontend
-    Loadgen --> Frontend
-    TEMedia --> Rtsp
+    Browser --> RouterIngress
+    TEHTTP --> RouterIngress
+    Loadgen --> RouterIngress
+    TERTSP --> RouterIngress
+    TEA2A --> TEA2ATarget
+
+    RouterIngress --> Frontend
+    RouterIngress --> Rtsp
 
     Frontend --> Services
     Services --> AgentSvc
     Frontend --> AgentSvc
     AgentSvc --> Agents
 
-    Agents --> Router
-    ClusterRx --> Router
+    Agents --> RouterEgress
+    ClusterRx --> RouterEgress
 
-    Router --> Primary
-    Router --> RC0
+    RouterEgress --> Primary
+    RouterEgress --> RC0
 ```
 
 ## What Each Path Does
 
 ### 1. User, loadgen, and ThousandEyes request traffic
 
-- Browsers, the broadcast loadgen, and the operator loadgen all hit `streaming-frontend`.
-- The HTTP ThousandEyes tests also hit `streaming-frontend`.
-- The RTSP, UDP, and RTP ThousandEyes tests hit the media path directly through `media-service-demo-rtsp`.
+- Browsers, the broadcast loadgen, and the operator loadgen must hit
+  `streaming-frontend` through the router-backed public URL.
+- The HTTP ThousandEyes tests must also hit router-backed frontend URLs.
+- The RTSP ThousandEyes TCP test must hit the router-backed RTSP endpoint on
+  `8554`.
+- The UDP and RTP ThousandEyes tests are agent-to-agent tests. They represent
+  media-path quality between the selected agents and do not prove frontend or
+  RTSP endpoint reachability by themselves.
 
 Only the HTTP ThousandEyes tests create APM traces. The RTSP, UDP, and RTP tests are still useful for network visibility, but they do not create application spans by themselves.
 
@@ -111,6 +129,21 @@ The working rc0 path used:
 - `SPLUNK_OTEL_SECONDARY_API_URL=https://external-api.rc0.signalfx.com`
 
 The repo overlays [`k8s/otel-splunk/collector.secondary-o11y.values.yaml`](../k8s/otel-splunk/collector.secondary-o11y.values.yaml) when both `SPLUNK_OTEL_SECONDARY_REALM` and `SPLUNK_OTEL_SECONDARY_ACCESS_TOKEN` are set.
+
+Secondary metrics export through both the collector's SignalFx exporter and the
+OTLP HTTP exporter. The OTLP path is:
+
+- `${SPLUNK_OTEL_SECONDARY_INGEST_URL}/v2/datapoint/otlp`
+
+Frontend Browser RUM dual-send is a separate path from collector dual-export.
+The browser does not use `SPLUNK_OTEL_SECONDARY_ACCESS_TOKEN`; it needs a
+dedicated browser-visible token in `SPLUNK_RUM_SECONDARY_ACCESS_TOKEN`. When
+both primary and secondary RUM tokens are set, the frontend sends spans to the
+primary RUM endpoint and adds a secondary span processor for the second org.
+Session replay follows that secondary destination too, but only the primary
+replay exporter keeps the SDK's persistent failed-replay queue. When only the
+secondary RUM token is set, the secondary destination is the only active browser
+RUM destination.
 
 ## What Broke And What It Looked Like
 
@@ -220,6 +253,7 @@ Check the agent telemetry for both accepted and exported spans:
 - `otelcol_receiver_accepted_spans`
 - `otelcol_exporter_sent_spans{exporter="signalfx"}`
 - `otelcol_exporter_sent_spans{exporter="signalfx/secondary"}`
+- `otelcol_exporter_sent_spans{exporter="otlp_http/secondary"}`
 
 If accepted spans stay at zero, the problem is still between the app pods and the collector. If accepted spans rise but secondary exported spans do not, the problem is downstream of the collector.
 

@@ -67,8 +67,14 @@ SPLUNK_RUM_APP_NAME="${SPLUNK_RUM_APP_NAME:-streaming-app-frontend}"
 DEPLOYMENT_ENVIRONMENT="${SPLUNK_DEPLOYMENT_ENVIRONMENT:-streaming-app}"
 SPLUNK_ACCESS_TOKEN="${SPLUNK_ACCESS_TOKEN:-}"
 SPLUNK_RUM_ACCESS_TOKEN="${SPLUNK_RUM_ACCESS_TOKEN:-}"
+SPLUNK_RUM_SECONDARY_ACCESS_TOKEN="${SPLUNK_RUM_SECONDARY_ACCESS_TOKEN:-}"
 SPLUNK_SOURCEMAP_UPLOAD_TOKEN="${SPLUNK_SOURCEMAP_UPLOAD_TOKEN:-${SPLUNK_ACCESS_TOKEN:-}}"
 export SPLUNK_RUM_ACCESS_TOKEN
+export SPLUNK_RUM_SECONDARY_ACCESS_TOKEN
+HAS_BROWSER_RUM_TOKEN=false
+if [[ -n "${SPLUNK_RUM_ACCESS_TOKEN:-}" || -n "${SPLUNK_RUM_SECONDARY_ACCESS_TOKEN:-}" ]]; then
+  HAS_BROWSER_RUM_TOKEN=true
+fi
 RENDERED_NAMESPACE=""
 TRACE_DEPLOYMENT_ENVIRONMENT=""
 
@@ -131,12 +137,12 @@ log "Building frontend assets"
   npm run build:production
 )
 
-if [[ -n "${SPLUNK_REALM:-}" && -z "${SPLUNK_RUM_ACCESS_TOKEN:-}" ]]; then
-  warn "SPLUNK_RUM_ACCESS_TOKEN is not set. Browser RUM will remain disabled even if sourcemap upload is configured with SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN."
+if [[ -n "${SPLUNK_REALM:-}" && "${HAS_BROWSER_RUM_TOKEN}" == "false" ]]; then
+  warn "No Browser RUM token is set. Set SPLUNK_RUM_ACCESS_TOKEN and/or SPLUNK_RUM_SECONDARY_ACCESS_TOKEN to enable runtime Browser RUM; sourcemap upload only needs SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN."
 fi
 
-if [[ -n "${SPLUNK_REALM:-}" && -z "${SPLUNK_SOURCEMAP_UPLOAD_TOKEN:-}" && -n "${SPLUNK_RUM_ACCESS_TOKEN:-}" ]]; then
-  warn "SPLUNK_RUM_ACCESS_TOKEN is set, but sourcemap upload needs SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN. Browser RUM will still work; sourcemap upload is being skipped."
+if [[ -n "${SPLUNK_REALM:-}" && -z "${SPLUNK_SOURCEMAP_UPLOAD_TOKEN:-}" && "${HAS_BROWSER_RUM_TOKEN}" == "true" ]]; then
+  warn "A Browser RUM token is set, but sourcemap upload needs SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN. Browser RUM will still work; sourcemap upload is being skipped."
 elif [[ -n "${SPLUNK_REALM:-}" && -n "${SPLUNK_SOURCEMAP_UPLOAD_TOKEN:-}" ]]; then
   if ! LOG_PREFIX="[frontend-deploy]" \
     FRONTEND_DIR="${FRONTEND_DIR}" \

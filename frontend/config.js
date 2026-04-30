@@ -48,6 +48,7 @@ window.STREAMING_CONFIG = {
         rumAccessToken: "",
         applicationName: "streaming-app-frontend",
         deploymentEnvironment: "streaming-app",
+        additionalDestinations: [],
         privacy: {
             maskAllText: false,
             sensitivityRules: [

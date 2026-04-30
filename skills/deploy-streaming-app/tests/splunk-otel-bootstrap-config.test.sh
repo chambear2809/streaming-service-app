@@ -97,6 +97,7 @@ assert_file_contains "${OPENSHIFT_VALUES_FILE}" "create: true"
 
 assert_file_contains "${SECONDARY_VALUES_FILE}" "signalfx/secondary"
 assert_file_contains "${SECONDARY_VALUES_FILE}" "otlp_http/secondary"
+assert_file_contains "${SECONDARY_VALUES_FILE}" 'metrics_endpoint: ${env:SPLUNK_OTEL_SECONDARY_INGEST_URL}/v2/datapoint/otlp'
 assert_file_contains "${SECONDARY_VALUES_FILE}" "SPLUNK_OTEL_SECONDARY_ACCESS_TOKEN"
 assert_file_contains "${SECONDARY_VALUES_FILE}" "SPLUNK_OTEL_SECONDARY_INGEST_URL"
 assert_file_contains "${SECONDARY_VALUES_FILE}" "SPLUNK_OTEL_SECONDARY_API_URL"
@@ -106,6 +107,7 @@ assert_file_contains "${BOOTSTRAP_DOC}" "otel-splunk/splunk-otel-collector"
 assert_file_contains "${BOOTSTRAP_DOC}" "--splunk-otel-mode install-if-missing"
 assert_file_contains "${BOOTSTRAP_DOC}" "SPLUNK_OTEL_SECONDARY_REALM"
 assert_file_contains "${BOOTSTRAP_DOC}" "collector.secondary-o11y.values.yaml"
+assert_file_contains "${BOOTSTRAP_DOC}" '/v2/datapoint/otlp'
 assert_file_contains "${BOOTSTRAP_DOC}" "SPLUNK_OTEL_SECONDARY_INGEST_URL"
 assert_file_contains "${BOOTSTRAP_DOC}" "SPLUNK_OTEL_SECONDARY_API_URL"
 assert_file_contains "${BOOTSTRAP_DOC}" "internalTrafficPolicy=Cluster"
@@ -121,6 +123,7 @@ assert_file_contains "${TRACING_DOC}" "trace-map"
 
 assert_file_contains "${TRAFFIC_ARCH_DOC}" "44.208.125.119"
 assert_file_contains "${TRAFFIC_ARCH_DOC}" "external-ingest.rc0.signalfx.com"
+assert_file_contains "${TRAFFIC_ARCH_DOC}" 'otelcol_exporter_sent_spans{exporter="otlp_http/secondary"}'
 assert_file_contains "${TRAFFIC_ARCH_DOC}" "internalTrafficPolicy=Cluster"
 assert_file_contains "${TRAFFIC_ARCH_DOC}" "OTEL_EXPORTER_OTLP_PROTOCOL=grpc"
 assert_file_contains "${TRAFFIC_ARCH_DOC}" "Mermaid"

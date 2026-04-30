@@ -24,6 +24,12 @@ Choose the ThousandEyes target mode before you build payloads:
 - `local`: use cluster-private or same-network endpoints that your Enterprise Agents can reach, such as `streaming-frontend.<namespace>.svc.cluster.local`
 - `external`: use browser-facing or internet-reachable frontend and RTSP endpoints that ThousandEyes agents outside the cluster can reach
 
+For the router-backed EKS delay demo, `external` means the router-backed URLs.
+Do not point the HTTP or RTSP tests at direct AWS load balancer hostnames if the
+demo needs application traffic to traverse the router. The full source,
+destination, port, and bypass rules are in
+[`10-traffic-flow-contract.md`](10-traffic-flow-contract.md).
+
 ## Read This First If You Are New To ThousandEyes
 
 If you come from Splunk Observability Cloud and not from a networking background, treat ThousandEyes in this repo as a way to create synthetic "outside-in" checks for the demo.
@@ -417,6 +423,97 @@ When the cluster sits behind a delay-injecting router or proxy, prefer `TE_EXTER
 ## Build The Splunk Demo Dashboards
 
 Once the tests are live, use [`scripts/thousandeyes/create-demo-dashboards.py`](/Users/alecchamberlain/Documents/GitHub/streaming-service-app/scripts/thousandeyes/create-demo-dashboards.py) to create or update the Splunk Observability dashboard group that supports the demo story.
+
+If the ThousandEyes OpenTelemetry stream into Splunk O11y does not exist yet, or if you want the repo to reconcile the current test IDs onto one managed stream, run:
+
+```bash
+python3 scripts/thousandeyes/sync-o11y-metric-stream.py
+```
+
+When the target account group already has several similar Splunk streams, set `THOUSANDEYES_O11Y_STREAM_ID` first so the helper updates the exact one you intend. Run the helper once per Splunk O11y destination when the same ThousandEyes tests need to feed both the primary realm and a secondary tenant.
+
+For the primary realm:
+
+```bash
+export THOUSANDEYES_O11Y_STREAM_ID='<primary-stream-id>'
+export THOUSANDEYES_O11Y_ENDPOINT_URL='https://ingest.us1.signalfx.com/v2/datapoint/otlp'
+export THOUSANDEYES_O11Y_INGEST_TOKEN="${SPLUNK_ACCESS_TOKEN}"
+python3 scripts/thousandeyes/sync-o11y-metric-stream.py
+```
+
+When the target Splunk environment uses nonstandard ingest hosts such as rc0, set `THOUSANDEYES_O11Y_ENDPOINT_URL` explicitly, for example:
+
+```bash
+export THOUSANDEYES_O11Y_ENDPOINT_URL='https://external-ingest.rc0.signalfx.com/v2/datapoint/otlp'
+```
+
+If that environment requires a different ingest credential than the dashboard/API token, set `THOUSANDEYES_O11Y_INGEST_TOKEN` too. The stream helper falls back to `SPLUNK_ACCESS_TOKEN` only when no dedicated ingest token is provided.
+
+## Enable The Splunk APM Integrations 2.0 Connector
+
+The ThousandEyes OpenTelemetry metric stream above sends ThousandEyes network
+metrics into Splunk Observability. The Splunk APM trace-link integration is a
+separate ThousandEyes Integrations 2.0 setup that uses:
+
+- a Generic Connector whose target is the Splunk API URL
+- a custom `X-SF-Token` header with an API-scoped Splunk Observability token
+- an enabled `Splunk Observability APM` operation assigned to that connector
+
+The official ThousandEyes workflow is: Manage > Integrations > Integrations 2.0,
+create a Generic Connector, then create or enable a `Splunk Observability APM`
+operation and assign it to the connector. ThousandEyes documents the normal
+target shape as `https://api.<REALM>.signalfx.com`; for rc0, use the
+nonstandard API host:
+
+```bash
+export SPLUNK_OTEL_SECONDARY_API_URL='https://external-api.rc0.signalfx.com'
+```
+
+Do not reuse the OTLP metric-stream endpoint here. The APM connector target is
+`https://external-api.rc0.signalfx.com`; the metric-stream endpoint remains
+`https://external-ingest.rc0.signalfx.com/v2/datapoint/otlp`.
+
+If the demo must cross-link traces in both O11y instances, keep one APM
+operation assigned to the primary connector and create a second connector for
+rc0. ThousandEyes Integrations 2.0 operations are limited to one connector, so a
+second O11y instance needs its own `Splunk Observability APM` operation.
+
+For the existing primary operation:
+
+```bash
+python3 scripts/thousandeyes/sync-o11y-apm-integration.py \
+  --operation-id '<primary-apm-operation-id>' \
+  --connector-name '<primary-connector-name>' \
+  --target-url 'https://api.us1.signalfx.com'
+```
+
+When the target URL matches `SPLUNK_REALM`, the helper uses
+`SPLUNK_ACCESS_TOKEN` unless `THOUSANDEYES_APM_API_TOKEN` is set explicitly.
+
+For the rc0 connector, stage the connector without reassigning the primary
+operation:
+
+```bash
+python3 scripts/thousandeyes/sync-o11y-apm-integration.py \
+  --skip-operation-assignment \
+  --connector-name '<primary-connector-name>-rc0'
+```
+
+The helper reads `.env` by default. For rc0 it prefers
+`SPLUNK_OTEL_SECONDARY_ACCESS_TOKEN` as the API token, unless
+`THOUSANDEYES_APM_API_TOKEN` is set explicitly. After the rc0 connector exists,
+create or enable a second `Splunk Observability APM` operation in Manage >
+Integrations > Integrations 2.0 and assign the rc0 connector to it. If that
+operation already exists, set `THOUSANDEYES_APM_OPERATION_ID` or
+`THOUSANDEYES_APM_OPERATION_NAME` and rerun the helper without
+`--skip-operation-assignment`. The helper refuses to replace an already assigned
+operation connector unless `--replace-operation-connector` is passed.
+
+Official references:
+
+- [Distributed Tracing with Splunk Observability APM](https://docs.thousandeyes.com/product-documentation/integration-guides/custom-built-integrations/distributed-tracing/distributed-tracing-splunk-apm)
+- [ThousandEyes Integrations 2.0 connector and operation model](https://docs.thousandeyes.com/product-documentation/integration-guides)
+- [Splunk APM ThousandEyes trace links](https://help.splunk.com/en/splunk-observability-cloud/monitor-application-performance/manage-services-spans-and-traces-in-splunk-apm/view-and-filter-for-spans-within-a-trace#View-traces-with-Cisco-ThousandEyes-integration)
 
 The script keeps the dashboards ordered for the walkthrough:
 

@@ -186,7 +186,35 @@ EOF
   [[ ${status} -ne 0 ]] || fail "expected helper to fail when only the browser RUM token is present"
 
   output="$(<"${output_file}")"
-  assert_contains "${output}" "SPLUNK_RUM_ACCESS_TOKEN is for Browser RUM only."
+  assert_contains "${output}" "Browser RUM tokens are for Browser RUM only."
+  assert_contains "${output}" "Set SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN for sourcemap upload."
+}
+
+run_secondary_browser_token_only_hint_case() {
+  local frontend_dir
+  local output_file="${TEMP_DIR}/secondary-browser-token-only.out"
+  local output=""
+  local status=0
+
+  frontend_dir="$(make_frontend_fixture secondary-browser-token-only)"
+
+  cat > "${frontend_dir}/upload.env" <<'EOF'
+SPLUNK_REALM=us1
+SPLUNK_RUM_SECONDARY_ACCESS_TOKEN=secondary-browser-rum-token
+EOF
+
+  set +e
+  LOG_PREFIX="[sourcemap-test]" \
+  ENV_FILE="${frontend_dir}/upload.env" \
+  FRONTEND_DIR="${frontend_dir}" \
+  bash "${TARGET_SCRIPT}" > "${output_file}" 2>&1
+  status=$?
+  set -e
+
+  [[ ${status} -ne 0 ]] || fail "expected helper to fail when only the secondary browser RUM token is present"
+
+  output="$(<"${output_file}")"
+  assert_contains "${output}" "Browser RUM tokens are for Browser RUM only."
   assert_contains "${output}" "Set SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN for sourcemap upload."
 }
 
@@ -194,3 +222,4 @@ run_success_case
 run_failure_case
 run_env_token_precedence_case
 run_browser_token_only_hint_case
+run_secondary_browser_token_only_hint_case

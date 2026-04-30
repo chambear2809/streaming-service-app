@@ -1,5 +1,12 @@
-import SplunkOtelWeb from "@splunk/otel-web";
+import SplunkOtelWeb, { SplunkZipkinExporter } from "@splunk/otel-web";
 import SplunkSessionRecorder from "@splunk/otel-web-session-recorder";
+import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import {
+    applySessionReplayFanout,
+    buildRumBeaconUrl,
+    buildSessionReplayDestination,
+    resolveRumDestinations
+} from "./splunk-rum-destinations.mjs";
 
 const runtimeConfig = window.STREAMING_CONFIG ?? {};
 const rumConfig = runtimeConfig.splunkRum ?? {};
@@ -23,23 +30,24 @@ const defaultSessionReplayConfig = {
         video: true
     }
 };
+const rumDestinations = resolveRumDestinations(rumConfig);
 
 if (
     !window[initFlag] &&
     rumConfig.enabled !== false &&
-    rumConfig.realm &&
-    rumConfig.rumAccessToken &&
-    rumConfig.applicationName
+    rumDestinations.length > 0
 ) {
     window[initFlag] = true;
+    const [primaryDestination, ...additionalDestinations] = rumDestinations;
 
     try {
         SplunkOtelWeb.init({
-            realm: rumConfig.realm,
-            rumAccessToken: rumConfig.rumAccessToken,
-            applicationName: rumConfig.applicationName,
-            deploymentEnvironment: rumConfig.deploymentEnvironment ?? runtimeConfig.environment ?? "streaming-app",
-            version: rumConfig.version ?? runtimeConfig.buildVersion,
+            realm: primaryDestination.realm,
+            rumAccessToken: primaryDestination.rumAccessToken,
+            beaconEndpoint: primaryDestination.beaconEndpoint,
+            applicationName: primaryDestination.applicationName,
+            deploymentEnvironment: primaryDestination.deploymentEnvironment,
+            version: primaryDestination.version,
             privacy: {
                 ...defaultRumPrivacy,
                 ...(rumConfig.privacy ?? {})
@@ -47,7 +55,8 @@ if (
             globalAttributes: {
                 "app.surface": window.location.pathname,
                 "k8s.namespace.name": runtimeConfig.namespace ?? "streaming-service-app"
-            }
+            },
+            spanProcessors: buildAdditionalSpanProcessors(additionalDestinations)
         });
     } catch (error) {
         console.warn("Unable to initialize Splunk RUM.", error);
@@ -56,21 +65,45 @@ if (
     if (!window[sessionReplayFlag] && rumConfig.sessionReplayEnabled !== false) {
         try {
             const sessionReplayConfig = rumConfig.sessionReplay ?? {};
+            const primarySessionReplayDestination = buildSessionReplayDestination(primaryDestination);
 
-            SplunkSessionRecorder.init({
-                realm: rumConfig.realm,
-                rumAccessToken: rumConfig.rumAccessToken,
-                maskAllInputs: sessionReplayConfig.maskAllInputs ?? defaultSessionReplayConfig.maskAllInputs,
-                maskAllText: sessionReplayConfig.maskAllText ?? defaultSessionReplayConfig.maskAllText,
-                sensitivityRules: sessionReplayConfig.sensitivityRules ?? defaultSessionReplayConfig.sensitivityRules,
-                features: {
-                    ...defaultSessionReplayConfig.features,
-                    ...(sessionReplayConfig.features ?? {})
-                }
-            });
-            window[sessionReplayFlag] = true;
+            if (primarySessionReplayDestination) {
+                applySessionReplayFanout(SplunkSessionRecorder, additionalDestinations);
+                SplunkSessionRecorder.init({
+                    realm: primarySessionReplayDestination.realm,
+                    rumAccessToken: primarySessionReplayDestination.rumAccessToken,
+                    beaconEndpoint: primarySessionReplayDestination.beaconEndpoint,
+                    maskAllInputs: sessionReplayConfig.maskAllInputs ?? defaultSessionReplayConfig.maskAllInputs,
+                    maskAllText: sessionReplayConfig.maskAllText ?? defaultSessionReplayConfig.maskAllText,
+                    sensitivityRules: sessionReplayConfig.sensitivityRules ?? defaultSessionReplayConfig.sensitivityRules,
+                    features: {
+                        ...defaultSessionReplayConfig.features,
+                        ...(sessionReplayConfig.features ?? {})
+                    }
+                });
+                window[sessionReplayFlag] = true;
+            }
         } catch (error) {
             console.warn("Unable to initialize Splunk session replay.", error);
         }
     }
+}
+
+function buildAdditionalSpanProcessors(destinations) {
+    return destinations
+        .map((destination) => {
+            const beaconUrl = buildRumBeaconUrl(destination);
+            if (!beaconUrl) {
+                return null;
+            }
+
+            return new BatchSpanProcessor(
+                new SplunkZipkinExporter({ url: beaconUrl }),
+                {
+                    maxExportBatchSize: 50,
+                    scheduledDelayMillis: 4000
+                }
+            );
+        })
+        .filter(Boolean);
 }

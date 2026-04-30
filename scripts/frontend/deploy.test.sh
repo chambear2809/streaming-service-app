@@ -86,6 +86,7 @@ cat > "${dist_dir}/build-info.json" <<'JSON'
 JSON
 
 printf '%s' "${SPLUNK_RUM_ACCESS_TOKEN-}" > "${PWD}/build-rum-token.txt"
+printf '%s' "${SPLUNK_RUM_SECONDARY_ACCESS_TOKEN-}" > "${PWD}/build-secondary-rum-token.txt"
 EOF
   chmod +x "${path}"
 }
@@ -261,7 +262,27 @@ EOF
   built_rum_token="$(<"${root}/frontend/build-rum-token.txt")"
   [[ -z "${built_rum_token}" ]] || fail "expected frontend build to keep SPLUNK_ACCESS_TOKEN out of the browser RUM config"
   output="$(<"${root}/output.log")"
-  assert_contains "${output}" "SPLUNK_RUM_ACCESS_TOKEN is not set. Browser RUM will remain disabled"
+  assert_contains "${output}" "No Browser RUM token is set."
+}
+
+test_secondary_rum_token_is_exported_to_build() {
+  local root output built_secondary_rum_token
+
+  root="$(make_fixture_repo secondary-rum-token)"
+
+  cat > "${root}/.env" <<'EOF'
+SPLUNK_REALM=us1
+SPLUNK_ACCESS_TOKEN=observability-upload-token
+SPLUNK_RUM_SECONDARY_ACCESS_TOKEN=secondary-browser-rum-token
+EOF
+
+  run_deploy "${root}" "${root}/output.log"
+
+  built_secondary_rum_token="$(<"${root}/frontend/build-secondary-rum-token.txt")"
+  [[ "${built_secondary_rum_token}" == "secondary-browser-rum-token" ]] || fail "expected secondary browser RUM token to be exported into the frontend build"
+
+  output="$(<"${root}/output.log")"
+  assert_not_contains "${output}" "No Browser RUM token is set."
 }
 
 test_explicit_upload_override_wins() {
@@ -297,9 +318,28 @@ EOF
   run_deploy "${root}" "${root}/output.log"
 
   output="$(<"${root}/output.log")"
-  assert_contains "${output}" "SPLUNK_RUM_ACCESS_TOKEN is set, but sourcemap upload needs SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN."
+  assert_contains "${output}" "A Browser RUM token is set, but sourcemap upload needs SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN."
   if [[ -f "${root}/stub-count.txt" ]]; then
     fail "expected sourcemap upload to be skipped when only the browser token is present"
+  fi
+}
+
+test_secondary_browser_token_only_warns_and_skips_upload() {
+  local root output
+
+  root="$(make_fixture_repo secondary-rum-only)"
+
+  cat > "${root}/.env" <<'EOF'
+SPLUNK_REALM=us1
+SPLUNK_RUM_SECONDARY_ACCESS_TOKEN=secondary-browser-rum-token
+EOF
+
+  run_deploy "${root}" "${root}/output.log"
+
+  output="$(<"${root}/output.log")"
+  assert_contains "${output}" "A Browser RUM token is set, but sourcemap upload needs SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN."
+  if [[ -f "${root}/stub-count.txt" ]]; then
+    fail "expected sourcemap upload to be skipped when only the secondary browser token is present"
   fi
 }
 
@@ -321,8 +361,10 @@ EOF
 }
 
 test_access_token_default_is_used_for_upload
+test_secondary_rum_token_is_exported_to_build
 test_explicit_upload_override_wins
 test_browser_token_only_warns_and_skips_upload
+test_secondary_browser_token_only_warns_and_skips_upload
 test_trace_environment_is_rendered_into_manifest
 
 printf 'PASS: frontend deploy\n'

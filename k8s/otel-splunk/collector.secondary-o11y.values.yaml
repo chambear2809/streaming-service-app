@@ -57,6 +57,7 @@ agent:
           exporters:
             - signalfx
             - signalfx/secondary
+            - otlp_http/secondary
           processors:
             - memory_limiter
             - batch
@@ -70,6 +71,7 @@ agent:
           exporters:
             - signalfx
             - signalfx/secondary
+            - otlp_http/secondary
           processors:
             - memory_limiter
             - batch
@@ -83,6 +85,7 @@ agent:
           exporters:
             - signalfx/histograms
             - signalfx/histograms_secondary
+            - otlp_http/secondary
           processors:
             - memory_limiter
             - batch
@@ -112,23 +115,38 @@ agent:
 clusterReceiver:
   config:
     exporters:
+      otlp_http/secondary:
+        auth:
+          authenticator: headers_setter/secondary
+        metrics_endpoint: ${env:SPLUNK_OTEL_SECONDARY_INGEST_URL}/v2/datapoint/otlp
       signalfx/secondary:
         access_token: ${env:SPLUNK_OTEL_SECONDARY_ACCESS_TOKEN}
         api_url: ${env:SPLUNK_OTEL_SECONDARY_API_URL}
         disable_default_translation_rules: true
         ingest_url: ${env:SPLUNK_OTEL_SECONDARY_INGEST_URL}
         timeout: 10s
+    extensions:
+      headers_setter/secondary:
+        headers:
+          - action: upsert
+            default_value: ${env:SPLUNK_OTEL_SECONDARY_ACCESS_TOKEN}
+            from_context: X-SF-TOKEN
+            key: X-SF-TOKEN
     receivers:
       k8s_cluster:
         metadata_exporters:
           - signalfx
           - signalfx/secondary
     service:
+      extensions:
+        - health_check
+        - headers_setter/secondary
       pipelines:
         metrics:
           exporters:
             - signalfx
             - signalfx/secondary
+            - otlp_http/secondary
           processors:
             - memory_limiter
             - batch
@@ -141,6 +159,7 @@ clusterReceiver:
           exporters:
             - signalfx
             - signalfx/secondary
+            - otlp_http/secondary
           processors:
             - memory_limiter
             - batch
