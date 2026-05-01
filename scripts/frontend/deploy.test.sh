@@ -360,11 +360,32 @@ EOF
   assert_contains "${apply_log}" 'deployment.environment=$(OTEL_DEPLOYMENT_ENVIRONMENT)'
 }
 
+test_delay_demo_target_overrides_legacy_trace_environment() {
+  local root apply_log output
+
+  root="$(make_fixture_repo delay-demo-trace-environment)"
+
+  cat > "${root}/.env" <<'EOF'
+NAMESPACE=streaming-demo
+SPLUNK_DEPLOYMENT_ENVIRONMENT=network-streaming-app
+EOF
+
+  run_deploy "${root}" "${root}/output.log"
+
+  output="$(<"${root}/output.log")"
+  apply_log="$(<"${root}/apply.log")"
+  assert_contains "${output}" "Ignoring legacy SPLUNK_DEPLOYMENT_ENVIRONMENT=network-streaming-app for the delay demo"
+  assert_contains "${apply_log}" "name: OTEL_DEPLOYMENT_ENVIRONMENT"
+  assert_contains "${apply_log}" "value: 'network-streaming-app-delay-demo'"
+  assert_contains "${apply_log}" 'deployment.environment=$(OTEL_DEPLOYMENT_ENVIRONMENT)'
+}
+
 test_access_token_default_is_used_for_upload
 test_secondary_rum_token_is_exported_to_build
 test_explicit_upload_override_wins
 test_browser_token_only_warns_and_skips_upload
 test_secondary_browser_token_only_warns_and_skips_upload
 test_trace_environment_is_rendered_into_manifest
+test_delay_demo_target_overrides_legacy_trace_environment
 
 printf 'PASS: frontend deploy\n'

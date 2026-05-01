@@ -12,6 +12,8 @@ const upstreamRequestTimeoutMs = Number.parseInt(process.env.UPSTREAM_REQUEST_TI
 const errorLogThrottleMs = Number.parseInt(process.env.ERROR_LOG_THROTTLE_MS ?? "30000", 10);
 const internalAuthSecret = process.env.INTERNAL_AUTH_SECRET ?? "";
 const throttledErrorState = new Map();
+const requestTelemetryRoute = Symbol("requestTelemetryRoute");
+const telemetry = createTelemetry();
 
 const SESSION_CACHE_TTL_MS = 8000;
 const SESSION_COOKIE_NAME = "acme_demo_session";
@@ -375,43 +377,50 @@ const publicProxyRules = [
 ];
 
 const server = http.createServer(async (req, res) => {
-    try {
-        const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
-        const pathname = url.pathname;
+    const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
 
-        if (pathname === "/healthz") {
-            writeJson(res, 200, { status: "ok" });
-            return;
+    await telemetry.withServerSpan(req, res, url, async () => {
+        try {
+            const pathname = url.pathname;
+
+            if (pathname === "/healthz") {
+                req[requestTelemetryRoute] = "/healthz";
+                writeJson(res, 200, { status: "ok" });
+                return;
+            }
+
+            if (pathname === "/broadcast") {
+                req[requestTelemetryRoute] = "/broadcast";
+                redirect(res, "/broadcast.html");
+                return;
+            }
+
+            if (pathname === "/demo-monkey") {
+                req[requestTelemetryRoute] = "/demo-monkey";
+                redirect(res, "/demo-monkey.html");
+                return;
+            }
+
+            if (pathname === "/splunk-instrumentation.js") {
+                req[requestTelemetryRoute] = "/splunk-instrumentation.js";
+                await serveRumScript(res);
+                return;
+            }
+
+            if (pathname.startsWith("/api/")) {
+                await handleApi(req, res, url);
+                return;
+            }
+
+            await serveStatic(res, pathname);
+        } catch (error) {
+            console.error("Unhandled frontend gateway error", error);
+            writeJson(res, 500, {
+                error: "frontend_gateway_error",
+                message: "The frontend gateway could not complete the request."
+            });
         }
-
-        if (pathname === "/broadcast") {
-            redirect(res, "/broadcast.html");
-            return;
-        }
-
-        if (pathname === "/demo-monkey") {
-            redirect(res, "/demo-monkey.html");
-            return;
-        }
-
-        if (pathname === "/splunk-instrumentation.js") {
-            await serveRumScript(res);
-            return;
-        }
-
-        if (pathname.startsWith("/api/")) {
-            await handleApi(req, res, url);
-            return;
-        }
-
-        await serveStatic(res, pathname);
-    } catch (error) {
-        console.error("Unhandled frontend gateway error", error);
-        writeJson(res, 500, {
-            error: "frontend_gateway_error",
-            message: "The frontend gateway could not complete the request."
-        });
-    }
+    });
 });
 
 async function handleApi(req, res, url) {
@@ -419,12 +428,14 @@ async function handleApi(req, res, url) {
 
     const publicRule = matchRule(publicProxyRules, pathname, req.method);
     if (publicRule) {
+        req[requestTelemetryRoute] = formatRuleRoute(publicRule);
         await proxyRequest(req, res, buildProxyTarget(publicRule, url));
         return;
     }
 
     const protectedRule = matchRule(protectedProxyRules, pathname, req.method);
     if (protectedRule) {
+        req[requestTelemetryRoute] = formatRuleRoute(protectedRule);
         const authResult = await authorize(req, protectedRule.capabilities ?? []);
         if (!authResult.authorized) {
             forwardAuthFailure(res, authResult);
@@ -595,18 +606,32 @@ function forwardAuthFailure(res, authResult) {
 }
 
 async function proxyRequest(req, res, target, extraHeaders = {}) {
-    return new Promise((resolve) => {
-        const targetKey = `${target.hostname}:${target.port}${target.path}`;
+    const targetKey = `${target.hostname}:${target.port}${target.path}`;
+    const clientSpan = telemetry.startClientSpan(req, target);
+
+    return telemetry.withSpan(clientSpan, () => new Promise((resolve) => {
+        let finished = false;
+        const finish = (error = null, statusCode = null) => {
+            if (finished) {
+                return;
+            }
+
+            finished = true;
+            telemetry.endClientSpan(clientSpan, error, statusCode);
+            resolve();
+        };
+        const headers = buildProxyHeaders(req, {
+            includeBodyHeaders: true,
+            extraHeaders
+        });
+        telemetry.inject(headers);
         const upstreamReq = http.request(
             {
                 hostname: target.hostname,
                 port: target.port,
                 path: target.path,
                 method: req.method,
-                headers: buildProxyHeaders(req, {
-                    includeBodyHeaders: true,
-                    extraHeaders
-                })
+                headers
             },
             (upstreamRes) => {
                 res.statusCode = upstreamRes.statusCode ?? 502;
@@ -623,7 +648,7 @@ async function proxyRequest(req, res, target, extraHeaders = {}) {
                     if (error) {
                         logThrottledError("Proxy response pipeline failed", error, targetKey);
                     }
-                    resolve();
+                    finish(error, upstreamRes.statusCode ?? 502);
                 });
             }
         );
@@ -642,12 +667,12 @@ async function proxyRequest(req, res, target, extraHeaders = {}) {
             } else {
                 res.destroy(error);
             }
-            resolve();
+            finish(error, 502);
         });
 
         req.on("aborted", () => {
             upstreamReq.destroy();
-            resolve();
+            finish(new Error("Client request aborted before the upstream response completed."), 499);
         });
 
         pipeline(req, upstreamReq, (error) => {
@@ -655,7 +680,7 @@ async function proxyRequest(req, res, target, extraHeaders = {}) {
                 logThrottledError("Proxy request pipeline failed", error, targetKey);
             }
         });
-    });
+    }));
 }
 
 function buildProxyTarget(rule, url) {
@@ -823,6 +848,18 @@ function matchRule(rules, pathname, method) {
     });
 }
 
+function formatRuleRoute(rule) {
+    if (rule.exact) {
+        return rule.exact;
+    }
+
+    if (rule.prefix) {
+        return `${rule.prefix}*`;
+    }
+
+    return "/api/*";
+}
+
 function redirect(res, location) {
     res.statusCode = 302;
     res.setHeader("location", location);
@@ -839,6 +876,175 @@ function writeJson(res, statusCode, payload) {
 
 function serviceHost(name) {
     return `${name}.${namespace}.svc.cluster.local`;
+}
+
+function createTelemetry() {
+    const enabled = String(process.env.FRONTEND_APM_MANUAL_SPANS ?? "true").toLowerCase();
+    if (["0", "false", "no", "off"].includes(enabled)) {
+        return createNoopTelemetry();
+    }
+
+    const api = loadOpenTelemetryApi();
+    if (!api) {
+        return createNoopTelemetry();
+    }
+
+    const { context, propagation, trace, SpanKind, SpanStatusCode } = api;
+    const tracer = trace.getTracer("streaming-frontend-gateway");
+    const headerGetter = {
+        keys(carrier) {
+            return Object.keys(carrier);
+        },
+        get(carrier, key) {
+            return carrier[key.toLowerCase()];
+        }
+    };
+    const headerSetter = {
+        set(carrier, key, value) {
+            carrier[key] = value;
+        }
+    };
+
+    return {
+        withServerSpan(req, res, url, work) {
+            const extractedContext = propagation.extract(context.active(), req.headers, headerGetter);
+            const span = tracer.startSpan(
+                `HTTP ${req.method}`,
+                {
+                    kind: SpanKind.SERVER,
+                    attributes: {
+                        "http.method": req.method,
+                        "http.target": req.url ?? url.pathname,
+                        "http.url": url.toString(),
+                        "http.scheme": url.protocol.replace(":", ""),
+                        "http.host": req.headers.host ?? "",
+                        "url.path": url.pathname,
+                        "url.query": url.search ? url.search.slice(1) : "",
+                        "server.address": req.headers.host ?? "",
+                        "network.protocol.name": "http"
+                    }
+                },
+                extractedContext
+            );
+
+            return context.with(trace.setSpan(extractedContext, span), async () => {
+                try {
+                    return await work();
+                } catch (error) {
+                    recordSpanError(span, error, SpanStatusCode);
+                    throw error;
+                } finally {
+                    span.setAttribute("http.route", req[requestTelemetryRoute] ?? url.pathname);
+                    span.setAttribute("http.status_code", res.statusCode);
+                    span.setAttribute("http.response.status_code", res.statusCode);
+                    if (res.statusCode >= 500) {
+                        span.setStatus({ code: SpanStatusCode.ERROR });
+                    }
+                    span.end();
+                }
+            });
+        },
+        startClientSpan(req, target) {
+            const upstreamService = serviceNameFromHost(target.hostname);
+            return tracer.startSpan(`HTTP ${req.method} ${upstreamService}`, {
+                kind: SpanKind.CLIENT,
+                attributes: {
+                    "http.method": req.method,
+                    "http.url": `http://${target.hostname}:${target.port}${target.path}`,
+                    "http.target": target.path,
+                    "http.host": target.hostname,
+                    "net.peer.name": target.hostname,
+                    "net.peer.port": target.port,
+                    "peer.service": upstreamService,
+                    "server.address": target.hostname,
+                    "server.port": target.port,
+                    "url.path": target.path.split("?")[0]
+                }
+            });
+        },
+        withSpan(span, work) {
+            if (!span) {
+                return work();
+            }
+
+            return context.with(trace.setSpan(context.active(), span), work);
+        },
+        inject(headers) {
+            propagation.inject(context.active(), headers, headerSetter);
+        },
+        endClientSpan(span, error, statusCode) {
+            if (!span) {
+                return;
+            }
+
+            if (statusCode !== null && statusCode !== undefined) {
+                span.setAttribute("http.status_code", statusCode);
+                span.setAttribute("http.response.status_code", statusCode);
+                if (statusCode >= 500) {
+                    span.setStatus({ code: SpanStatusCode.ERROR });
+                }
+            }
+
+            if (error) {
+                recordSpanError(span, error, SpanStatusCode);
+            }
+
+            span.end();
+        }
+    };
+}
+
+function loadOpenTelemetryApi() {
+    const candidates = [
+        process.env.FRONTEND_OTEL_API_MODULE,
+        "/otel-auto-instrumentation-nodejs/node_modules/@opentelemetry/api",
+        "@opentelemetry/api"
+    ].filter(Boolean);
+
+    for (const candidate of candidates) {
+        try {
+            return require(candidate);
+        } catch {
+            // The Kubernetes runtime gets this from the auto-instrumentation mount.
+        }
+    }
+
+    return null;
+}
+
+function createNoopTelemetry() {
+    return {
+        withServerSpan(_req, _res, _url, work) {
+            return work();
+        },
+        startClientSpan() {
+            return null;
+        },
+        withSpan(_span, work) {
+            return work();
+        },
+        inject() {},
+        endClientSpan() {}
+    };
+}
+
+function serviceNameFromHost(hostname) {
+    return String(hostname ?? "").split(".")[0] || "unknown";
+}
+
+function recordSpanError(span, error, SpanStatusCode) {
+    if (!span || !error) {
+        return;
+    }
+
+    if (typeof span.recordException === "function") {
+        span.recordException(error);
+    }
+
+    span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: error.message
+    });
 }
 
 function logThrottledError(context, error, key) {
