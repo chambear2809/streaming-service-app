@@ -80,6 +80,8 @@ Optional shared environment:
   THOUSANDEYES_DRY_RUN=true
   TE_ALERTS_ENABLED=true
   TE_SOURCE_AGENT_IDS=111,222
+  TE_APP_SOURCE_AGENT_IDS=111,222
+  TE_MEDIA_SOURCE_AGENT_IDS=333,444
   TE_TARGET_AGENT_ID=333
   TE_UDP_TARGET_AGENT_ID=3
   TE_DSCP_ID=0
@@ -119,6 +121,12 @@ Demo Monkey HTTP test environment:
 
 If the matching TE_*_TEST_ID value is set, the create commands reconcile that
 existing test in place with PUT instead of creating a duplicate with POST.
+
+Source-agent precedence:
+  - RTSP TCP, trace-map, and broadcast tests use TE_APP_SOURCE_AGENT_IDS first,
+    then fall back to TE_SOURCE_AGENT_IDS.
+  - UDP and RTP tests use TE_MEDIA_SOURCE_AGENT_IDS first, then fall back to
+    TE_SOURCE_AGENT_IDS.
 EOF
 }
 
@@ -192,6 +200,43 @@ build_agents_json() {
 
   rendered+="]"
   printf '%s' "${rendered}"
+}
+
+source_agents_csv_for_scope() {
+  local scope="$1"
+
+  case "${scope}" in
+    app)
+      printf '%s' "${TE_APP_SOURCE_AGENT_IDS:-${TE_SOURCE_AGENT_IDS:-}}"
+      ;;
+    media)
+      printf '%s' "${TE_MEDIA_SOURCE_AGENT_IDS:-${TE_SOURCE_AGENT_IDS:-}}"
+      ;;
+    *)
+      echo "Unsupported source-agent scope: ${scope}" >&2
+      return 1
+      ;;
+  esac
+}
+
+build_agents_json_for_scope() {
+  local scope="$1"
+  local csv
+
+  csv="$(source_agents_csv_for_scope "${scope}")"
+  if [[ -z "${csv}" ]]; then
+    case "${scope}" in
+      app)
+        echo "Missing required environment variable: TE_APP_SOURCE_AGENT_IDS or TE_SOURCE_AGENT_IDS" >&2
+        ;;
+      media)
+        echo "Missing required environment variable: TE_MEDIA_SOURCE_AGENT_IDS or TE_SOURCE_AGENT_IDS" >&2
+        ;;
+    esac
+    return 1
+  fi
+
+  build_agents_json "${csv}"
 }
 
 print_json_file() {
@@ -283,8 +328,8 @@ submit_test() {
 build_rtsp_tcp_payload() {
   local agents_json
 
-  require_env TE_RTSP_SERVER TE_SOURCE_AGENT_IDS
-  agents_json="$(build_agents_json "${TE_SOURCE_AGENT_IDS}")"
+  require_env TE_RTSP_SERVER
+  agents_json="$(build_agents_json_for_scope app)"
 
   printf '%s' \
     "{\
@@ -309,8 +354,7 @@ build_rtsp_tcp_payload() {
 build_udp_media_payload() {
   local agents_json udp_target_agent_id
 
-  require_env TE_SOURCE_AGENT_IDS
-  agents_json="$(build_agents_json "${TE_SOURCE_AGENT_IDS}")"
+  agents_json="$(build_agents_json_for_scope media)"
   udp_target_agent_id="${TE_UDP_TARGET_AGENT_ID:-${TE_TARGET_AGENT_ID:-}}"
 
   if [[ -z "${udp_target_agent_id}" ]]; then
@@ -343,8 +387,8 @@ build_udp_media_payload() {
 build_rtp_stream_payload() {
   local agents_json
 
-  require_env TE_SOURCE_AGENT_IDS TE_TARGET_AGENT_ID
-  agents_json="$(build_agents_json "${TE_SOURCE_AGENT_IDS}")"
+  require_env TE_TARGET_AGENT_ID
+  agents_json="$(build_agents_json_for_scope media)"
 
   printf '%s' \
     "{\
@@ -368,8 +412,8 @@ build_rtp_stream_payload() {
 build_trace_map_payload() {
   local agents_json
 
-  require_env TE_SOURCE_AGENT_IDS TE_TRACE_MAP_TEST_URL
-  agents_json="$(build_agents_json "${TE_SOURCE_AGENT_IDS}")"
+  require_env TE_TRACE_MAP_TEST_URL
+  agents_json="$(build_agents_json_for_scope app)"
 
   printf '%s' \
     "{\
@@ -396,8 +440,8 @@ build_trace_map_payload() {
 build_broadcast_payload() {
   local agents_json
 
-  require_env TE_SOURCE_AGENT_IDS TE_BROADCAST_TEST_URL
-  agents_json="$(build_agents_json "${TE_SOURCE_AGENT_IDS}")"
+  require_env TE_BROADCAST_TEST_URL
+  agents_json="$(build_agents_json_for_scope app)"
 
   printf '%s' \
     "{\

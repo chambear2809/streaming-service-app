@@ -123,6 +123,56 @@ require_env() {
   done
 }
 
+require_one_of_env() {
+  local name
+  for name in "$@"; do
+    if [[ -n "${(P)name:-}" ]]; then
+      return 0
+    fi
+  done
+
+  echo "Missing required environment variable: $*" >&2
+  return 1
+}
+
+require_app_source_agent_config() {
+  require_one_of_env TE_APP_SOURCE_AGENT_IDS TE_SOURCE_AGENT_IDS
+}
+
+require_media_source_agent_config() {
+  require_one_of_env TE_MEDIA_SOURCE_AGENT_IDS TE_SOURCE_AGENT_IDS
+}
+
+require_job_action_config() {
+  require_env THOUSANDEYES_BEARER_TOKEN
+
+  case "${THOUSANDEYES_JOB_ACTION}" in
+    create-rtsp-tcp)
+      require_app_source_agent_config
+      ;;
+    create-udp-media)
+      require_media_source_agent_config
+      require_one_of_env TE_UDP_TARGET_AGENT_ID TE_TARGET_AGENT_ID
+      ;;
+    create-rtp-stream)
+      require_media_source_agent_config
+      require_env TE_TARGET_AGENT_ID
+      ;;
+    create-demo-monkey-trace-map|create-demo-monkey-broadcast|create-demo-monkey-http)
+      require_app_source_agent_config
+      ;;
+    create-all)
+      require_app_source_agent_config
+      require_media_source_agent_config
+      require_env TE_TARGET_AGENT_ID
+      ;;
+    *)
+      echo "Unsupported THOUSANDEYES_JOB_ACTION: ${THOUSANDEYES_JOB_ACTION}" >&2
+      return 1
+      ;;
+  esac
+}
+
 apply_or_dry_run() {
   if [[ "${K8S_DRY_RUN}" == "true" ]]; then
     kubectl apply --dry-run=client -f -
@@ -149,7 +199,7 @@ wait_and_stream_logs() {
   kubectl -n "${NAMESPACE}" logs "job/${THOUSANDEYES_JOB_NAME}"
 }
 
-require_env THOUSANDEYES_BEARER_TOKEN TE_SOURCE_AGENT_IDS TE_TARGET_AGENT_ID
+require_job_action_config
 
 TE_RTSP_SERVER="${TE_RTSP_SERVER:-$(discover_rtsp_server)}"
 TE_RTSP_PORT="${TE_RTSP_PORT:-$(discover_rtsp_port)}"
@@ -202,10 +252,24 @@ spec:
               value: "${THOUSANDEYES_ACCOUNT_GROUP_ID:-}"
             - name: TE_ALERTS_ENABLED
               value: "${TE_ALERTS_ENABLED:-true}"
+            - name: TE_RTSP_TCP_ENABLED
+              value: "${TE_RTSP_TCP_ENABLED:-true}"
+            - name: TE_UDP_MEDIA_ENABLED
+              value: "${TE_UDP_MEDIA_ENABLED:-true}"
+            - name: TE_RTP_STREAM_ENABLED
+              value: "${TE_RTP_STREAM_ENABLED:-true}"
+            - name: TE_TRACE_MAP_ENABLED
+              value: "${TE_TRACE_MAP_ENABLED:-true}"
+            - name: TE_BROADCAST_ENABLED
+              value: "${TE_BROADCAST_ENABLED:-true}"
             - name: TE_SOURCE_AGENT_IDS
-              value: "${TE_SOURCE_AGENT_IDS}"
+              value: "${TE_SOURCE_AGENT_IDS:-}"
+            - name: TE_APP_SOURCE_AGENT_IDS
+              value: "${TE_APP_SOURCE_AGENT_IDS:-}"
+            - name: TE_MEDIA_SOURCE_AGENT_IDS
+              value: "${TE_MEDIA_SOURCE_AGENT_IDS:-}"
             - name: TE_TARGET_AGENT_ID
-              value: "${TE_TARGET_AGENT_ID}"
+              value: "${TE_TARGET_AGENT_ID:-}"
             - name: TE_UDP_TARGET_AGENT_ID
               value: "${TE_UDP_TARGET_AGENT_ID:-}"
             - name: TE_DSCP_ID
@@ -216,6 +280,8 @@ spec:
               value: "${TE_RTSP_PORT}"
             - name: TE_RTSP_TCP_TEST_NAME
               value: "${TE_RTSP_TCP_TEST_NAME:-RTSP-TCP-${TE_RTSP_PORT}}"
+            - name: TE_RTSP_TCP_TEST_ID
+              value: "${TE_RTSP_TCP_TEST_ID:-}"
             - name: TE_RTSP_TCP_INTERVAL
               value: "${TE_RTSP_TCP_INTERVAL:-60}"
             - name: TE_RTSP_TCP_ALERTS_ENABLED
@@ -224,6 +290,8 @@ spec:
               value: "${TE_DEMO_MONKEY_FRONTEND_BASE_URL}"
             - name: TE_TRACE_MAP_TEST_NAME
               value: "${TE_TRACE_MAP_TEST_NAME:-aleccham-broadcast-trace-map}"
+            - name: TE_TRACE_MAP_TEST_ID
+              value: "${TE_TRACE_MAP_TEST_ID:-}"
             - name: TE_TRACE_MAP_TEST_URL
               value: "${TE_TRACE_MAP_TEST_URL}"
             - name: TE_TRACE_MAP_INTERVAL
@@ -234,6 +302,8 @@ spec:
               value: "${TE_TRACE_MAP_NETWORK_MEASUREMENTS:-true}"
             - name: TE_BROADCAST_TEST_NAME
               value: "${TE_BROADCAST_TEST_NAME:-aleccham-broadcast-playback}"
+            - name: TE_BROADCAST_TEST_ID
+              value: "${TE_BROADCAST_TEST_ID:-}"
             - name: TE_BROADCAST_TEST_URL
               value: "${TE_BROADCAST_TEST_URL}"
             - name: TE_BROADCAST_INTERVAL
@@ -244,6 +314,8 @@ spec:
               value: "${TE_BROADCAST_NETWORK_MEASUREMENTS:-true}"
             - name: TE_UDP_MEDIA_TEST_NAME
               value: "${TE_UDP_MEDIA_TEST_NAME:-UDP-Media-Path}"
+            - name: TE_UDP_MEDIA_TEST_ID
+              value: "${TE_UDP_MEDIA_TEST_ID:-}"
             - name: TE_UDP_MEDIA_INTERVAL
               value: "${TE_UDP_MEDIA_INTERVAL:-60}"
             - name: TE_UDP_MEDIA_ALERTS_ENABLED
@@ -258,6 +330,8 @@ spec:
               value: "${TE_A2A_THROUGHPUT_DURATION_MS:-10000}"
             - name: TE_RTP_STREAM_TEST_NAME
               value: "${TE_RTP_STREAM_TEST_NAME:-RTP-Stream-Proxy}"
+            - name: TE_RTP_STREAM_TEST_ID
+              value: "${TE_RTP_STREAM_TEST_ID:-}"
             - name: TE_RTP_STREAM_INTERVAL
               value: "${TE_RTP_STREAM_INTERVAL:-60}"
             - name: TE_RTP_STREAM_ALERTS_ENABLED

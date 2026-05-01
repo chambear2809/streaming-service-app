@@ -101,6 +101,54 @@ assert_equals \
   "1" \
   "shared alert default should be overridable for the remaining HTTP test"
 
+disabled_output="$(
+  ENV_FILE="${empty_env}" \
+  THOUSANDEYES_DRY_RUN=true \
+  THOUSANDEYES_BEARER_TOKEN=test-token \
+  TE_RTSP_TCP_ENABLED=false \
+  TE_UDP_MEDIA_ENABLED=false \
+  TE_RTP_STREAM_ENABLED=false \
+  TE_TRACE_MAP_ENABLED=false \
+  TE_BROADCAST_ENABLED=false \
+  TE_SOURCE_AGENT_IDS=111 \
+  TE_TARGET_AGENT_ID=222 \
+  TE_UDP_TARGET_AGENT_ID=333 \
+  TE_RTSP_SERVER=rtsp.example.com \
+  TE_RTSP_PORT=8554 \
+  TE_TRACE_MAP_TEST_URL=https://demo.example.com/api/v1/demo/public/trace-map \
+  TE_BROADCAST_TEST_URL=https://demo.example.com/api/v1/demo/public/broadcast/live/index.m3u8 \
+  bash "${DIRECT_SCRIPT}" create-all
+)"
+
+assert_equals \
+  "$(count_fixed_occurrences "${disabled_output}" "\"enabled\":false")" \
+  "5" \
+  "direct create-all should allow all five tests to be created disabled"
+
+split_sources_output="$(
+  ENV_FILE="${empty_env}" \
+  THOUSANDEYES_DRY_RUN=true \
+  THOUSANDEYES_BEARER_TOKEN=test-token \
+  TE_APP_SOURCE_AGENT_IDS=111 \
+  TE_MEDIA_SOURCE_AGENT_IDS=444 \
+  TE_TARGET_AGENT_ID=222 \
+  TE_UDP_TARGET_AGENT_ID=333 \
+  TE_RTSP_SERVER=rtsp.example.com \
+  TE_RTSP_PORT=8554 \
+  TE_TRACE_MAP_TEST_URL=https://demo.example.com/api/v1/demo/public/trace-map \
+  TE_BROADCAST_TEST_URL=https://demo.example.com/api/v1/demo/public/broadcast/live/index.m3u8 \
+  bash "${DIRECT_SCRIPT}" create-all
+)"
+
+assert_equals \
+  "$(count_fixed_occurrences "${split_sources_output}" "\"agentId\":\"111\"")" \
+  "3" \
+  "RTSP and public HTTP tests should use TE_APP_SOURCE_AGENT_IDS when set"
+assert_equals \
+  "$(count_fixed_occurrences "${split_sources_output}" "\"agentId\":\"444\"")" \
+  "2" \
+  "UDP and RTP tests should use TE_MEDIA_SOURCE_AGENT_IDS when set"
+
 stub_dir="${temp_dir}/bin"
 capture_dir="${temp_dir}/captures"
 mkdir -p "${stub_dir}" "${capture_dir}"

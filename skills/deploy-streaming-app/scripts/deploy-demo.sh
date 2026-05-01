@@ -12,6 +12,10 @@ PLATFORM="${PLATFORM-}"
 KUBECLI="${KUBECLI-}"
 FRONTEND_SERVICE_TYPE="${FRONTEND_SERVICE_TYPE-}"
 RTSP_SERVICE_TYPE="${RTSP_SERVICE_TYPE-}"
+FRONTEND_LOAD_BALANCER_SCHEME="${FRONTEND_LOAD_BALANCER_SCHEME-}"
+RTSP_LOAD_BALANCER_SCHEME="${RTSP_LOAD_BALANCER_SCHEME-}"
+FRONTEND_AWS_LOAD_BALANCER_TYPE="${FRONTEND_AWS_LOAD_BALANCER_TYPE-}"
+RTSP_AWS_LOAD_BALANCER_TYPE="${RTSP_AWS_LOAD_BALANCER_TYPE-}"
 CLUSTER_LABEL="${CLUSTER_LABEL-}"
 ENVIRONMENT_LABEL="${ENVIRONMENT_LABEL-}"
 REGION_LABEL="${REGION_LABEL-}"
@@ -47,7 +51,11 @@ Options:
   --namespace <name>
   --cli <kubectl|oc>
   --frontend-service-type <ClusterIP|NodePort|LoadBalancer>
+  --frontend-load-balancer-scheme <internet-facing|internal>
+  --frontend-aws-load-balancer-type <type>
   --rtsp-service-type <ClusterIP|NodePort|LoadBalancer>
+  --rtsp-load-balancer-scheme <internet-facing|internal>
+  --rtsp-aws-load-balancer-type <type>
   --cluster-label <label>
   --environment-label <label>
   --region-label <label>
@@ -165,8 +173,24 @@ while [[ $# -gt 0 ]]; do
       FRONTEND_SERVICE_TYPE="${2:?missing value for --frontend-service-type}"
       shift 2
       ;;
+    --frontend-load-balancer-scheme)
+      FRONTEND_LOAD_BALANCER_SCHEME="${2:?missing value for --frontend-load-balancer-scheme}"
+      shift 2
+      ;;
+    --frontend-aws-load-balancer-type)
+      FRONTEND_AWS_LOAD_BALANCER_TYPE="${2:?missing value for --frontend-aws-load-balancer-type}"
+      shift 2
+      ;;
     --rtsp-service-type)
       RTSP_SERVICE_TYPE="${2:?missing value for --rtsp-service-type}"
+      shift 2
+      ;;
+    --rtsp-load-balancer-scheme)
+      RTSP_LOAD_BALANCER_SCHEME="${2:?missing value for --rtsp-load-balancer-scheme}"
+      shift 2
+      ;;
+    --rtsp-aws-load-balancer-type)
+      RTSP_AWS_LOAD_BALANCER_TYPE="${2:?missing value for --rtsp-aws-load-balancer-type}"
       shift 2
       ;;
     --cluster-label)
@@ -311,6 +335,15 @@ validate_service_type() {
   esac
 }
 
+validate_load_balancer_scheme() {
+  case "$1" in
+    ''|internet-facing|internal) ;;
+    *)
+      fail "invalid load balancer scheme '$1'"
+      ;;
+  esac
+}
+
 validate_splunk_otel_mode() {
   case "$1" in
     skip|reuse|install-if-missing) ;;
@@ -414,6 +447,7 @@ package_service_source() {
   local archive_path="$2"
   shift 2
   local -a excludes
+  local -a archive_paths
   local extra_path
 
   excludes=(
@@ -423,12 +457,16 @@ package_service_source() {
     "--exclude=${service_dir}/.vscode"
     "--exclude=${service_dir}/.DS_Store"
   )
+  archive_paths=(
+    "pom.xml"
+    "${service_dir}"
+  )
 
   for extra_path in "$@"; do
     excludes+=("--exclude=${service_dir}/${extra_path}")
   done
 
-  tar -C "${REPO_ROOT}" "${excludes[@]}" -czf "${archive_path}" "${service_dir}"
+  tar -C "${REPO_ROOT}" "${excludes[@]}" -czf "${archive_path}" "${archive_paths[@]}"
 }
 
 ensure_demo_auth_secret() {
@@ -609,6 +647,31 @@ patch_service_type() {
   local service_name="$1"
   local service_type="$2"
   "${KUBECLI}" -n "${NAMESPACE}" patch service "${service_name}" --type merge -p "{\"spec\":{\"type\":\"${service_type}\"}}" >/dev/null
+}
+
+patch_service_annotation() {
+  local service_name="$1"
+  local annotation_key="$2"
+  local annotation_value="$3"
+
+  [[ -n "${annotation_value}" ]] || return 0
+
+  "${KUBECLI}" -n "${NAMESPACE}" patch service "${service_name}" --type merge \
+    -p "{\"metadata\":{\"annotations\":{\"${annotation_key}\":\"${annotation_value}\"}}}" >/dev/null
+}
+
+patch_service_load_balancer_scheme() {
+  local service_name="$1"
+  local scheme="$2"
+
+  patch_service_annotation "${service_name}" "service.beta.kubernetes.io/aws-load-balancer-scheme" "${scheme}"
+}
+
+patch_service_aws_load_balancer_type() {
+  local service_name="$1"
+  local load_balancer_type="$2"
+
+  patch_service_annotation "${service_name}" "service.beta.kubernetes.io/aws-load-balancer-type" "${load_balancer_type}"
 }
 
 discover_service_host() {
@@ -889,8 +952,18 @@ if [[ -z "${RTSP_SERVICE_TYPE}" ]]; then
   fi
 fi
 
+if [[ -z "${FRONTEND_LOAD_BALANCER_SCHEME}" && "${PLATFORM}" == "kubernetes" && "${FRONTEND_SERVICE_TYPE}" == "LoadBalancer" ]]; then
+  FRONTEND_LOAD_BALANCER_SCHEME="internet-facing"
+fi
+
+if [[ -z "${RTSP_LOAD_BALANCER_SCHEME}" && "${PLATFORM}" == "kubernetes" && "${RTSP_SERVICE_TYPE}" == "LoadBalancer" ]]; then
+  RTSP_LOAD_BALANCER_SCHEME="internet-facing"
+fi
+
 validate_service_type "${FRONTEND_SERVICE_TYPE}"
 validate_service_type "${RTSP_SERVICE_TYPE}"
+validate_load_balancer_scheme "${FRONTEND_LOAD_BALANCER_SCHEME}"
+validate_load_balancer_scheme "${RTSP_LOAD_BALANCER_SCHEME}"
 validate_splunk_otel_mode "${SPLUNK_OTEL_MODE}"
 
 if [[ -z "${APP_VERSION}" ]]; then
@@ -917,6 +990,12 @@ log "CLI: ${KUBECLI}"
 log "Namespace: ${NAMESPACE}"
 log "Frontend service type: ${FRONTEND_SERVICE_TYPE}"
 log "RTSP service type: ${RTSP_SERVICE_TYPE}"
+if [[ -n "${FRONTEND_LOAD_BALANCER_SCHEME}" ]]; then
+  log "Frontend load balancer scheme: ${FRONTEND_LOAD_BALANCER_SCHEME}"
+fi
+if [[ -n "${RTSP_LOAD_BALANCER_SCHEME}" ]]; then
+  log "RTSP load balancer scheme: ${RTSP_LOAD_BALANCER_SCHEME}"
+fi
 log "Splunk OTel mode: ${SPLUNK_OTEL_MODE}"
 if [[ "${SPLUNK_OTEL_MODE}" != "skip" && -n "${SPLUNK_OTEL_CLUSTER_NAME}" ]]; then
   log "Splunk OTel cluster name: ${SPLUNK_OTEL_CLUSTER_NAME}"
@@ -941,6 +1020,8 @@ apply_manifest "${REPO_ROOT}/k8s/backend-demo/user-service.yaml"
 apply_manifest "${REPO_ROOT}/k8s/backend-demo/billing-service.yaml"
 apply_manifest "${REPO_ROOT}/k8s/backend-demo/ad-service.yaml"
 patch_service_type media-service-demo-rtsp "${RTSP_SERVICE_TYPE}"
+patch_service_load_balancer_scheme media-service-demo-rtsp "${RTSP_LOAD_BALANCER_SCHEME}"
+patch_service_aws_load_balancer_type media-service-demo-rtsp "${RTSP_AWS_LOAD_BALANCER_TYPE}"
 
 restart_and_wait content-service-demo
 restart_and_wait media-service-demo
@@ -958,6 +1039,8 @@ log "Applying frontend manifests"
 apply_manifest "${REPO_ROOT}/k8s/frontend/deployment.yaml"
 apply_manifest "${REPO_ROOT}/k8s/frontend/service.yaml"
 patch_service_type streaming-frontend "${FRONTEND_SERVICE_TYPE}"
+patch_service_load_balancer_scheme streaming-frontend "${FRONTEND_LOAD_BALANCER_SCHEME}"
+patch_service_aws_load_balancer_type streaming-frontend "${FRONTEND_AWS_LOAD_BALANCER_TYPE}"
 restart_and_wait streaming-frontend
 ensure_frontend_route
 

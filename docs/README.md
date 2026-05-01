@@ -10,5 +10,6 @@ Follow the top-level guides in this order when you want the canonical operator p
 6. [`06-thousandeyes-rtsp-api.md`](06-thousandeyes-rtsp-api.md) for ThousandEyes tests, alert rules, and dashboard sync.
 7. [`07-broadcast-loadgen.md`](07-broadcast-loadgen.md) for public viewer traffic generation.
 8. [`08-operator-billing-loadgen.md`](08-operator-billing-loadgen.md) for protected operator, billing, and optional commerce traffic generation.
+9. [`09-eks-delay-demo.md`](09-eks-delay-demo.md) for the dedicated AWS EKS + router delay-box demo flow with ThousandEyes and Splunk wiring.
 
 Supporting material that does not fit the main numbered flow stays under [`docs/isovalent/`](isovalent/README.md).
