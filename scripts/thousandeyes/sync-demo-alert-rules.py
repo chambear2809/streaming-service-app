@@ -21,6 +21,8 @@ from typing import Any
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_ENV_FILE = ROOT_DIR / ".env"
 THOUSANDEYES_API_BASE_URL = os.environ.get("THOUSANDEYES_API_BASE_URL", "https://api.thousandeyes.com/v7")
+HTTP_LATENCY_ALERT_SLOTS = {"broadcast", "trace_map"}
+DEFAULT_HTTP_ALERT_LATENCY_MS = 200
 
 
 def load_env_file(env_file: Path) -> None:
@@ -277,6 +279,56 @@ def per_slot_notify_on_clear(slot: SlotDefinition) -> bool:
     return env_bool(env_name, env_bool("TE_ALERT_NOTIFY_ON_CLEAR", True))
 
 
+def per_slot_latency_threshold_ms(slot: SlotDefinition) -> int:
+    slot_env = f"TE_{slot.slot.upper()}_ALERT_LATENCY_MS"
+    default = env_int("TE_HTTP_ALERT_LATENCY_MS", DEFAULT_HTTP_ALERT_LATENCY_MS)
+    threshold = env_int(slot_env, default)
+    if threshold <= 0:
+        raise SystemExit(f"{slot_env} must be greater than 0.")
+    return threshold
+
+
+def per_slot_expression(slot: SlotDefinition, template_rule: dict[str, Any]) -> str:
+    expression_env = f"TE_{slot.slot.upper()}_ALERT_RULE_EXPRESSION"
+    expression = os.environ.get(expression_env, "").strip()
+    if expression:
+        return expression
+
+    if slot.slot in HTTP_LATENCY_ALERT_SLOTS:
+        threshold_ms = per_slot_latency_threshold_ms(slot)
+        return f"((responseTime >= {threshold_ms} ms))"
+
+    return str(template_rule["expression"])
+
+
+def per_slot_rounds_violating_mode(slot: SlotDefinition, template_rule: dict[str, Any]) -> str | None:
+    env_name = f"TE_{slot.slot.upper()}_ALERT_ROUNDS_VIOLATING_MODE"
+    configured = os.environ.get(env_name, "").strip()
+    if configured:
+        return configured
+    if slot.slot in HTTP_LATENCY_ALERT_SLOTS:
+        return "any"
+    return template_rule.get("roundsViolatingMode")
+
+
+def per_slot_rounds_violating_out_of(slot: SlotDefinition, template_rule: dict[str, Any]) -> int:
+    env_name = f"TE_{slot.slot.upper()}_ALERT_ROUNDS_VIOLATING_OUT_OF"
+    if os.environ.get(env_name, "").strip():
+        return env_int(env_name, 1)
+    if slot.slot in HTTP_LATENCY_ALERT_SLOTS:
+        return 1
+    return int(template_rule.get("roundsViolatingOutOf", 3))
+
+
+def per_slot_rounds_violating_required(slot: SlotDefinition, template_rule: dict[str, Any]) -> int:
+    env_name = f"TE_{slot.slot.upper()}_ALERT_ROUNDS_VIOLATING_REQUIRED"
+    if os.environ.get(env_name, "").strip():
+        return env_int(env_name, 1)
+    if slot.slot in HTTP_LATENCY_ALERT_SLOTS:
+        return 1
+    return int(template_rule.get("roundsViolatingRequired", 2))
+
+
 def rule_payload(
     slot: SlotDefinition,
     test_id: str,
@@ -287,16 +339,16 @@ def rule_payload(
         "ruleName": slot.rule_name,
         "description": slot.description,
         "alertType": slot.alert_type,
-        "expression": template_rule["expression"],
+        "expression": per_slot_expression(slot, template_rule),
         "notifyOnClear": per_slot_notify_on_clear(slot),
         "severity": per_slot_severity(slot),
         "testIds": [test_id],
-        "roundsViolatingOutOf": int(template_rule.get("roundsViolatingOutOf", 3)),
-        "roundsViolatingRequired": int(template_rule.get("roundsViolatingRequired", 2)),
+        "roundsViolatingOutOf": per_slot_rounds_violating_out_of(slot, template_rule),
+        "roundsViolatingRequired": per_slot_rounds_violating_required(slot, template_rule),
         "minimumSources": per_slot_minimum_sources(slot),
     }
 
-    rounds_mode = template_rule.get("roundsViolatingMode")
+    rounds_mode = per_slot_rounds_violating_mode(slot, template_rule)
     if rounds_mode:
         payload["roundsViolatingMode"] = rounds_mode
     direction = template_rule.get("direction")
@@ -313,11 +365,16 @@ def rule_payload(
     return payload
 
 
-def test_update_payload(rule_id: str) -> dict[str, Any]:
-    return {
+def test_update_payload(slot: SlotDefinition, rule_id: str) -> dict[str, Any]:
+    payload: dict[str, Any] = {
         "alertsEnabled": True,
         "alertRules": [rule_id],
     }
+    if slot.slot == "trace_map":
+        payload["distributedTracing"] = True
+    if slot.slot in HTTP_LATENCY_ALERT_SLOTS:
+        payload["networkMeasurements"] = True
+    return payload
 
 
 def print_plan(slot: SlotDefinition, test_id: str, rule_payload_data: dict[str, Any], rule_exists: bool, rule_id: str | None) -> None:
@@ -326,7 +383,7 @@ def print_plan(slot: SlotDefinition, test_id: str, rule_payload_data: dict[str, 
     if rule_id:
         print(f"  existing ruleId: {rule_id}")
     print(json.dumps(rule_payload_data, indent=2, sort_keys=True))
-    print(f"  test assignment payload: {json.dumps(test_update_payload(rule_id or '<pending>'))}")
+    print(f"  test assignment payload: {json.dumps(test_update_payload(slot, rule_id or '<pending>'))}")
 
 
 def sync_alert_rules(apply_changes: bool) -> None:
@@ -372,7 +429,7 @@ def sync_alert_rules(apply_changes: bool) -> None:
             "PUT",
             f"/tests/{slot.test_path}/{test_id}",
             query={"aid": account_group_id},
-            body=test_update_payload(rule_id),
+            body=test_update_payload(slot, rule_id),
         )
         assigned = test_response.get("alertRules", [])
         assigned_ids = [str(item.get("ruleId", item)) for item in assigned]

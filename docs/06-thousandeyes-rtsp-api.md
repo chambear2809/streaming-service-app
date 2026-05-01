@@ -844,6 +844,14 @@ Alert controls:
 - `TE_BROADCAST_ALERTS_ENABLED`
 - `TE_ALERT_MINIMUM_SOURCES`
 - `TE_ALERT_NOTIFY_ON_CLEAR`
+- `TE_HTTP_ALERT_LATENCY_MS`: shared latency threshold for the repo-managed
+  playback and trace-map HTTP alert rules. Defaults to `200`.
+- `TE_BROADCAST_ALERT_LATENCY_MS` and `TE_TRACE_MAP_ALERT_LATENCY_MS`:
+  per-test HTTP latency threshold overrides.
+- `TE_BROADCAST_ALERT_RULE_EXPRESSION` and
+  `TE_TRACE_MAP_ALERT_RULE_EXPRESSION`: optional raw ThousandEyes alert
+  expression overrides when you need a custom rule beyond the default
+  `responseTime >= <threshold> ms`.
 - `THOUSANDEYES_ALERT_EMAIL_RECIPIENTS`
 - `THOUSANDEYES_ALERT_EMAIL_MESSAGE`
 - `THOUSANDEYES_ALERT_NOTIFICATIONS_JSON`
@@ -868,7 +876,7 @@ Splunk demo dashboard sync:
 - ThousandEyes scheduled `RTP Stream` tests are created through the `voice` test API.
 - In this cluster, the RTSP demo feed is exposed through `media-service-demo-rtsp` on port `8554`, so the Kubernetes wrapper defaults the TCP reachability test to `TCP/8554` instead of `TCP/554`.
 - Demo Monkey changes the public frontend-backed paths `/api/v1/demo/public/trace-map` and `/api/v1/demo/public/broadcast/live/index.m3u8`, so the new HTTP server tests are the ones that visibly move when Demo Monkey presets are enabled.
-- For the standard booth story, treat the playback and trace-map HTTP tests as the primary operator-facing alerts. Keep RTSP, UDP, and RTP alerts enabled when you want full-path coverage, but use the per-test `TE_*_ALERTS_ENABLED` overrides when those deeper media checks should stay quieter until the transport deep dive.
+- For the standard booth story, treat the playback and trace-map HTTP tests as the primary operator-facing alerts. Their repo-managed custom alert rules default to HTTP `responseTime >= 200 ms` so the router delay demo can page on visible frontend latency, not only outright availability failures. Keep RTSP, UDP, and RTP alerts enabled when you want full-path coverage, but use the per-test `TE_*_ALERTS_ENABLED` overrides when those deeper media checks should stay quieter until the transport deep dive.
 - The repo alert-rule helper creates one custom rule per demo test and assigns it directly to the current `TE_*_TEST_ID`, so the live demo tests do not depend on ThousandEyes default rule selection or the default `minimumSources=2` behavior.
 - `throughputMeasurements` on the agent-to-agent UDP test cannot be enabled when either side is a Cloud Agent. If you set `TE_UDP_TARGET_AGENT_ID` or `TE_TARGET_AGENT_ID` to a Cloud Agent for the UDP test, set `TE_A2A_THROUGHPUT_MEASUREMENTS=false`.
 - This does not validate the RTSP verbs themselves. Use an RTSP-aware client outside ThousandEyes for `OPTIONS`, `DESCRIBE`, `SETUP`, and `PLAY`.

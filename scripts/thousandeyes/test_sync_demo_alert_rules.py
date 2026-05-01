@@ -44,8 +44,10 @@ class SyncDemoAlertRulesTests(unittest.TestCase):
         self.assertEqual(payload["minimumSources"], 1)
         self.assertTrue(payload["notifyOnClear"])
         self.assertEqual(payload["testIds"], ["8400454"])
-        self.assertEqual(payload["expression"], '((probDetail != ""))')
-        self.assertEqual(payload["roundsViolatingMode"], "exact")
+        self.assertEqual(payload["expression"], "((responseTime >= 200 ms))")
+        self.assertEqual(payload["roundsViolatingMode"], "any")
+        self.assertEqual(payload["roundsViolatingOutOf"], 1)
+        self.assertEqual(payload["roundsViolatingRequired"], 1)
         self.assertEqual(payload["alertGroupType"], "cloud-enterprise")
 
     def test_rule_payload_honors_per_slot_overrides(self):
@@ -72,6 +74,44 @@ class SyncDemoAlertRulesTests(unittest.TestCase):
         self.assertFalse(payload["notifyOnClear"])
         self.assertEqual(payload["direction"], "to-target")
 
+    def test_http_latency_alert_defaults_support_threshold_and_expression_overrides(self):
+        slot = next(defn for defn in module.SLOT_DEFINITIONS if defn.slot == "trace_map")
+        template_rule = {
+            "expression": '((probDetail != ""))',
+            "roundsViolatingOutOf": 3,
+            "roundsViolatingRequired": 2,
+            "roundsViolatingMode": "exact",
+        }
+
+        os.environ["TE_HTTP_ALERT_LATENCY_MS"] = "250"
+        payload = module.rule_payload(
+            slot=slot,
+            test_id="8400453",
+            template_rule=template_rule,
+            notifications=None,
+        )
+
+        self.assertEqual(payload["expression"], "((responseTime >= 250 ms))")
+        self.assertEqual(payload["roundsViolatingMode"], "any")
+        self.assertEqual(payload["roundsViolatingOutOf"], 1)
+        self.assertEqual(payload["roundsViolatingRequired"], 1)
+
+        os.environ["TE_TRACE_MAP_ALERT_RULE_EXPRESSION"] = '((responseTime >= 500 ms))'
+        os.environ["TE_TRACE_MAP_ALERT_ROUNDS_VIOLATING_MODE"] = "exact"
+        os.environ["TE_TRACE_MAP_ALERT_ROUNDS_VIOLATING_OUT_OF"] = "3"
+        os.environ["TE_TRACE_MAP_ALERT_ROUNDS_VIOLATING_REQUIRED"] = "2"
+        payload = module.rule_payload(
+            slot=slot,
+            test_id="8400453",
+            template_rule=template_rule,
+            notifications=None,
+        )
+
+        self.assertEqual(payload["expression"], "((responseTime >= 500 ms))")
+        self.assertEqual(payload["roundsViolatingMode"], "exact")
+        self.assertEqual(payload["roundsViolatingOutOf"], 3)
+        self.assertEqual(payload["roundsViolatingRequired"], 2)
+
     def test_alert_notifications_supports_email_or_raw_json(self):
         os.environ["THOUSANDEYES_ALERT_EMAIL_RECIPIENTS"] = "alice@example.com,bob@example.com"
         os.environ["THOUSANDEYES_ALERT_EMAIL_MESSAGE"] = "Demo alert"
@@ -92,9 +132,32 @@ class SyncDemoAlertRulesTests(unittest.TestCase):
         )
 
     def test_test_update_payload_replaces_default_rule_assignment(self):
+        slot = next(defn for defn in module.SLOT_DEFINITIONS if defn.slot == "rtsp")
         self.assertEqual(
-            module.test_update_payload("123456"),
+            module.test_update_payload(slot, "123456"),
             {"alertsEnabled": True, "alertRules": ["123456"]},
+        )
+
+    def test_http_test_update_payload_preserves_required_measurements(self):
+        trace_map = next(defn for defn in module.SLOT_DEFINITIONS if defn.slot == "trace_map")
+        broadcast = next(defn for defn in module.SLOT_DEFINITIONS if defn.slot == "broadcast")
+
+        self.assertEqual(
+            module.test_update_payload(trace_map, "123456"),
+            {
+                "alertsEnabled": True,
+                "alertRules": ["123456"],
+                "distributedTracing": True,
+                "networkMeasurements": True,
+            },
+        )
+        self.assertEqual(
+            module.test_update_payload(broadcast, "654321"),
+            {
+                "alertsEnabled": True,
+                "alertRules": ["654321"],
+                "networkMeasurements": True,
+            },
         )
 
 
