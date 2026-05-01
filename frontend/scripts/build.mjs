@@ -29,9 +29,15 @@ const splunkRumOverrides = Object.fromEntries(
         realm: readEnvOverride("SPLUNK_REALM"),
         rumAccessToken: readEnvOverride("SPLUNK_RUM_ACCESS_TOKEN"),
         applicationName: readEnvOverride("SPLUNK_RUM_APP_NAME"),
-        deploymentEnvironment: readEnvOverride("SPLUNK_DEPLOYMENT_ENVIRONMENT")
+        deploymentEnvironment: readEnvOverride("SPLUNK_DEPLOYMENT_ENVIRONMENT"),
+        beaconEndpoint: readEnvOverride("SPLUNK_RUM_BEACON_ENDPOINT"),
+        sessionReplayBeaconEndpoint: readEnvOverride("SPLUNK_RUM_SESSION_REPLAY_BEACON_ENDPOINT")
     }).filter(([, value]) => value !== undefined)
 );
+const secondarySplunkRumDestination = buildSecondarySplunkRumDestination();
+if (secondarySplunkRumDestination) {
+    splunkRumOverrides.additionalDestinations = [secondarySplunkRumDestination];
+}
 
 await rm(distDir, { force: true, recursive: true });
 await mkdir(distDir, { recursive: true });
@@ -105,6 +111,61 @@ function readEnvOverride(name) {
     return Object.prototype.hasOwnProperty.call(buildEnv, name)
         ? buildEnv[name]
         : undefined;
+}
+
+function readFirstEnvOverride(...names) {
+    for (const name of names) {
+        const value = readEnvOverride(name);
+        if (value !== undefined && value !== "") {
+            return value;
+        }
+    }
+
+    return undefined;
+}
+
+function readEnvBoolean(name, defaultValue = true) {
+    const rawValue = readEnvOverride(name);
+    if (rawValue === undefined || rawValue === "") {
+        return defaultValue;
+    }
+
+    const normalizedValue = String(rawValue).trim().toLowerCase();
+    if (["1", "true", "yes", "on"].includes(normalizedValue)) {
+        return true;
+    }
+    if (["0", "false", "no", "off"].includes(normalizedValue)) {
+        return false;
+    }
+
+    throw new Error(`Invalid boolean value for ${name}: ${rawValue}`);
+}
+
+function buildSecondarySplunkRumDestination() {
+    if (!readEnvBoolean("SPLUNK_RUM_SECONDARY_ENABLED", true)) {
+        return undefined;
+    }
+
+    const rumAccessToken = readFirstEnvOverride("SPLUNK_RUM_SECONDARY_ACCESS_TOKEN");
+    if (!rumAccessToken) {
+        return undefined;
+    }
+
+    const destination = Object.fromEntries(
+        Object.entries({
+            name: readFirstEnvOverride("SPLUNK_RUM_SECONDARY_NAME") ?? "secondary",
+            realm: readFirstEnvOverride("SPLUNK_RUM_SECONDARY_REALM", "SPLUNK_OTEL_SECONDARY_REALM"),
+            rumAccessToken,
+            beaconEndpoint: readFirstEnvOverride("SPLUNK_RUM_SECONDARY_BEACON_ENDPOINT"),
+            sessionReplayBeaconEndpoint: readFirstEnvOverride("SPLUNK_RUM_SECONDARY_SESSION_REPLAY_BEACON_ENDPOINT")
+        }).filter(([, value]) => value !== undefined)
+    );
+
+    if (!destination.realm && !destination.beaconEndpoint && !destination.sessionReplayBeaconEndpoint) {
+        return undefined;
+    }
+
+    return destination;
 }
 
 async function loadDotEnv(filePath) {

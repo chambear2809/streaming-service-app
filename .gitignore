@@ -32,3 +32,6 @@ __pycache__/
 # Ignore repo-local tool caches
 /.tools/
 /.generated/
+
+# Internal environment runbooks
+/docs/12-rc0-connectivity-best-practices.md

@@ -33,10 +33,12 @@ flowchart TB
         TETarget["RTP Target Enterprise Agent<br/>Ashburn, Virginia, US"]
         TECloud["UDP Target Cloud Agent<br/>Singapore"]
         TEHttp["HTTP Tests<br/>broadcast playback + trace map"]
-        TEMedia["RTSP / UDP / RTP Tests"]
+        TERTSP["RTSP TCP Test"]
+        TEA2A["UDP / RTP<br/>agent-to-agent tests"]
     end
 
-    subgraph Edge["Frontend Edge"]
+    subgraph Edge["Router-Backed Frontend Edge"]
+        Router["Router ingress<br/>80 + 8554"]
         Frontend["streaming-frontend<br/>Node gateway + static UI"]
     end
 
@@ -63,16 +65,20 @@ flowchart TB
         APM["APM + Service Map + Demo Dashboards"]
     end
 
-    Viewer --> Frontend
-    Operator --> Frontend
+    Viewer --> Router
+    Operator --> Router
 
     TESource --> TEHttp
-    TESource --> TEMedia
-    TETarget --> TEMedia
-    TECloud -. UDP override .-> TEMedia
+    TESource --> TERTSP
+    TESource --> TEA2A
+    TETarget --> TEA2A
+    TECloud -. UDP override .-> TEA2A
 
-    TEHttp --> Frontend
-    TEMedia --> RtspSvc
+    TEHttp --> Router
+    TERTSP --> Router
+
+    Router --> Frontend
+    Router --> RtspSvc
 
     Frontend --> User
     Frontend --> Content
@@ -116,7 +122,8 @@ flowchart TB
     Order -. optional OTel .-> APM
 
     TEHttp -. connector + dashboards .-> APM
-    TEMedia -. connector + dashboards .-> APM
+    TERTSP -. connector + dashboards .-> APM
+    TEA2A -. connector + dashboards .-> APM
 ```
 
 Diagram notes:
@@ -125,6 +132,11 @@ Diagram notes:
 - The current ThousandEyes demo config uses source agent `1639905` in `Ashburn, Virginia, US`, RTP target agent `1659237` in `Ashburn, Virginia, US`, and UDP target override `3` in `Singapore`.
 - The `Optional Protected Commerce Services` are present in the repo and in the legacy backend demo flow, but they are not part of the canonical skill deploy by default.
 - Public playback and the public trace pivot both enter through `streaming-frontend`.
+- In the router-backed EKS delay demo, public application and RTSP traffic must
+  target router-backed URLs, while OTel collector export must leave through
+  `44.208.125.119`. Treat the diagram arrows as logical service paths and use
+  [`docs/10-traffic-flow-contract.md`](docs/10-traffic-flow-contract.md) for
+  physical routing.
 - `media-service-demo` owns the public broadcast path, Demo Monkey state, and the trace-map fanout into `user-service-demo`, `content-service-demo`, `billing-service`, and `ad-service-demo`.
 
 ## What ThousandEyes And Splunk Should Show

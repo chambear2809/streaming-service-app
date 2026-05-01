@@ -18,6 +18,13 @@ assert_contains() {
   [[ "${haystack}" == *"${needle}"* ]] || fail "expected output to contain: ${needle}"
 }
 
+assert_not_contains() {
+  local haystack="$1"
+  local needle="$2"
+
+  [[ "${haystack}" != *"${needle}"* ]] || fail "did not expect output to contain: ${needle}"
+}
+
 write_git_stub() {
   local path="$1"
 
@@ -152,7 +159,7 @@ if [[ "${1-}" == "get" && "${2-}" == "secret" && "${4-}" == "-o" ]]; then
 fi
 
 if [[ "${1-}" == "apply" ]]; then
-  cat >/dev/null
+  cat >> "${DEPLOY_APPLY_LOG}"
   exit 0
 fi
 
@@ -202,6 +209,7 @@ run_deploy() {
   write_splunk_rum_stub "${temp_dir}/splunk-rum"
   write_helper_stub "${temp_dir}/helper.sh"
   : > "${temp_dir}/helper.log"
+  : > "${temp_dir}/apply.log"
   : > "${temp_dir}/test.env"
 
   set +e
@@ -214,12 +222,13 @@ run_deploy() {
     RTSP_SERVICE_TYPE='ClusterIP' \
     ROLLOUT_SNAPSHOT_INTERVAL_SECONDS='0' \
     DEPLOY_HELPER_LOG="${temp_dir}/helper.log" \
+    DEPLOY_APPLY_LOG="${temp_dir}/apply.log" \
     SPLUNK_OTEL_HELPER_SCRIPT="${temp_dir}/helper.sh" \
     SPLUNK_RUM_CLI="${temp_dir}/splunk-rum" \
     SPLUNK_REALM='us1' \
     SPLUNK_ACCESS_TOKEN='collector-token' \
-    SPLUNK_DEPLOYMENT_ENVIRONMENT='streaming-app' \
-    SPLUNK_OTEL_HELM_CHART_VERSION='0.148.0' \
+    SPLUNK_DEPLOYMENT_ENVIRONMENT="${SPLUNK_DEPLOYMENT_ENVIRONMENT_TEST-streaming-app}" \
+    SPLUNK_OTEL_HELM_CHART_VERSION='0.149.0' \
     bash "${TARGET_SCRIPT}" --platform kubernetes --namespace skill-test ${extra_args} \
     >"${output_file}" 2>&1
   local status=$?
@@ -258,10 +267,25 @@ test_reuse_mode_invokes_helper_with_expected_args() {
   assert_contains "${helper_log}" 'REALM:us1'
   assert_contains "${helper_log}" 'TOKEN:collector-token'
   assert_contains "${helper_log}" 'ENV:streaming-app'
-  assert_contains "${helper_log}" 'CHART:0.148.0'
+  assert_contains "${helper_log}" 'CHART:0.149.0'
+}
+
+test_rendered_manifests_use_requested_trace_environment() {
+  local temp_dir apply_log
+
+  temp_dir="$(mktemp -d)"
+  trap 'rm -rf "${temp_dir}"' RETURN
+  SPLUNK_DEPLOYMENT_ENVIRONMENT_TEST='network-streaming-app' \
+  run_deploy "" "${temp_dir}" "${temp_dir}/output.log"
+  apply_log="$(cat "${temp_dir}/apply.log")"
+
+  assert_contains "${apply_log}" "name: OTEL_DEPLOYMENT_ENVIRONMENT"
+  assert_contains "${apply_log}" "value: 'network-streaming-app'"
+  assert_contains "${apply_log}" 'deployment.environment=$(OTEL_DEPLOYMENT_ENVIRONMENT)'
 }
 
 test_skip_mode_does_not_invoke_helper
 test_reuse_mode_invokes_helper_with_expected_args
+test_rendered_manifests_use_requested_trace_environment
 
 printf 'PASS: deploy-demo Splunk OTel forwarding\n'

@@ -10,6 +10,9 @@ Follow the top-level guides in this order when you want the canonical operator p
 6. [`06-thousandeyes-rtsp-api.md`](06-thousandeyes-rtsp-api.md) for ThousandEyes tests, alert rules, and dashboard sync.
 7. [`07-broadcast-loadgen.md`](07-broadcast-loadgen.md) for public viewer traffic generation.
 8. [`08-operator-billing-loadgen.md`](08-operator-billing-loadgen.md) for protected operator, billing, and optional commerce traffic generation.
-9. [`09-eks-delay-demo.md`](09-eks-delay-demo.md) for the dedicated AWS EKS + router delay-box demo flow with ThousandEyes and Splunk wiring.
+9. [`11-browser-rum-loadgen.md`](11-browser-rum-loadgen.md) for Playwright-based Browser RUM and session replay traffic generation.
+10. [`09-eks-delay-demo.md`](09-eks-delay-demo.md) for the dedicated AWS EKS + router delay-box demo flow with ThousandEyes and Splunk wiring.
+11. [`09-splunk-otel-traffic-architecture.md`](09-splunk-otel-traffic-architecture.md) for the collector traffic model, rc0 secondary export shape, and the router-based egress path.
+12. [`10-traffic-flow-contract.md`](10-traffic-flow-contract.md) for the required source, destination, port, and router-path rules used during the delay demo.
 
 Supporting material that does not fit the main numbered flow stays under [`docs/isovalent/`](isovalent/README.md).

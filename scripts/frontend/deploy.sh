@@ -65,12 +65,26 @@ APP_VERSION="${APP_VERSION:-$(git -C "${ROOT_DIR}" rev-parse --short HEAD)}"
 RUM_CONFIGMAP_NAME="${RUM_CONFIGMAP_NAME:-streaming-frontend-rum-assets}"
 SPLUNK_RUM_APP_NAME="${SPLUNK_RUM_APP_NAME:-streaming-app-frontend}"
 DEPLOYMENT_ENVIRONMENT="${SPLUNK_DEPLOYMENT_ENVIRONMENT:-streaming-app}"
+DEFAULT_DELAY_DEMO_DEPLOYMENT_ENVIRONMENT="network-streaming-app-delay-demo"
+LEGACY_DELAY_DEMO_DEPLOYMENT_ENVIRONMENT="network-streaming-app"
 SPLUNK_ACCESS_TOKEN="${SPLUNK_ACCESS_TOKEN:-}"
 SPLUNK_RUM_ACCESS_TOKEN="${SPLUNK_RUM_ACCESS_TOKEN:-}"
+SPLUNK_RUM_SECONDARY_ACCESS_TOKEN="${SPLUNK_RUM_SECONDARY_ACCESS_TOKEN:-}"
 SPLUNK_SOURCEMAP_UPLOAD_TOKEN="${SPLUNK_SOURCEMAP_UPLOAD_TOKEN:-${SPLUNK_ACCESS_TOKEN:-}}"
 export SPLUNK_RUM_ACCESS_TOKEN
+export SPLUNK_RUM_SECONDARY_ACCESS_TOKEN
+HAS_BROWSER_RUM_TOKEN=false
+if [[ -n "${SPLUNK_RUM_ACCESS_TOKEN:-}" || -n "${SPLUNK_RUM_SECONDARY_ACCESS_TOKEN:-}" ]]; then
+  HAS_BROWSER_RUM_TOKEN=true
+fi
+if [[ "${DEPLOYMENT_ENVIRONMENT}" == "${LEGACY_DELAY_DEMO_DEPLOYMENT_ENVIRONMENT}" ]]; then
+  if [[ "${NAMESPACE}" == "streaming-demo" || "${KUBECONFIG:-}" == *streaming-eks-delay-demo* ]]; then
+    warn "Ignoring legacy SPLUNK_DEPLOYMENT_ENVIRONMENT=${LEGACY_DELAY_DEMO_DEPLOYMENT_ENVIRONMENT} for the delay demo; using ${DEFAULT_DELAY_DEMO_DEPLOYMENT_ENVIRONMENT}."
+    DEPLOYMENT_ENVIRONMENT="${DEFAULT_DELAY_DEMO_DEPLOYMENT_ENVIRONMENT}"
+  fi
+fi
 RENDERED_NAMESPACE=""
-RENDERED_DEPLOYMENT_ENVIRONMENT=""
+TRACE_DEPLOYMENT_ENVIRONMENT=""
 
 fail() {
   print -u2 -r -- "[frontend-deploy] ERROR: $*"
@@ -84,8 +98,22 @@ escape_sed_replacement() {
 render_manifest() {
   sed \
     -e "s/streaming-service-app/${RENDERED_NAMESPACE}/g" \
-    -e "s/deployment.environment=streaming-app/deployment.environment=${RENDERED_DEPLOYMENT_ENVIRONMENT}/g" \
-    "$1"
+    "$1" | awk -v env_value="${TRACE_DEPLOYMENT_ENVIRONMENT}" '
+      BEGIN {
+        escaped_env = env_value
+        gsub(/\047/, "\047\047", escaped_env)
+      }
+      pending && $0 ~ /^[[:space:]]*value:[[:space:]]+/ {
+        match($0, /^[[:space:]]*/)
+        indent = substr($0, RSTART, RLENGTH)
+        printf "%svalue: \047%s\047\n", indent, escaped_env
+        pending = 0
+        next
+      }
+      pending { pending = 0 }
+      $0 ~ /^[[:space:]]*- name:[[:space:]]+OTEL_DEPLOYMENT_ENVIRONMENT[[:space:]]*$/ { pending = 1 }
+      { print }
+    '
 }
 
 apply_manifest() {
@@ -97,7 +125,7 @@ create_namespace() {
 }
 
 RENDERED_NAMESPACE="$(escape_sed_replacement "${NAMESPACE}")"
-RENDERED_DEPLOYMENT_ENVIRONMENT="$(escape_sed_replacement "${DEPLOYMENT_ENVIRONMENT}")"
+TRACE_DEPLOYMENT_ENVIRONMENT="${DEPLOYMENT_ENVIRONMENT}"
 
 create_namespace
 
@@ -117,12 +145,12 @@ log "Building frontend assets"
   npm run build:production
 )
 
-if [[ -n "${SPLUNK_REALM:-}" && -z "${SPLUNK_RUM_ACCESS_TOKEN:-}" ]]; then
-  warn "SPLUNK_RUM_ACCESS_TOKEN is not set. Browser RUM will remain disabled even if sourcemap upload is configured with SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN."
+if [[ -n "${SPLUNK_REALM:-}" && "${HAS_BROWSER_RUM_TOKEN}" == "false" ]]; then
+  warn "No Browser RUM token is set. Set SPLUNK_RUM_ACCESS_TOKEN and/or SPLUNK_RUM_SECONDARY_ACCESS_TOKEN to enable runtime Browser RUM; sourcemap upload only needs SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN."
 fi
 
-if [[ -n "${SPLUNK_REALM:-}" && -z "${SPLUNK_SOURCEMAP_UPLOAD_TOKEN:-}" && -n "${SPLUNK_RUM_ACCESS_TOKEN:-}" ]]; then
-  warn "SPLUNK_RUM_ACCESS_TOKEN is set, but sourcemap upload needs SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN. Browser RUM will still work; sourcemap upload is being skipped."
+if [[ -n "${SPLUNK_REALM:-}" && -z "${SPLUNK_SOURCEMAP_UPLOAD_TOKEN:-}" && "${HAS_BROWSER_RUM_TOKEN}" == "true" ]]; then
+  warn "A Browser RUM token is set, but sourcemap upload needs SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN. Browser RUM will still work; sourcemap upload is being skipped."
 elif [[ -n "${SPLUNK_REALM:-}" && -n "${SPLUNK_SOURCEMAP_UPLOAD_TOKEN:-}" ]]; then
   if ! LOG_PREFIX="[frontend-deploy]" \
     FRONTEND_DIR="${FRONTEND_DIR}" \

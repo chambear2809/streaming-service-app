@@ -24,6 +24,12 @@ Choose the ThousandEyes target mode before you build payloads:
 - `local`: use cluster-private or same-network endpoints that your Enterprise Agents can reach, such as `streaming-frontend.<namespace>.svc.cluster.local`
 - `external`: use browser-facing or internet-reachable frontend and RTSP endpoints that ThousandEyes agents outside the cluster can reach
 
+For the router-backed EKS delay demo, `external` means the router-backed URLs.
+Do not point the HTTP or RTSP tests at direct AWS load balancer hostnames if the
+demo needs application traffic to traverse the router. The full source,
+destination, port, and bypass rules are in
+[`10-traffic-flow-contract.md`](10-traffic-flow-contract.md).
+
 ## Read This First If You Are New To ThousandEyes
 
 If you come from Splunk Observability Cloud and not from a networking background, treat ThousandEyes in this repo as a way to create synthetic "outside-in" checks for the demo.
@@ -233,6 +239,7 @@ Optional alert posture inputs:
 
 Sometimes required:
 
+- `TE_EXTERNAL_ROUTER_HOST`: set this when a public router or proxy fronts the cluster and ThousandEyes should stay on that delay-injecting public path; the helpers derive the external RTSP host and Demo Monkey HTTP base URL from it
 - `TE_RTSP_SERVER`: set this if you are running the direct API flow or if the Kubernetes wrapper cannot discover the RTSP hostname automatically
 - `TE_RTSP_PORT`: override this if your RTSP service is not using the default port expected by your chosen flow
 - `TE_DEMO_MONKEY_FRONTEND_BASE_URL`: set this to the public frontend URL in `external` mode instead of leaving the default `svc.cluster.local` value in place
@@ -247,6 +254,7 @@ If you are not sure what to put in those variables, use this translation:
 - `TE_SOURCE_AGENT_IDS`: "which agent or agents should start the test?"
 - `TE_TARGET_AGENT_ID`: "which remote agent should represent the far side of the media path?"
 - `TE_UDP_TARGET_AGENT_ID`: "should the UDP media-path test use a different remote agent than the RTP test?"
+- `TE_EXTERNAL_ROUTER_HOST`: "what public router or proxy should ThousandEyes use so the test path includes the injected network delay?"
 - `TE_RTSP_SERVER`: "what hostname should ThousandEyes use for the RTSP endpoint?"
 - `TE_DEMO_MONKEY_FRONTEND_BASE_URL`: "what base frontend URL should the HTTP tests hit?"
 
@@ -295,9 +303,10 @@ export TE_TRACE_MAP_ENABLED='false'
 export TE_BROADCAST_ENABLED='false'
 export TE_ALERTS_ENABLED='true'
 export TE_ALERT_MINIMUM_SOURCES='1'
-export TE_RTSP_SERVER='rtsp.example.com'
+export TE_EXTERNAL_ROUTER_HOST='demo-router.example.com'
 export TE_RTSP_PORT='8554'
-export TE_DEMO_MONKEY_FRONTEND_BASE_URL='https://demo.example.com'
+export TE_RTSP_SERVER="${TE_EXTERNAL_ROUTER_HOST}"
+export TE_DEMO_MONKEY_FRONTEND_BASE_URL="http://${TE_EXTERNAL_ROUTER_HOST}"
 export TE_TRACE_MAP_TEST_URL="${TE_DEMO_MONKEY_FRONTEND_BASE_URL}/api/v1/demo/public/trace-map"
 export TE_BROADCAST_TEST_URL="${TE_DEMO_MONKEY_FRONTEND_BASE_URL}/api/v1/demo/public/broadcast/live/index.m3u8"
 export TE_A2A_PORT='5004'
@@ -384,7 +393,7 @@ scripts/thousandeyes/deploy-k8s-rtsp-tests.sh
 If the service hostname is not ready yet, override it manually:
 
 ```bash
-export TE_RTSP_SERVER='rtsp.example.com'
+export TE_EXTERNAL_ROUTER_HOST='demo-router.example.com'
 export TE_RTSP_PORT='8554'
 scripts/thousandeyes/deploy-k8s-rtsp-tests.sh
 ```
@@ -404,17 +413,107 @@ For a non-networking user, this is a good first ThousandEyes exercise because th
 To force the Kubernetes wrapper to create tests against external endpoints instead of cluster-local defaults:
 
 ```bash
-export TE_RTSP_SERVER='rtsp.example.com'
+export TE_EXTERNAL_ROUTER_HOST='demo-router.example.com'
 export TE_RTSP_PORT='8554'
-export TE_DEMO_MONKEY_FRONTEND_BASE_URL='https://demo.example.com'
-export TE_TRACE_MAP_TEST_URL="${TE_DEMO_MONKEY_FRONTEND_BASE_URL}/api/v1/demo/public/trace-map"
-export TE_BROADCAST_TEST_URL="${TE_DEMO_MONKEY_FRONTEND_BASE_URL}/api/v1/demo/public/broadcast/live/index.m3u8"
 scripts/thousandeyes/deploy-k8s-rtsp-tests.sh
 ```
+
+When the cluster sits behind a delay-injecting router or proxy, prefer `TE_EXTERNAL_ROUTER_HOST` over the direct service load balancer hostnames so the ThousandEyes tests stay on the real public path.
 
 ## Build The Splunk Demo Dashboards
 
 Once the tests are live, use [`scripts/thousandeyes/create-demo-dashboards.py`](/Users/alecchamberlain/Documents/GitHub/streaming-service-app/scripts/thousandeyes/create-demo-dashboards.py) to create or update the Splunk Observability dashboard group that supports the demo story.
+
+If the ThousandEyes OpenTelemetry stream into Splunk O11y does not exist yet, or if you want the repo to reconcile the current test IDs onto one managed stream, run:
+
+```bash
+python3 scripts/thousandeyes/sync-o11y-metric-stream.py
+```
+
+When the target account group already has several similar Splunk streams, set `THOUSANDEYES_O11Y_STREAM_ID` first so the helper updates the exact one you intend. Run the helper once per Splunk O11y destination when the same ThousandEyes tests need to feed both the primary realm and a secondary tenant.
+
+For the primary realm:
+
+```bash
+export THOUSANDEYES_O11Y_STREAM_ID='<primary-stream-id>'
+export THOUSANDEYES_O11Y_ENDPOINT_URL='https://ingest.us1.signalfx.com/v2/datapoint/otlp'
+export THOUSANDEYES_O11Y_INGEST_TOKEN="${SPLUNK_ACCESS_TOKEN}"
+python3 scripts/thousandeyes/sync-o11y-metric-stream.py
+```
+
+When the target Splunk environment uses nonstandard ingest hosts such as rc0, set `THOUSANDEYES_O11Y_ENDPOINT_URL` explicitly, for example:
+
+```bash
+export THOUSANDEYES_O11Y_ENDPOINT_URL='https://external-ingest.rc0.signalfx.com/v2/datapoint/otlp'
+```
+
+If that environment requires a different ingest credential than the dashboard/API token, set `THOUSANDEYES_O11Y_INGEST_TOKEN` too. The stream helper falls back to `SPLUNK_ACCESS_TOKEN` only when no dedicated ingest token is provided.
+
+## Enable The Splunk APM Integrations 2.0 Connector
+
+The ThousandEyes OpenTelemetry metric stream above sends ThousandEyes network
+metrics into Splunk Observability. The Splunk APM trace-link integration is a
+separate ThousandEyes Integrations 2.0 setup that uses:
+
+- a Generic Connector whose target is the Splunk API URL
+- a custom `X-SF-Token` header with an API-scoped Splunk Observability token
+- an enabled `Splunk Observability APM` operation assigned to that connector
+
+The official ThousandEyes workflow is: Manage > Integrations > Integrations 2.0,
+create a Generic Connector, then create or enable a `Splunk Observability APM`
+operation and assign it to the connector. ThousandEyes documents the normal
+target shape as `https://api.<REALM>.signalfx.com`; for rc0, use the
+nonstandard API host:
+
+```bash
+export SPLUNK_OTEL_SECONDARY_API_URL='https://external-api.rc0.signalfx.com'
+```
+
+Do not reuse the OTLP metric-stream endpoint here. The APM connector target is
+`https://external-api.rc0.signalfx.com`; the metric-stream endpoint remains
+`https://external-ingest.rc0.signalfx.com/v2/datapoint/otlp`.
+
+If the demo must cross-link traces in both O11y instances, keep one APM
+operation assigned to the primary connector and create a second connector for
+rc0. ThousandEyes Integrations 2.0 operations are limited to one connector, so a
+second O11y instance needs its own `Splunk Observability APM` operation.
+
+For the existing primary operation:
+
+```bash
+python3 scripts/thousandeyes/sync-o11y-apm-integration.py \
+  --operation-id '<primary-apm-operation-id>' \
+  --connector-name '<primary-connector-name>' \
+  --target-url 'https://api.us1.signalfx.com'
+```
+
+When the target URL matches `SPLUNK_REALM`, the helper uses
+`SPLUNK_ACCESS_TOKEN` unless `THOUSANDEYES_APM_API_TOKEN` is set explicitly.
+
+For the rc0 connector, stage the connector without reassigning the primary
+operation:
+
+```bash
+python3 scripts/thousandeyes/sync-o11y-apm-integration.py \
+  --skip-operation-assignment \
+  --connector-name '<primary-connector-name>-rc0'
+```
+
+The helper reads `.env` by default. For rc0 it prefers
+`SPLUNK_OTEL_SECONDARY_ACCESS_TOKEN` as the API token, unless
+`THOUSANDEYES_APM_API_TOKEN` is set explicitly. After the rc0 connector exists,
+create or enable a second `Splunk Observability APM` operation in Manage >
+Integrations > Integrations 2.0 and assign the rc0 connector to it. If that
+operation already exists, set `THOUSANDEYES_APM_OPERATION_ID` or
+`THOUSANDEYES_APM_OPERATION_NAME` and rerun the helper without
+`--skip-operation-assignment`. The helper refuses to replace an already assigned
+operation connector unless `--replace-operation-connector` is passed.
+
+Official references:
+
+- [Distributed Tracing with Splunk Observability APM](https://docs.thousandeyes.com/product-documentation/integration-guides/custom-built-integrations/distributed-tracing/distributed-tracing-splunk-apm)
+- [ThousandEyes Integrations 2.0 connector and operation model](https://docs.thousandeyes.com/product-documentation/integration-guides)
+- [Splunk APM ThousandEyes trace links](https://help.splunk.com/en/splunk-observability-cloud/monitor-application-performance/manage-services-spans-and-traces-in-splunk-apm/view-and-filter-for-spans-within-a-trace#View-traces-with-Cisco-ThousandEyes-integration)
 
 The script keeps the dashboards ordered for the walkthrough:
 
@@ -753,6 +852,7 @@ Target selection guidance:
 
 - Leave `TE_DEMO_MONKEY_FRONTEND_BASE_URL` on the `svc.cluster.local` default when you want `local` Enterprise-Agent reachability inside the cluster network
 - Override `TE_DEMO_MONKEY_FRONTEND_BASE_URL`, `TE_TRACE_MAP_TEST_URL`, and `TE_BROADCAST_TEST_URL` with public URLs when you want `external` ThousandEyes reachability
+- When a public router or proxy fronts the cluster, prefer `TE_EXTERNAL_ROUTER_HOST` or explicit router-backed URLs so the test path includes the injected delay instead of bypassing it through direct service load balancers
 
 Splunk demo dashboard sync:
 

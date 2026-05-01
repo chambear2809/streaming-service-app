@@ -146,8 +146,10 @@ spec:
       containers:
         - name: app
           env:
+            - name: OTEL_DEPLOYMENT_ENVIRONMENT
+              value: 'streaming-app'
             - name: OTEL_RESOURCE_ATTRIBUTES
-              value: service.name=fixture,deployment.environment=streaming-app
+              value: service.name=fixture,deployment.environment=$(OTEL_DEPLOYMENT_ENVIRONMENT)
 EOF
 done
 
@@ -171,6 +173,8 @@ env \
   >/dev/null 2>&1 || fail "backend-demo deploy flow failed"
 
 applied="$(<"${apply_log}")"
-assert_contains "${applied}" "deployment.environment=from-dotenv"
+assert_contains "${applied}" "name: OTEL_DEPLOYMENT_ENVIRONMENT"
+assert_contains "${applied}" "value: 'from-dotenv'"
+assert_contains "${applied}" 'deployment.environment=$(OTEL_DEPLOYMENT_ENVIRONMENT)'
 
 printf 'PASS: backend-demo deployment environment regression test\n'

@@ -47,8 +47,9 @@ APM services to look for:
 4. Open `/demo-monkey` and confirm the current profile is `Clear` or `Simulation bypassed`. Check the **Preset** row in the detail card on the left side of the page (labeled "Simulation bypassed" when no fault is armed) — not the form toggle state, which is ephemeral.
 5. On `/demo-monkey`, confirm the **"Next break"** row in the left detail panel shows a sponsor pod time within the next few minutes. If it reads "Waiting for schedule" or shows a time more than 10 minutes away, verify the broadcast is running and the backend ad schedule is responding before starting the walkthrough. The primary booth story depends on arming the fault close to a pod boundary.
 6. In ThousandEyes, confirm the playback and trace-map HTTP tests are reporting.
-7. In Splunk, confirm the numbered demo dashboard group exists and traces are arriving for `streaming-frontend` and `media-service-demo`.
-7. If you plan to use `trace-map-outage`, `dependency-timeout`, or `service-specific-failure`, open `/demo-monkey` and click the **"Open ThousandEyes"** launch button before the walkthrough to confirm it opens the ThousandEyes dashboard and not a JSON endpoint.
+7. Confirm the traffic-flow contract in [`docs/10-traffic-flow-contract.md`](docs/10-traffic-flow-contract.md): public application traffic enters through the router, and Splunk OTel collector egress leaves as `44.208.125.119`.
+8. In Splunk, confirm the numbered demo dashboard group exists and traces are arriving for `streaming-frontend` and `media-service-demo`.
+9. If you plan to use `trace-map-outage`, `dependency-timeout`, or `service-specific-failure`, open `/demo-monkey` and click the **"Open ThousandEyes"** launch button before the walkthrough to confirm it opens the ThousandEyes dashboard and not a JSON endpoint.
 
 > **Config check:** The button reads `observabilityLinks.thousandEyesUrl` from `config.js`. If that key is absent, the button falls back to `/api/v1/demo/public/trace-map`, which returns raw JSON. Open `frontend/config.js` and confirm `observabilityLinks.thousandEyesUrl` is set before running a trace-pivot scenario. Example:
 > ```js
@@ -64,7 +65,7 @@ If ThousandEyes tests or dashboards are missing, use `docs/06-thousandeyes-rtsp-
 
 ## Warm The Environment
 
-Available profiles for both loadgen scripts:
+Available profiles for the repo loadgen scripts:
 
 | Profile | Broadcast viewers | Duration | Purpose |
 | --- | --- | --- | --- |
@@ -92,11 +93,20 @@ LOADGEN_OPERATOR_TAKE_LIVE_RATIO=0.00 \
 zsh scripts/loadgen/deploy-k8s-operator-billing-loadgen.sh
 ```
 
+Browser RUM and session replay traffic:
+
+```bash
+LOADGEN_BROWSER_PROFILE=booth \
+LOADGEN_BROWSER_K8S_MODE=cronjob \
+zsh scripts/loadgen/deploy-k8s-browser-rum-loadgen.sh
+```
+
 Recommended live-demo posture:
 
-- Use recurring `cronjob` mode when you want both warm-up flows active at the same time without juggling terminals.
-- If you use one-shot `job` mode instead, launch the two helpers from separate terminals. Both scripts wait for completion in job mode and auto-delete completed jobs by default, so a single terminal will not keep the viewer and operator load side by side.
+- Use recurring `cronjob` mode when you want the warm-up flows active at the same time without juggling terminals.
+- If you use one-shot `job` mode instead, launch the helpers from separate terminals. The scripts wait for completion in job mode and auto-delete completed jobs by default, so a single terminal will not keep the viewer, operator, and Browser RUM load side by side.
 - Keep `LOADGEN_OPERATOR_TAKE_LIVE_RATIO=0.00` for the standard booth walkthrough so the protected loadgen does not unexpectedly route an RTSP contribution onto the public channel.
+- Keep `LOADGEN_BROWSER_ROUTER_EGRESS=true` in the EKS delay demo so browser RUM beacons leave from the private router-egress path.
 
 Status checks:
 
@@ -106,12 +116,16 @@ zsh scripts/loadgen/deploy-k8s-broadcast-loadgen.sh
 
 LOADGEN_OPERATOR_K8S_ACTION=status \
 zsh scripts/loadgen/deploy-k8s-operator-billing-loadgen.sh
+
+LOADGEN_BROWSER_K8S_ACTION=status \
+zsh scripts/loadgen/deploy-k8s-browser-rum-loadgen.sh
 ```
 
 Use the default booth profiles unless you are intentionally stress testing. For the booth walkthrough, the recommended warm-up settings are:
 
 - Broadcast loadgen: `90` viewers, `10m`, `2m` ramp-up, `1m` ramp-down, `35%` page viewers, `10%` trace pivots
 - Operator loadgen: `3` workers, `8m`, `4s` pause, `0%` auto-take-live during the default story
+- Browser RUM loadgen: `8` browser contexts, `15m`, `2m` ramp-up, `2m` ramp-down, scheduled every `5m` with overlapping runs for a steadier RUM chart
 
 ## Recommended Fault Order
 
@@ -262,6 +276,9 @@ zsh scripts/loadgen/deploy-k8s-broadcast-loadgen.sh
 
 LOADGEN_OPERATOR_K8S_ACTION=delete \
 zsh scripts/loadgen/deploy-k8s-operator-billing-loadgen.sh
+
+LOADGEN_BROWSER_K8S_ACTION=delete \
+zsh scripts/loadgen/deploy-k8s-browser-rum-loadgen.sh
 ```
 
 ## When To Use The RTSP Deep Dive

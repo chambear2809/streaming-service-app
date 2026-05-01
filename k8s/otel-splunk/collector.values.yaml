@@ -1,6 +1,29 @@
 operatorcrds:
   install: true
 
+# Keep Splunk OTel collector egress on the private nodegroup so outbound traffic
+# uses the router EIP instead of ephemeral worker public IPs.
+nodeSelector:
+  "eks.amazonaws.com/nodegroup": private
+
+tolerations:
+  - key: node-role.kubernetes.io/master
+    effect: NoSchedule
+    operator: Exists
+  - key: node-role.kubernetes.io/control-plane
+    effect: NoSchedule
+    operator: Exists
+  - key: kubernetes.io/system-node
+    effect: NoSchedule
+    operator: Exists
+  - key: node-role.kubernetes.io/infra
+    effect: NoSchedule
+    operator: Exists
+  - key: dedicated
+    operator: Equal
+    value: otel
+    effect: NoSchedule
+
 operator:
   enabled: true
   admissionWebhooks:
@@ -12,7 +35,26 @@ instrumentation:
   installationJob:
     enabled: true
   spec:
+    exporter:
+      endpoint: http://splunk-otel-collector-agent.otel-splunk.svc.cluster.local:4317
     propagators:
       - baggage
       - b3
       - tracecontext
+    java:
+      env:
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://splunk-otel-collector-agent.otel-splunk.svc.cluster.local:4317
+    nodejs:
+      env:
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://splunk-otel-collector-agent.otel-splunk.svc.cluster.local:4317
+
+clusterReceiver:
+  nodeSelector:
+    "eks.amazonaws.com/nodegroup": private
+  tolerations:
+    - key: dedicated
+      operator: Equal
+      value: otel
+      effect: NoSchedule

@@ -194,6 +194,21 @@ def metric_streams(api: JsonApi, account_group_id: str) -> list[dict[str, Any]]:
     ]
 
 
+def stream_test_type_filters(stream: dict[str, Any]) -> set[str]:
+    return {
+        str(value).strip()
+        for value in (((stream.get("filters") or {}).get("testTypes") or {}).get("values") or [])
+        if str(value).strip()
+    }
+
+
+def stream_allows_test_type(stream: dict[str, Any], test: dict[str, Any]) -> bool:
+    configured_test_types = stream_test_type_filters(stream)
+    if not configured_test_types:
+        return True
+    return str(test.get("type", "")).strip() in configured_test_types
+
+
 def stream_matches_test(stream: dict[str, Any], test: dict[str, Any]) -> bool:
     test_id = str(test.get("testId", "")).strip()
     if not test_id:
@@ -201,19 +216,12 @@ def stream_matches_test(stream: dict[str, Any], test: dict[str, Any]) -> bool:
 
     for matched in stream.get("testMatch", []):
         if str(matched.get("id", "")).strip() == test_id:
-            return True
+            return stream_allows_test_type(stream, test)
 
     if stream.get("testMatch"):
         return False
 
-    configured_test_types = {
-        str(value).strip()
-        for value in (((stream.get("filters") or {}).get("testTypes") or {}).get("values") or [])
-        if str(value).strip()
-    }
-    if not configured_test_types:
-        return True
-    return str(test.get("type", "")).strip() in configured_test_types
+    return stream_allows_test_type(stream, test)
 
 
 def expected_target_agent_id(definition: dict[str, Any]) -> str | None:

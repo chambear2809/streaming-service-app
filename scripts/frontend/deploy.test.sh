@@ -20,6 +20,13 @@ assert_contains() {
   [[ "${haystack}" == *"${needle}"* ]] || fail "expected output to contain: ${needle}"
 }
 
+assert_not_contains() {
+  local haystack="$1"
+  local needle="$2"
+
+  [[ "${haystack}" != *"${needle}"* ]] || fail "did not expect output to contain: ${needle}"
+}
+
 cleanup() {
   rm -rf "${TEMP_DIR}"
 }
@@ -79,6 +86,7 @@ cat > "${dist_dir}/build-info.json" <<'JSON'
 JSON
 
 printf '%s' "${SPLUNK_RUM_ACCESS_TOKEN-}" > "${PWD}/build-rum-token.txt"
+printf '%s' "${SPLUNK_RUM_SECONDARY_ACCESS_TOKEN-}" > "${PWD}/build-secondary-rum-token.txt"
 EOF
   chmod +x "${path}"
 }
@@ -191,10 +199,12 @@ spec:
   template:
     spec:
       containers:
-        - name: app
+        - name: streaming-frontend
           env:
+            - name: OTEL_DEPLOYMENT_ENVIRONMENT
+              value: 'streaming-app'
             - name: OTEL_RESOURCE_ATTRIBUTES
-              value: service.name=streaming-frontend,deployment.environment=streaming-app
+              value: service.name=streaming-frontend,deployment.environment=$(OTEL_DEPLOYMENT_ENVIRONMENT)
 EOF
 
   cat > "${root}/k8s/frontend/service.yaml" <<'EOF'
@@ -252,7 +262,27 @@ EOF
   built_rum_token="$(<"${root}/frontend/build-rum-token.txt")"
   [[ -z "${built_rum_token}" ]] || fail "expected frontend build to keep SPLUNK_ACCESS_TOKEN out of the browser RUM config"
   output="$(<"${root}/output.log")"
-  assert_contains "${output}" "SPLUNK_RUM_ACCESS_TOKEN is not set. Browser RUM will remain disabled"
+  assert_contains "${output}" "No Browser RUM token is set."
+}
+
+test_secondary_rum_token_is_exported_to_build() {
+  local root output built_secondary_rum_token
+
+  root="$(make_fixture_repo secondary-rum-token)"
+
+  cat > "${root}/.env" <<'EOF'
+SPLUNK_REALM=us1
+SPLUNK_ACCESS_TOKEN=observability-upload-token
+SPLUNK_RUM_SECONDARY_ACCESS_TOKEN=secondary-browser-rum-token
+EOF
+
+  run_deploy "${root}" "${root}/output.log"
+
+  built_secondary_rum_token="$(<"${root}/frontend/build-secondary-rum-token.txt")"
+  [[ "${built_secondary_rum_token}" == "secondary-browser-rum-token" ]] || fail "expected secondary browser RUM token to be exported into the frontend build"
+
+  output="$(<"${root}/output.log")"
+  assert_not_contains "${output}" "No Browser RUM token is set."
 }
 
 test_explicit_upload_override_wins() {
@@ -288,28 +318,74 @@ EOF
   run_deploy "${root}" "${root}/output.log"
 
   output="$(<"${root}/output.log")"
-  assert_contains "${output}" "SPLUNK_RUM_ACCESS_TOKEN is set, but sourcemap upload needs SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN."
+  assert_contains "${output}" "A Browser RUM token is set, but sourcemap upload needs SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN."
   if [[ -f "${root}/stub-count.txt" ]]; then
     fail "expected sourcemap upload to be skipped when only the browser token is present"
   fi
 }
 
-test_dotenv_deployment_environment_rewrites_manifest() {
-  local root applied
+test_secondary_browser_token_only_warns_and_skips_upload() {
+  local root output
 
-  root="$(make_fixture_repo deployment-environment)"
+  root="$(make_fixture_repo secondary-rum-only)"
 
   cat > "${root}/.env" <<'EOF'
-SPLUNK_DEPLOYMENT_ENVIRONMENT=from-dotenv
+SPLUNK_REALM=us1
+SPLUNK_RUM_SECONDARY_ACCESS_TOKEN=secondary-browser-rum-token
 EOF
 
   run_deploy "${root}" "${root}/output.log"
 
-  applied="$(<"${root}/apply.log")"
-  assert_contains "${applied}" "deployment.environment=from-dotenv"
+  output="$(<"${root}/output.log")"
+  assert_contains "${output}" "A Browser RUM token is set, but sourcemap upload needs SPLUNK_ACCESS_TOKEN or SPLUNK_SOURCEMAP_UPLOAD_TOKEN."
+  if [[ -f "${root}/stub-count.txt" ]]; then
+    fail "expected sourcemap upload to be skipped when only the secondary browser token is present"
+  fi
+}
+
+test_trace_environment_is_rendered_into_manifest() {
+  local root apply_log
+
+  root="$(make_fixture_repo trace-environment)"
+
+  cat > "${root}/.env" <<'EOF'
+SPLUNK_DEPLOYMENT_ENVIRONMENT=network-streaming-app
+EOF
+
+  run_deploy "${root}" "${root}/output.log"
+
+  apply_log="$(<"${root}/apply.log")"
+  assert_contains "${apply_log}" "name: OTEL_DEPLOYMENT_ENVIRONMENT"
+  assert_contains "${apply_log}" "value: 'network-streaming-app'"
+  assert_contains "${apply_log}" 'deployment.environment=$(OTEL_DEPLOYMENT_ENVIRONMENT)'
+}
+
+test_delay_demo_target_overrides_legacy_trace_environment() {
+  local root apply_log output
+
+  root="$(make_fixture_repo delay-demo-trace-environment)"
+
+  cat > "${root}/.env" <<'EOF'
+NAMESPACE=streaming-demo
+SPLUNK_DEPLOYMENT_ENVIRONMENT=network-streaming-app
+EOF
+
+  run_deploy "${root}" "${root}/output.log"
+
+  output="$(<"${root}/output.log")"
+  apply_log="$(<"${root}/apply.log")"
+  assert_contains "${output}" "Ignoring legacy SPLUNK_DEPLOYMENT_ENVIRONMENT=network-streaming-app for the delay demo"
+  assert_contains "${apply_log}" "name: OTEL_DEPLOYMENT_ENVIRONMENT"
+  assert_contains "${apply_log}" "value: 'network-streaming-app-delay-demo'"
+  assert_contains "${apply_log}" 'deployment.environment=$(OTEL_DEPLOYMENT_ENVIRONMENT)'
 }
 
 test_access_token_default_is_used_for_upload
+test_secondary_rum_token_is_exported_to_build
 test_explicit_upload_override_wins
 test_browser_token_only_warns_and_skips_upload
-test_dotenv_deployment_environment_rewrites_manifest
+test_secondary_browser_token_only_warns_and_skips_upload
+test_trace_environment_is_rendered_into_manifest
+test_delay_demo_target_overrides_legacy_trace_environment
+
+printf 'PASS: frontend deploy\n'

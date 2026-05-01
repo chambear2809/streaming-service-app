@@ -59,8 +59,10 @@ spec:
               value: grpc
             - name: OTEL_PROPAGATORS
               value: baggage,b3,tracecontext
+            - name: OTEL_DEPLOYMENT_ENVIRONMENT
+              value: 'streaming-app'
             - name: OTEL_RESOURCE_ATTRIBUTES
-              value: service.name=$(OTEL_SERVICE_NAME),service.namespace=streaming-service-app,k8s.namespace.name=streaming-service-app,k8s.deployment.name=streaming-frontend,deployment.environment=streaming-app
+              value: service.name=$(OTEL_SERVICE_NAME),service.namespace=streaming-service-app,k8s.namespace.name=streaming-service-app,k8s.deployment.name=streaming-frontend,deployment.environment=$(OTEL_DEPLOYMENT_ENVIRONMENT)
           resources:
             requests:
               cpu: 250m
